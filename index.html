@@ -1,0 +1,2646 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SAKUYA SCRAMBLE</title>
+  <!-- OGP / Twitter Card -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="SAKUYA SCRAMBLE" />
+  <meta property="og:description" content="クリプト忍者咲耶の宇宙船で洞窟を駆け抜けるブラウザゲーム" />
+  <meta property="og:url" content="https://naonao1971.github.io/ExciteByc/" />
+  <meta property="og:image" content="https://naonao1971.github.io/ExciteByc/image01.jpg" />
+  <meta property="og:image:width" content="1672" />
+  <meta property="og:image:height" content="941" />
+  <meta property="og:locale" content="ja_JP" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="SAKUYA SCRAMBLE" />
+  <meta name="twitter:description" content="クリプト忍者咲耶の宇宙船で洞窟を駆け抜けるブラウザゲーム" />
+  <meta name="twitter:image" content="https://naonao1971.github.io/ExciteByc/image01.jpg" />
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: #07090f;
+      color: #e8ecff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
+      min-height: 100vh;
+      padding: 20px 12px 40px;
+      box-sizing: border-box;
+    }
+    .wrap {
+      position: relative;
+      text-align: center;
+    }
+    canvas {
+      width: min(92vw, 960px);
+      height: auto;
+      max-height: 72vh;
+      border: 1px solid #2a365f;
+      box-shadow: 0 0 32px rgba(90, 140, 255, 0.2);
+      background: linear-gradient(#02040a, #060b18);
+      image-rendering: pixelated;
+    }
+    .help {
+      margin-top: 10px;
+      color: #9db0ff;
+      font-size: 14px;
+    }
+    .mobile-controls {
+      margin-top: 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    .mobile-controls button {
+      appearance: none;
+      border: 1px solid #4d5f95;
+      background: linear-gradient(180deg, #1b2a52, #10192f);
+      color: #eef4ff;
+      border-radius: 999px;
+      padding: 12px 18px;
+      font: inherit;
+      font-weight: 700;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+    }
+    .mobile-controls button:disabled {
+      opacity: 0.55;
+    }
+    .mobile-controls .restart {
+      border-color: #8b6c3c;
+      background: linear-gradient(180deg, #5a3f15, #2c1e08);
+    }
+    .mobile-controls .start {
+      border-color: #3f8b72;
+      background: linear-gradient(180deg, #17604c, #0f362c);
+    }
+    .hud-start {
+      /* left/top are set per-frame in JS (positionStartButton) to track the
+         canvas-space "start here" hint spot at any display scale */
+      position: absolute;
+      transform: translate(-50%, -50%);
+      z-index: 2;
+      padding: 8px 14px;
+      font-size: 14px;
+    }
+    /* sits in the empty center cell of the 3x3 touch d-pad grid */
+    .gyro-toggle {
+      grid-column: 2;
+      grid-row: 2;
+      border-color: #3f8b6c;
+      background: linear-gradient(180deg, #17604c, #0f362c);
+      font-size: 20px;
+      padding: 0;
+    }
+    .status {
+      min-height: 1.4em;
+      color: #b9c8ff;
+      font-size: 13px;
+    }
+    .touch-pad {
+      /* scales down on narrow screens instead of staying a fixed 56px */
+      --dpad-size: clamp(34px, 9vw, 56px);
+      --dpad-gap: clamp(4px, 1.2vw, 8px);
+      position: relative;
+      z-index: 1;
+      display: none;
+      grid-template-columns: repeat(3, var(--dpad-size));
+      grid-template-rows: repeat(3, var(--dpad-size));
+      gap: var(--dpad-gap);
+      pointer-events: auto;
+    }
+    .touch-pad .touch-btn {
+      width: var(--dpad-size);
+      height: var(--dpad-size);
+      font-size: clamp(14px, 4vw, 22px);
+      border-radius: clamp(8px, 2.5vw, 14px);
+    }
+    .touch-up {
+      grid-column: 2;
+      grid-row: 1;
+    }
+    .touch-left {
+      grid-column: 1;
+      grid-row: 2;
+    }
+    .touch-right {
+      grid-column: 3;
+      grid-row: 2;
+    }
+    .touch-down {
+      grid-column: 2;
+      grid-row: 3;
+    }
+    .fire-pad {
+      /* pin fire/bomb buttons to the left-bottom of the viewport */
+      position: fixed;
+      left: 18px;
+      bottom: 18px;
+      z-index: 6;
+      display: none;
+      pointer-events: auto;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .touch-fire {
+      border-color: #9d6038;
+      background: rgba(80, 34, 14, 0.82);
+      font-size: 18px;
+      width: 62px;
+      height: 62px;
+      border-radius: 16px;
+    }
+    .touch-btn {
+      width: 56px;
+      height: 56px;
+      border-radius: 14px;
+      border: 1px solid #3f558e;
+      background: rgba(16, 28, 56, 0.72);
+      color: #f2f6ff;
+      font-size: 22px;
+      font-weight: 800;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      pointer-events: auto;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .touch-btn:active,
+    .touch-btn.active {
+      background: rgba(71, 118, 224, 0.86);
+      border-color: #7db0ff;
+      transform: translateY(1px);
+    }
+    .controls-bottom {
+      position: absolute;
+      right: 12px;
+      bottom: 18px;
+      z-index: 3;
+      display: flex;
+      gap: 14px;
+      align-items: flex-end;
+      pointer-events: none;
+    }
+    .controls-bottom > * {
+      pointer-events: auto;
+    }
+
+    /* --- ランキング（TOP10） --- */
+    .leaderboard {
+      width: min(92vw, 960px);
+      box-sizing: border-box;
+      background: rgba(16, 28, 56, 0.55);
+      border: 1px solid #3f558e;
+      border-radius: 14px;
+      padding: 16px 18px 20px;
+      display: none;
+    }
+    .leaderboard.visible {
+      display: block;
+    }
+    .leaderboard-title {
+      margin: 0 0 10px;
+      font-size: 16px;
+      color: #ffe08a;
+      text-align: center;
+    }
+    .leaderboard-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    /* columns: 順位 / ニックネーム / Xの名称 / スコア */
+    .leaderboard-row {
+      display: grid;
+      grid-template-columns: 40px 1fr auto auto;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 10px;
+      background: rgba(7, 12, 26, 0.6);
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    .leaderboard-row .lb-rank {
+      color: #9db0ff;
+      font-weight: 700;
+      text-align: center;
+    }
+    .leaderboard-row .lb-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .leaderboard-row .lb-xname {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .leaderboard-row .lb-avatar {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: #1b2340;
+      flex: none;
+    }
+    .leaderboard-row .lb-xlink {
+      color: #7db0ff;
+      text-decoration: none;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .leaderboard-row .lb-xlink:hover {
+      text-decoration: underline;
+    }
+    .leaderboard-row .lb-score {
+      color: #ffe08a;
+      font-weight: 700;
+      text-align: right;
+    }
+    .leaderboard-empty {
+      color: #9db0ff;
+      font-size: 13px;
+      text-align: center;
+      padding: 8px 0;
+    }
+    .score-register {
+      margin-bottom: 14px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid #3f558e;
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      align-items: center;
+    }
+    .score-register.visible {
+      display: flex;
+    }
+    .score-register-msg {
+      margin: 0;
+      color: #ffe08a;
+      font-weight: 700;
+      font-size: 14px;
+    }
+    .score-register input {
+      width: min(280px, 90%);
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid #3f558e;
+      background: rgba(7, 12, 26, 0.8);
+      color: #e8ecff;
+      font: inherit;
+    }
+    .score-register button {
+      padding: 8px 20px;
+      border-radius: 999px;
+      border: 1px solid #3f8b6c;
+      background: linear-gradient(180deg, #17604c, #0f362c);
+      color: #eef4ff;
+      font: inherit;
+      font-weight: 700;
+    }
+    .score-register button:disabled {
+      opacity: 0.5;
+    }
+    .rank-submit-status {
+      margin: 0;
+      font-size: 12px;
+      color: #9db0ff;
+      min-height: 1.2em;
+    }
+    .xid-preview {
+      width: min(280px, 90%);
+      min-height: 1.4em;
+      font-size: 12px;
+      display: none;
+      align-items: center;
+      gap: 6px;
+    }
+    .xid-preview.visible {
+      display: flex;
+    }
+    .xid-preview.xid-loading {
+      color: #9db0ff;
+    }
+    .xid-preview.xid-error {
+      color: #ff9d9d;
+    }
+    .xid-preview.xid-found {
+      color: #9dffb0;
+    }
+    .xid-preview .xid-avatar {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: #1b2340;
+    }
+    .xid-preview a {
+      color: #7db0ff;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <canvas id="game" width="960" height="540" aria-label="Scramble tunnel game"></canvas>
+    <div id="gyroStatus" class="status"></div>
+    <div class="controls-bottom" aria-hidden="false">
+      <div id="firePad" class="fire-pad" aria-label="発射ボタン">
+        <button id="touchFire" class="touch-btn touch-fire" type="button" aria-label="バルカン発射">X</button>
+        <button id="touchBomb" class="touch-btn touch-bomb" type="button" aria-label="爆弾投下">💣</button>
+      </div>
+      <div id="touchPad" class="touch-pad" aria-label="タッチコントローラー">
+        <button id="touchUp" class="touch-btn touch-up" type="button" aria-label="上昇">▲</button>
+        <button id="touchLeft" class="touch-btn touch-left" type="button" aria-label="左移動">◀</button>
+        <button id="touchRight" class="touch-btn touch-right" type="button" aria-label="右移動">▶</button>
+        <button id="touchDown" class="touch-btn touch-down" type="button" aria-label="下降">▼</button>
+      </div>
+    </div>
+  </div>
+
+  <section id="leaderboard" class="leaderboard" aria-label="ランキング TOP10">
+    <div id="scoreRegisterForm" class="score-register">
+      <p class="score-register-msg">TOP10入り！ニックネームを登録してください</p>
+      <input id="rankNickname" type="text" placeholder="ニックネーム（必須）" maxlength="20" autocomplete="off" />
+      <input id="rankXid" type="text" placeholder="XのユーザーID（任意・@なし）" maxlength="20" autocomplete="off" />
+      <div id="rankXidPreview" class="xid-preview"></div>
+      <button id="rankSubmitBtn" type="button">登録する</button>
+      <p id="rankSubmitStatus" class="rank-submit-status"></p>
+    </div>
+    <h2 class="leaderboard-title">🏆 TOP10 ランキング</h2>
+    <ol id="leaderboardList" class="leaderboard-list"></ol>
+  </section>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const gyroStatus = document.getElementById("gyroStatus");
+
+    // --- ランキング (Google スプレッドシート連携) ---
+    // デプロイ後の Apps Script Web App URL をここに設定してください（apps-script.gs 参照）
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbyTTaCaeW6hPn60U2UeG3Cle9tHjQ4I4PaujzYkXzNKaxprlMhlR4KELXv0dE7VVyFr/exec";
+    const leaderboardPanel = document.getElementById("leaderboard");
+    const leaderboardList = document.getElementById("leaderboardList");
+    const scoreRegisterForm = document.getElementById("scoreRegisterForm");
+    const rankNicknameInput = document.getElementById("rankNickname");
+    const rankXidInput = document.getElementById("rankXid");
+    const rankSubmitBtn = document.getElementById("rankSubmitBtn");
+    const rankSubmitStatus = document.getElementById("rankSubmitStatus");
+    const rankXidPreview = document.getElementById("rankXidPreview");
+    // タッチ操作対応端末をモバイルとみなし、ランキング登録時に記録する
+    const isMobileDevice = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+    let leaderboardCache = [];
+    let scoreSubmitted = false;
+    // X ID の検証状態: 未入力なら常に登録可、入力中は検証が完了(found)するまで登録不可
+    let xidVerifyState = "empty"; // "empty" | "loading" | "found" | "error"
+    let xidVerifyToken = 0; // 直前の検証より新しい結果だけ反映するための連番
+
+    function escapeHTML(s) {
+      return String(s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    }
+
+    function renderLeaderboard() {
+      if (!leaderboardList) return;
+      if (!leaderboardCache.length) {
+        leaderboardList.innerHTML = '<li class="leaderboard-empty">まだ記録がありません</li>';
+        return;
+      }
+      // 表示順: 順位 / ニックネーム / Xの名称 / スコア
+      leaderboardList.innerHTML = leaderboardCache
+        .slice(0, 10)
+        .map((r, i) => {
+          const rank = i + 1;
+          const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `${rank}`;
+          const xid = String(r.xid || "").replace(/^@/, "").trim();
+          const xPart =
+            xid && /^[A-Za-z0-9_]{1,15}$/.test(xid)
+              ? `<img class="lb-avatar" src="https://unavatar.io/x/${encodeURIComponent(xid)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+                 <a class="lb-xlink" href="https://x.com/${encodeURIComponent(xid)}" target="_blank" rel="noopener noreferrer">@${escapeHTML(xid)}</a>`
+              : "";
+          const deviceIcon = r.device === "モバイル" ? "📱" : r.device === "PC" ? "💻" : "";
+          return `<li class="leaderboard-row">
+              <span class="lb-rank">${medal}</span>
+              <span class="lb-name">${deviceIcon ? `<span class="lb-device" title="${escapeHTML(r.device)}">${deviceIcon}</span> ` : ""}${escapeHTML(r.nickname)}</span>
+              <span class="lb-xname">${xPart}</span>
+              <span class="lb-score">${Math.floor(r.score)}</span>
+            </li>`;
+        })
+        .join("");
+    }
+
+    function loadLeaderboard() {
+      if (!GAS_URL) {
+        renderLeaderboard();
+        return;
+      }
+      fetch(GAS_URL, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => {
+          leaderboardCache = (d.records || []).slice().sort((a, b) => b.score - a.score);
+          renderLeaderboard();
+        })
+        .catch(() => renderLeaderboard());
+    }
+
+    function qualifiesForTop10(score) {
+      if (leaderboardCache.length < 10) return true;
+      return score > leaderboardCache[9].score;
+    }
+
+    function setLeaderboardVisible(visible) {
+      if (!leaderboardPanel) return;
+      leaderboardPanel.classList.toggle("visible", !!visible);
+    }
+
+    function showScoreRegisterForm() {
+      if (!scoreRegisterForm) return;
+      scoreRegisterForm.classList.add("visible");
+      rankNicknameInput.value = "";
+      rankXidInput.value = "";
+      rankSubmitStatus.textContent = "";
+      xidVerifyState = "empty";
+      setXidPreview(null, "");
+      updateSubmitAvailability();
+    }
+
+    function hideScoreRegisterForm() {
+      if (!scoreRegisterForm) return;
+      scoreRegisterForm.classList.remove("visible");
+    }
+
+    // ニックネーム入力済み、かつ(X IDが空 または 検証済みfound)のときだけ登録可能にする
+    function updateSubmitAvailability() {
+      if (!rankSubmitBtn) return;
+      const nickname = rankNicknameInput.value.trim();
+      const xidOk = xidVerifyState === "empty" || xidVerifyState === "found";
+      rankSubmitBtn.disabled = !nickname || !xidOk;
+    }
+
+    function setXidPreview(mode, html) {
+      if (!rankXidPreview) return;
+      rankXidPreview.className = "xid-preview" + (mode ? " visible xid-" + mode : "");
+      rankXidPreview.innerHTML = html || "";
+    }
+
+    // unavatar.io へのアバター読み込み成否で、Xアカウントが実在するかを簡易検証する
+    function verifyXid(rawXid) {
+      const username = String(rawXid || "").replace(/^@/, "").trim();
+      xidVerifyToken++;
+      const token = xidVerifyToken;
+
+      if (!username) {
+        xidVerifyState = "empty";
+        setXidPreview(null, "");
+        updateSubmitAvailability();
+        return;
+      }
+      if (!/^[A-Za-z0-9_]{1,15}$/.test(username)) {
+        xidVerifyState = "error";
+        setXidPreview("error", "形式エラー：半角英数字・アンダースコアのみ、最大15文字で入力してください");
+        updateSubmitAvailability();
+        return;
+      }
+
+      xidVerifyState = "loading";
+      setXidPreview("loading", "確認中...");
+      updateSubmitAvailability();
+
+      const img = new Image();
+      img.onload = () => {
+        if (token !== xidVerifyToken) return; // 途中で入力が変わっていたら無視
+        xidVerifyState = "found";
+        setXidPreview(
+          "found",
+          `<img src="https://unavatar.io/x/${encodeURIComponent(username)}" alt="" class="xid-avatar">` +
+            `<a href="https://x.com/${encodeURIComponent(username)}" target="_blank" rel="noopener noreferrer">@${escapeHTML(username)}</a>` +
+            `<span>を確認しました</span>`
+        );
+        updateSubmitAvailability();
+      };
+      img.onerror = () => {
+        if (token !== xidVerifyToken) return;
+        xidVerifyState = "error";
+        setXidPreview("error", "このXアカウントの名称を取得できませんでした。IDを確認してください");
+        updateSubmitAvailability();
+      };
+      img.src = "https://unavatar.io/x/" + encodeURIComponent(username);
+    }
+
+    if (rankXidInput) {
+      // 入力中は再検証されるまで登録不可にする（値を空にした場合のみ即座に登録可へ戻す）
+      rankXidInput.addEventListener("input", () => {
+        const username = rankXidInput.value.trim();
+        if (!username) {
+          xidVerifyState = "empty";
+          setXidPreview(null, "");
+        } else {
+          xidVerifyState = "loading";
+          setXidPreview(null, "");
+        }
+        updateSubmitAvailability();
+      });
+      rankXidInput.addEventListener("blur", () => verifyXid(rankXidInput.value));
+    }
+    if (rankNicknameInput) {
+      rankNicknameInput.addEventListener("input", updateSubmitAvailability);
+    }
+
+    if (rankSubmitBtn) {
+      rankSubmitBtn.addEventListener("click", () => {
+        const nickname = rankNicknameInput.value.trim();
+        if (!nickname) {
+          rankSubmitStatus.textContent = "ニックネームを入力してください";
+          rankNicknameInput.focus();
+          return;
+        }
+        if (xidVerifyState !== "empty" && xidVerifyState !== "found") {
+          rankSubmitStatus.textContent = "XのIDを確認できるまで登録できません";
+          rankXidInput.focus();
+          return;
+        }
+        const xid = rankXidInput.value.trim().replace(/^@/, "");
+        rankSubmitBtn.disabled = true;
+        rankSubmitStatus.textContent = "登録中...";
+        const record = {
+          nickname,
+          xid,
+          score: Math.floor(state.score),
+          created: Date.now(),
+          device: isMobileDevice ? "モバイル" : "PC"
+        };
+        if (!GAS_URL) {
+          rankSubmitStatus.textContent = "ランキング機能が未設定です（GAS_URL 未設定）";
+          rankSubmitBtn.disabled = false;
+          return;
+        }
+        fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "add", record }) })
+          .then((r) => r.json())
+          .then((d) => {
+            if (d.success) {
+              rankSubmitStatus.textContent = "登録しました！";
+              hideScoreRegisterForm();
+              loadLeaderboard();
+            } else {
+              rankSubmitStatus.textContent = "登録に失敗しました: " + (d.error || "");
+              updateSubmitAvailability();
+            }
+          })
+          .catch((e) => {
+            rankSubmitStatus.textContent = "通信エラー: " + e.message;
+            updateSubmitAvailability();
+          });
+      });
+    }
+    const touchPad = document.getElementById("touchPad");
+    const firePad = document.getElementById("firePad");
+    const touchUp = document.getElementById("touchUp");
+    const touchLeft = document.getElementById("touchLeft");
+    const touchFire = document.getElementById("touchFire");
+    const touchBomb = document.getElementById("touchBomb");
+    const touchRight = document.getElementById("touchRight");
+    const touchDown = document.getElementById("touchDown");
+
+    // gyro tilt controls: when available, replace the on-screen d-pad with device tilt.
+    // baseline is calibrated to however the phone is being held right when the game starts.
+    const gyro = {
+      supported: false,   // real orientation data has been observed at least once
+      listening: false,   // the deviceorientation listener has been attached (permission granted)
+      active: false,      // currently driving ship movement (toggle-able)
+      calibrated: false,
+      baseline: { x: 0, y: 0 },
+      deadzoneDeg: 4,     // degrees of tilt ignored around the baseline (dead zone)
+      maxDeg: 28,         // degrees of tilt for full deflection
+      sensitivity: 0.55,  // scales the analog thrust vs. a full digital key-press, for finer control
+      userChoiceMade: false // once the player uses the toggle button, スタート stops auto-switching modes
+    };
+
+    // current screen rotation (0/90/180/270) so tilt axes can be remapped to how the phone is actually held
+    function getScreenAngle() {
+      if (window.screen && window.screen.orientation && typeof window.screen.orientation.angle === "number") {
+        return window.screen.orientation.angle;
+      }
+      if (typeof window.orientation === "number") return window.orientation;
+      return 0;
+    }
+
+    // rotates the device's raw beta/gamma into screen-relative x (left/right) and y (forward/back) tilt
+    function computeScreenTilt(beta, gamma) {
+      const angle = ((getScreenAngle() % 360) + 360) % 360;
+      if (angle === 90) return { x: beta, y: -gamma };
+      if (angle === 180) return { x: -gamma, y: -beta };
+      if (angle === 270) return { x: -beta, y: gamma };
+      return { x: gamma, y: beta };
+    }
+
+    // maps a tilt offset (in degrees) to a smooth -1..1 analog value, with a dead zone near the baseline
+    function normalizeTiltAxis(deltaDeg) {
+      const abs = Math.abs(deltaDeg);
+      if (abs <= gyro.deadzoneDeg) return 0;
+      const t = Math.min(1, (abs - gyro.deadzoneDeg) / (gyro.maxDeg - gyro.deadzoneDeg));
+      return (deltaDeg < 0 ? -1 : 1) * t;
+    }
+
+    function applyGyroTilt(x, y) {
+      if (!gyro.calibrated) {
+        gyro.baseline.x = x;
+        gyro.baseline.y = y;
+        gyro.calibrated = true;
+        return;
+      }
+      state.input.gyroX = normalizeTiltAxis(x - gyro.baseline.x);
+      state.input.gyroY = normalizeTiltAxis(y - gyro.baseline.y);
+    }
+
+    // hides only the four direction buttons (not the whole grid), so the gyro
+    // toggle icon in the center cell stays visible/reachable either way
+    function setTouchPadVisible(visible) {
+      const isTouchDevice = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+      const display = visible && isTouchDevice ? "" : "none";
+      [touchUp, touchLeft, touchRight, touchDown].forEach((btn) => {
+        if (btn) btn.style.display = display;
+      });
+    }
+
+    // Hiding the d-pad must wait for a *real* deviceorientation event — granting
+    // permission does not mean the device actually reports tilt data (many Android
+    // devices without a gyroscope, or desktop "mobile mode", grant permission
+    // instantly but never fire the event). Hiding on activation alone left players
+    // with neither the d-pad nor working tilt controls.
+    let _gyroFallbackTimer = null;
+
+    function activateGyroControls() {
+      gyro.active = true;
+      state.input.gyroX = 0;
+      state.input.gyroY = 0;
+      recalibrateGyro();
+      updateGyroToggleLabel();
+      if (gyro.supported) {
+        // we've already confirmed real tilt data arrives (e.g. re-enabled via the toggle)
+        setTouchPadVisible(false);
+        updateGyroStatus("ジャイロ操作中：端末を傾けて移動します（現在の向きが基準）");
+      } else {
+        // keep the d-pad visible until the first real event confirms tilt actually works
+        setTouchPadVisible(true);
+        updateGyroStatus("ジャイロを確認中...端末を傾けてみてください（反応がなければ十字ボタンをご利用ください）");
+        clearTimeout(_gyroFallbackTimer);
+        _gyroFallbackTimer = setTimeout(() => {
+          if (gyro.active && !gyro.supported) {
+            updateGyroStatus("ジャイロが検出できませんでした。十字ボタンで操作してください");
+            deactivateGyroControls();
+          }
+        }, 1500);
+      }
+    }
+
+    function deactivateGyroControls() {
+      clearTimeout(_gyroFallbackTimer);
+      gyro.active = false;
+      state.input.gyroX = 0;
+      state.input.gyroY = 0;
+      setTouchPadVisible(true);
+      updateGyroStatus("キー/タッチ操作に切り替えました");
+      updateGyroToggleLabel();
+    }
+
+    function handleOrientation(e) {
+      if (e.beta == null || e.gamma == null) return;
+      const justConfirmed = !gyro.supported;
+      gyro.supported = true;
+      if (!gyro.active) return;
+      if (justConfirmed) {
+        // first real tilt data while active: now it's safe to hide the d-pad
+        clearTimeout(_gyroFallbackTimer);
+        setTouchPadVisible(false);
+        updateGyroStatus("ジャイロ操作中：端末を傾けて移動します（現在の向きが基準）");
+      }
+      const tilt = computeScreenTilt(e.beta, e.gamma);
+      applyGyroTilt(tilt.x, tilt.y);
+    }
+
+    function recalibrateGyro() {
+      gyro.calibrated = false;
+    }
+
+    async function requestGyroPermission() {
+      if (typeof window.DeviceOrientationEvent === "undefined") return false;
+      if (typeof DeviceOrientationEvent.requestPermission === "function") {
+        try {
+          const result = await DeviceOrientationEvent.requestPermission();
+          return result === "granted";
+        } catch (e) {
+          return false;
+        }
+      }
+      return true; // no explicit permission needed (Android, older iOS)
+    }
+
+    // requests permission (first time only) and attaches the listener; does not itself toggle control
+    async function ensureGyroListening() {
+      if (gyro.listening) return true;
+      const granted = await requestGyroPermission();
+      if (!granted) return false;
+      gyro.listening = true;
+      window.addEventListener("deviceorientation", handleOrientation);
+      // rotating the phone mid-game changes what "neutral" tilt means, so recalibrate on rotation
+      window.addEventListener("orientationchange", recalibrateGyro);
+      if (window.screen && window.screen.orientation) {
+        window.screen.orientation.addEventListener("change", recalibrateGyro);
+      }
+      return true;
+    }
+
+    async function enableGyroIfAvailable() {
+      const ok = await ensureGyroListening();
+      if (ok) activateGyroControls();
+    }
+
+    async function toggleGyroControls() {
+      gyro.userChoiceMade = true;
+      if (gyro.active) {
+        deactivateGyroControls();
+        return;
+      }
+      const ok = await ensureGyroListening();
+      if (ok) {
+        activateGyroControls();
+      } else {
+        updateGyroStatus("ジャイロを有効化できませんでした。キー/タッチで操作してください");
+      }
+    }
+
+    function updateGyroToggleLabel() {
+      if (!gyroToggleButton) return;
+      // icon-only: 🕹️ = tap to switch to key/touch, 📱 = tap to switch to tilt
+      gyroToggleButton.textContent = gyro.active ? "🕹️" : "📱";
+      gyroToggleButton.setAttribute(
+        "aria-label",
+        gyro.active ? "キー/タッチ操作に切り替え" : "傾き操作に切り替え"
+      );
+    }
+
+    const startButton = document.createElement("button");
+    startButton.id = "startButton";
+    startButton.type = "button";
+    startButton.className = "start hud-start";
+    startButton.textContent = "スタート";
+    document.querySelector(".wrap").appendChild(startButton);
+
+    // switches between gyro tilt control and key/touch control, without re-prompting for permission.
+    // sits in the empty center cell of the d-pad grid, icon-only so it doesn't crowd the controller.
+    const gyroToggleButton = document.createElement("button");
+    gyroToggleButton.id = "gyroToggleButton";
+    gyroToggleButton.type = "button";
+    gyroToggleButton.className = "touch-btn gyro-toggle";
+    gyroToggleButton.textContent = "📱";
+    gyroToggleButton.setAttribute("aria-label", "傾き操作とキー/タッチ操作を切り替え");
+    gyroToggleButton.style.display = "none"; // only shown once we know the device might support it
+    touchPad.appendChild(gyroToggleButton);
+
+    // pilot portrait sprite sheet: 5 expressions (①通常 ②被弾 ③怒り ④苦痛 ⑤決意), drawn onto the game canvas
+    const pilotImg = new Image();
+    pilotImg.src = "image01.png";
+    // source slots within the sheet (row1: 3 across, row2: 2 across)
+    const PILOT_SLOTS = [
+      { x: 0, y: 0, w: 557, h: 470 },     // ① 通常(冷静)
+      { x: 557, y: 0, w: 557, h: 470 },   // ② 被弾(衝撃)
+      { x: 1114, y: 0, w: 558, h: 470 },  // ③ 怒り(戦闘モード)
+      { x: 0, y: 471, w: 836, h: 470 },   // ④ 苦痛(ダメージ大)
+      { x: 836, y: 471, w: 836, h: 470 }  // ⑤ 決意(集中・反撃準備)
+    ];
+    // center-crop each slot to a 4:3 landscape rect so all 5 frames display consistently
+    const PILOT_ASPECT = 4 / 3;
+    const PILOT_CROPS = PILOT_SLOTS.map((s) => {
+      const slotAspect = s.w / s.h;
+      if (slotAspect > PILOT_ASPECT) {
+        const w = s.h * PILOT_ASPECT;
+        return { x: s.x + (s.w - w) / 2, y: s.y, w, h: s.h };
+      }
+      const h = s.w / PILOT_ASPECT;
+      return { x: s.x, y: s.y + (s.h - h) / 2, w: s.w, h };
+    });
+
+    // victory illustration shown on the CLEAR screen
+    const clearImg = new Image();
+    clearImg.src = "image02png.png";
+
+    // title illustration shown on the start screen, before the player presses スタート
+    const titleImg = new Image();
+    titleImg.src = "image01.jpg";
+
+    // HP recovery item sprite, drawn as-is (no recoloring/redrawing)
+    const hpItemImg = new Image();
+    hpItemImg.src = "noundry-studio-glasses.PNG";
+
+    const state = {
+      running: true,
+      // becomes true once the player presses スタート; gates update() so nothing moves before that
+      started: false,
+      score: 0,
+      speed: 2.6,
+      maxSpeed: 6.2,
+      bullets: [],
+      bombs: [],
+      bases: [],
+      explosions: [],
+      scrollSpeed: 2.6,
+      bonusText: "",
+      bonusTimer: 0,
+      columns: [],
+      stars: [],
+      frame: 0,
+      displayScore: 0,
+      ship: {
+        x: 130,
+        y: canvas.height / 2,
+        vx: 0,
+        vy: 0,
+        radius: 11,
+        hp: 100,
+        contactFrames: 0
+      },
+      hpItems: [],
+      // single mega HP per stage
+      megaHp: null,
+      megaHpSpawned: false,
+      // up/down/left/right: digital (keyboard/touch). gyroX/gyroY: analog -1..1 (device tilt)
+      input: { up: false, down: false, left: false, right: false, gyroX: 0, gyroY: 0 },
+      effects: {
+        slowTimer: 0,
+        wideTimer: 0
+      }
+      ,
+      // stage system
+      stage: 1,
+      stageTimer: 0, // frames elapsed in current stage
+      stageDuration: 60, // seconds per stage
+      caption: "",
+      captionTimer: 0, // frames to show caption
+      pendingStageAdvance: false
+      ,
+      gameOver: false
+      ,
+      goalHold: { active: false, frames: 0 },
+      // stage intro: phases: 'countdown' -> 'narrow'
+      stageIntro: { active: false, frames: 0, total: 0, startGap: 0, phase: null },
+      // arena bullets during intro
+      // spawnInterval: larger => fewer waves (frames)
+      arena: { bullets: [], spawnTimer: 0, spawnInterval: 60 },
+      // laser beam: hold X for 3s to charge, then fire
+      laser: { charging: false, chargeFrames: 0, chargeDuration: 180, beam: null },
+      // part 3: vertical fall through the floor after the arena chamber
+      fall: {
+        active: false,
+        timer: 0,
+        duration: 30 * 60,
+        rows: [],
+        // intro: bullets stop, ship rotates 90° while easing downward into the shaft
+        introActive: false,
+        introTimer: 0,
+        introDuration: 90,
+        introStartY: 0,
+        shipAngle: 0,
+        // landing: auto-fly to the floor once the descent timer ends, then CLEAR
+        landing: { active: false, timer: 0, duration: 90, progress: 0 }
+      },
+      cleared: false,
+      // pilot portrait: brief "被弾" flash timer shown right after taking damage
+      portrait: { hitTimer: 0 },
+      // big ship-explosion animation played before the GAME OVER telop appears
+      dying: { active: false, timer: 0, duration: 96 }
+    };
+
+    const tunnel = {
+      center: canvas.height / 2,
+      centerVel: 0,
+      gap: 200,
+      minGap: 120,
+      maxGap: 260,
+      roughness: 0.42,
+      baseSpawnChance: 0.0014
+    };
+
+    const fallTunnel = {
+      center: canvas.width / 2,
+      centerVel: 0,
+      gap: 260,
+      minGap: 156, // 120 * 1.3 — wider shaft, lower difficulty
+      maxGap: 338, // 260 * 1.3
+      roughness: 0.42
+    };
+
+    const baseColors = ["red", "blue", "yellow"];
+    const baseStyles = {
+      red: { fill: "#cf3946", edge: "#ff8f95" },
+      blue: { fill: "#2e67c9", edge: "#89b5ff" },
+      yellow: { fill: "#c89c26", edge: "#ffdf85" }
+    };
+
+    for (let i = 0; i < 160; i++) {
+      state.stars.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        z: 0.4 + Math.random() * 0.9
+      });
+    }
+
+    function seedColumns() {
+      state.columns.length = 0;
+      let localCenter = tunnel.center;
+      for (let x = 0; x < canvas.width; x++) {
+        state.columns.push(makeColumn(localCenter, tunnel.gap));
+      }
+    }
+
+    function makeColumn(center, gap) {
+      const half = gap * 0.5;
+      return {
+        top: Math.max(20, center - half),
+        bottom: Math.min(canvas.height - 20, center + half)
+      };
+    }
+
+    // --- part 3: vertical fall shaft (rows indexed by y, walls on left/right) ---
+    function seedFallRows() {
+      state.fall.rows.length = 0;
+      for (let y = 0; y < canvas.height; y++) {
+        state.fall.rows.push(makeFallRow(fallTunnel.center, fallTunnel.gap));
+      }
+    }
+
+    function makeFallRow(center, gap) {
+      const half = gap * 0.5;
+      return {
+        left: Math.max(20, center - half),
+        right: Math.min(canvas.width - 20, center + half)
+      };
+    }
+
+    function updateFallTunnel() {
+      const drift = (Math.random() - 0.5) * fallTunnel.roughness;
+      fallTunnel.centerVel += drift;
+      fallTunnel.centerVel *= 0.96;
+      fallTunnel.center += fallTunnel.centerVel;
+      fallTunnel.center = Math.max(90, Math.min(canvas.width - 90, fallTunnel.center));
+
+      const wave = Math.sin(state.frame * 0.012) * 22;
+      const gapTarget = 247 + wave; // 190 * 1.3 — wider, lower difficulty
+      fallTunnel.gap += (gapTarget - fallTunnel.gap) * 0.03;
+      fallTunnel.gap = Math.max(fallTunnel.minGap, Math.min(fallTunnel.maxGap, fallTunnel.gap));
+    }
+
+    function updateFallRows() {
+      const step = state.scrollSpeed;
+      for (let i = 0; i < step; i++) {
+        state.fall.rows.shift();
+        updateFallTunnel();
+        state.fall.rows.push(makeFallRow(fallTunnel.center, fallTunnel.gap));
+      }
+    }
+
+    // returns penetration amount in pixels for the fall shaft (0 if no collision)
+    function getFallPenetration() {
+      const y = Math.floor(state.ship.y);
+      const row = state.fall.rows[y];
+      if (!row) return 0;
+      if (state.ship.x - state.ship.radius < row.left) {
+        return row.left - (state.ship.x - state.ship.radius);
+      }
+      if (state.ship.x + state.ship.radius > row.right) {
+        return (state.ship.x + state.ship.radius) - row.right;
+      }
+      return 0;
+    }
+
+    function beginFall() {
+      state.fall.active = true;
+      state.fall.timer = 0;
+      // intro: bullets already stopped, ship rotates 90° while it keeps easing downward —
+      // no screen wipe, so it reads as a continuous descent rather than a scene cut
+      state.fall.introActive = true;
+      state.fall.introTimer = 0;
+      state.fall.introStartY = state.ship.y;
+      state.fall.shipAngle = 0;
+      fallTunnel.center = canvas.width / 2;
+      fallTunnel.centerVel = 0;
+      fallTunnel.gap = 260;
+      seedFallRows();
+      state.ship.x = canvas.width / 2;
+      state.ship.vx = 0;
+      state.ship.vy = 0;
+      state.bullets.length = 0;
+      state.bombs.length = 0;
+      state.arena.bullets.length = 0;
+      state.arena.spawnTimer = 0;
+      state.stageIntro.active = false;
+      state.hpItems.length = 0;
+      state.megaHp = null;
+      showCaption("床が開いた……地底へ落下！", 150);
+    }
+
+    function resetGame() {
+      state.running = true;
+      state.score = 0;
+      state.speed = 2.6;
+      scoreSubmitted = false;
+      hideScoreRegisterForm();
+      state.frame = 0;
+      state.ship.x = 130;
+      state.ship.y = canvas.height / 2;
+      state.ship.vx = 0;
+      state.ship.vy = 0;
+      state.bullets.length = 0;
+      state.bombs.length = 0;
+      state.bases.length = 0;
+      state.explosions.length = 0;
+      state.bonusText = "";
+      state.bonusTimer = 0;
+      state.effects.slowTimer = 0;
+      state.effects.wideTimer = 0;
+      state.ship.hp = 100;
+      state.ship.contactFrames = 0;
+      // reset stage
+      state.stage = 1;
+      state.stageTimer = 0;
+      state.caption = "";
+      state.captionTimer = 0;
+      state.pendingStageAdvance = false;
+      state.gameOver = false;
+      state.megaHp = null;
+      state.megaHpSpawned = false;
+      state.stageIntro = { active: false, frames: 0, total: 0, startGap: 0 };
+      state.arena.bullets.length = 0;
+      state.arena.spawnTimer = 0;
+      state.displayScore = 0;
+      state.laser.charging = false;
+      state.laser.chargeFrames = 0;
+      state.laser.beam = null;
+      state.fall.active = false;
+      state.fall.timer = 0;
+      state.fall.rows.length = 0;
+      state.fall.introActive = false;
+      state.fall.introTimer = 0;
+      state.fall.introStartY = 0;
+      state.fall.shipAngle = 0;
+      state.fall.landing.active = false;
+      state.fall.landing.timer = 0;
+      state.fall.landing.progress = 0;
+      state.cleared = false;
+      state.portrait.hitTimer = 0;
+      state.dying.active = false;
+      state.dying.timer = 0;
+      state.input.gyroX = 0;
+      state.input.gyroY = 0;
+      // ここが抜けていると、パート2(バルカン回避)中に力尽きた直後の再スタートが
+      // ステージ1のトンネルへ戻らず、古い goalHold 状態のまま再開してしまう
+      state.goalHold.active = false;
+      state.goalHold.frames = 0;
+
+      tunnel.center = canvas.height / 2;
+      tunnel.centerVel = 0;
+      tunnel.gap = 200;
+      seedColumns();
+    }
+
+    function startGame() {
+      resetGame();
+      state.started = true;
+      updateGyroStatus("開始しました。右下コントローラーで操作できます");
+      // begin stage with wide intro
+      beginStage();
+    }
+
+    function updateGyroStatus(message) {
+      gyroStatus.textContent = message;
+    }
+
+    function grantBaseBonus(color) {
+      if (color === "red") {
+        state.score += 180;
+        state.bonusText = "RED BONUS +180 SCORE";
+      } else if (color === "blue") {
+        state.effects.slowTimer = 360;
+        state.bonusText = "BLUE BONUS TUNNEL SLOW";
+      } else {
+        state.score += 80;
+        state.effects.wideTimer = 360;
+        state.bonusText = "YELLOW BONUS WIDE GAP";
+      }
+      state.bonusTimer = 140;
+    }
+
+    function createExplosion(x, y, color) {
+      const particles = [];
+      for (let i = 0; i < 12; i++) {
+        const angle = (Math.PI * 2 * i) / 12 + Math.random() * 0.26;
+        const speed = 1.4 + Math.random() * 3.1;
+        particles.push({
+          x,
+          y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: 30 + Math.floor(Math.random() * 12),
+          maxLife: 42,
+          color
+        });
+      }
+      state.explosions.push(...particles);
+    }
+
+    // several large overlapping bursts, staggered slightly so it reads as one big blast
+    function createShipDeathExplosion(x, y) {
+      const colors = ["red", "yellow", "red", "yellow"];
+      colors.forEach((color, i) => {
+        const jitterX = x + (Math.random() - 0.5) * 14;
+        const jitterY = y + (Math.random() - 0.5) * 14;
+        const particles = [];
+        const count = 18;
+        for (let p = 0; p < count; p++) {
+          const angle = (Math.PI * 2 * p) / count + Math.random() * 0.3;
+          const speed = 2.2 + Math.random() * 5.5;
+          particles.push({
+            x: jitterX,
+            y: jitterY,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            life: 55 + Math.floor(Math.random() * 25) + i * 4,
+            maxLife: 90,
+            color
+          });
+        }
+        state.explosions.push(...particles);
+      });
+    }
+
+    // freezes gameplay and plays a big explosion before GAME OVER appears (see the
+    // "dying" block near the top of update())
+    function triggerShipDeath() {
+      if (state.dying.active || state.gameOver) return;
+      state.dying.active = true;
+      state.dying.timer = 0;
+      state.running = false;
+      createShipDeathExplosion(state.ship.x, state.ship.y);
+    }
+
+    function spawnBaseAtRight() {
+      const x = canvas.width + 16;
+      const col = state.columns[Math.max(0, canvas.width - 2)];
+      if (!col) return;
+
+      const width = 14 + Math.random() * 14;
+      const maxProtrusion = Math.max(12, Math.min(28, (col.bottom - col.top) * 0.42));
+      const protrusion = 12 + Math.random() * (maxProtrusion - 12);
+      const side = Math.random() < 0.5 ? "top" : "bottom";
+      const color = baseColors[(Math.random() * baseColors.length) | 0];
+
+      if (side === "top") {
+        state.bases.push({ x, y: col.top, w: width, h: protrusion, side, color });
+      } else {
+        state.bases.push({ x, y: col.bottom - protrusion, w: width, h: protrusion, side, color });
+      }
+    }
+
+    function shiftBases(step) {
+      for (let i = 0; i < step; i++) {
+        for (const base of state.bases) {
+          base.x -= 1;
+        }
+        if (Math.random() < tunnel.baseSpawnChance) {
+          spawnBaseAtRight();
+        }
+      }
+      state.bases = state.bases.filter((b) => b.x + b.w > -24);
+    }
+
+    function circleRectHit(cx, cy, cr, rx, ry, rw, rh) {
+      const nearestX = Math.max(rx, Math.min(cx, rx + rw));
+      const nearestY = Math.max(ry, Math.min(cy, ry + rh));
+      const dx = cx - nearestX;
+      const dy = cy - nearestY;
+      return dx * dx + dy * dy <= cr * cr;
+    }
+
+    function fireVulcan() {
+      if (!state.running) return;
+      const shipSpeed = Math.max(1, Math.hypot(state.ship.vx, state.ship.vy));
+      const bulletSpeed = shipSpeed * 10;
+      state.bullets.push({
+        x: state.ship.x + state.ship.radius + 6,
+        y: state.ship.y,
+        vx: bulletSpeed,
+        vy: state.ship.vy * 0.12,
+        radius: 3
+      });
+    }
+
+    function updateTunnel() {
+      const drift = (Math.random() - 0.5) * tunnel.roughness;
+      tunnel.centerVel += drift;
+      tunnel.centerVel *= 0.96;
+      tunnel.center += tunnel.centerVel;
+      tunnel.center = Math.max(90, Math.min(canvas.height - 90, tunnel.center));
+
+      const wave = Math.sin(state.frame * 0.012) * 22;
+      const wideBonus = state.effects.wideTimer > 0 ? 24 : 0;
+      const gapTarget = 190 + wave - Math.min(38, state.speed * 7) + wideBonus;
+      tunnel.gap += (gapTarget - tunnel.gap) * 0.03;
+      tunnel.gap = Math.max(tunnel.minGap, Math.min(tunnel.maxGap, tunnel.gap));
+    }
+
+    function updateColumns() {
+      const step = state.scrollSpeed;
+      for (let i = 0; i < step; i++) {
+        state.columns.shift();
+        updateTunnel();
+        state.columns.push(makeColumn(tunnel.center, tunnel.gap));
+      }
+      shiftBases(step);
+    }
+
+    function updateShip() {
+      const verticalThrust = 0.34;
+      const horizontalThrust = 0.28;
+      const drag = 0.985;
+      if (state.input.up) state.ship.vy -= verticalThrust;
+      if (state.input.down) state.ship.vy += verticalThrust;
+      if (state.input.left) state.ship.vx -= horizontalThrust;
+      if (state.input.right) state.ship.vx += horizontalThrust;
+      // gyro tilt: proportional (analog) thrust instead of full digital thrust, for finer control
+      state.ship.vx += horizontalThrust * gyro.sensitivity * state.input.gyroX;
+      state.ship.vy += verticalThrust * gyro.sensitivity * state.input.gyroY;
+      state.ship.vx *= drag;
+      state.ship.vy *= drag;
+      state.ship.x += state.ship.vx;
+      state.ship.y += state.ship.vy;
+      state.ship.x = Math.max(state.ship.radius + 8, Math.min(canvas.width - state.ship.radius - 8, state.ship.x));
+      state.ship.y = Math.max(state.ship.radius, Math.min(canvas.height - state.ship.radius, state.ship.y));
+    }
+
+    // returns penetration amount in pixels (0 if no collision)
+    function getCollisionPenetration() {
+      const x = Math.floor(state.ship.x);
+      const column = state.columns[x];
+      if (!column) return 0;
+      if (state.ship.y - state.ship.radius < column.top) {
+        return column.top - (state.ship.y - state.ship.radius);
+      }
+      if (state.ship.y + state.ship.radius > column.bottom) {
+        return (state.ship.y + state.ship.radius) - column.bottom;
+      }
+      return 0;
+    }
+
+    function updateStars() {
+      for (const s of state.stars) {
+        s.x -= state.scrollSpeed * s.z * 0.4;
+        if (s.x < -2) {
+          s.x = canvas.width + Math.random() * 16;
+          s.y = Math.random() * canvas.height;
+        }
+      }
+    }
+
+    function updateBullets() {
+      for (const b of state.bullets) {
+        b.x += b.vx;
+        b.y += b.vy;
+      }
+
+      const hitBases = new Set();
+      const hitBullets = new Set();
+      for (let i = 0; i < state.bullets.length; i++) {
+        const b = state.bullets[i];
+        for (let j = 0; j < state.bases.length; j++) {
+          if (hitBases.has(j)) continue;
+          const base = state.bases[j];
+          if (circleRectHit(b.x, b.y, b.radius, base.x, base.y, base.w, base.h)) {
+            hitBases.add(j);
+            hitBullets.add(i);
+            grantBaseBonus(base.color);
+            createExplosion(base.x + base.w * 0.5, base.y + base.h * 0.5, base.color);
+            break;
+          }
+        }
+      }
+
+      if (hitBases.size > 0) {
+        state.bases = state.bases.filter((_, idx) => !hitBases.has(idx));
+      }
+      if (hitBullets.size > 0) {
+        state.bullets = state.bullets.filter((_, idx) => !hitBullets.has(idx));
+      }
+
+      state.bullets = state.bullets.filter(
+        (b) => b.x < canvas.width + 40 && b.y > -20 && b.y < canvas.height + 20
+      );
+    }
+
+    function dropBomb() {
+      if (!state.running) return;
+      const initialVx = state.ship.vx * 0.6 + 1.2;
+      state.bombs.push({
+        x: state.ship.x - 6,
+        y: state.ship.y + 6,
+        vx: initialVx,
+        vy: 0,
+        radius: 6
+      });
+    }
+
+    function updateBombs() {
+      const gravity = 0.42;
+      const toRemove = new Set();
+      for (let i = 0; i < state.bombs.length; i++) {
+        const b = state.bombs[i];
+        b.vy += gravity;
+        b.x += b.vx;
+        b.y += b.vy;
+
+        // hit base?
+        for (let j = 0; j < state.bases.length; j++) {
+          const base = state.bases[j];
+          if (circleRectHit(b.x, b.y, b.radius, base.x, base.y, base.w, base.h)) {
+            // explode and apply bonuses to affected bases within blast radius
+            const blastR = 36;
+            createExplosion(b.x, b.y, base.color);
+            const removed = [];
+            for (let k = 0; k < state.bases.length; k++) {
+              const bb = state.bases[k];
+              if (circleRectHit(b.x, b.y, blastR, bb.x, bb.y, bb.w, bb.h)) {
+                grantBaseBonus(bb.color);
+                removed.push(k);
+              }
+            }
+            state.bases = state.bases.filter((_, idx) => !removed.includes(idx));
+            toRemove.add(i);
+            break;
+          }
+        }
+
+        // hit floor or ceiling
+        if (b.y > canvas.height - 4 || b.y < 4) {
+          createExplosion(b.x, Math.max(4, Math.min(canvas.height - 4, b.y)), "red");
+          toRemove.add(i);
+        }
+      }
+      if (toRemove.size > 0) {
+        state.bombs = state.bombs.filter((_, idx) => !toRemove.has(idx));
+      }
+
+      state.bombs = state.bombs.filter((b) => b.x > -60 && b.x < canvas.width + 60 && b.y < canvas.height + 200);
+    }
+
+    // --- HP 回復アイテム (ゆらゆら浮遊) ---
+    function spawnHpItem() {
+      const x = canvas.width + 24;
+      // spawn within tunnel gap area near center of current column at right edge
+      const col = state.columns[Math.max(0, canvas.width - 2)];
+      let baseY = canvas.height / 2;
+      if (col) {
+        // choose a y between column.top + 16 and column.bottom - 16
+        baseY = Math.max(col.top + 16, Math.min(col.bottom - 16, col.top + Math.random() * (col.bottom - col.top - 32)));
+      } else {
+        baseY = 40 + Math.random() * (canvas.height - 80);
+      }
+      const phase = Math.random() * Math.PI * 2;
+      const item = {
+        x,
+        baseY,
+        radius: 12,
+        vx: 0.6 + Math.random() * 0.8,
+        phase,
+        bobAmp: 6 + Math.random() * 6
+      };
+      state.hpItems.push(item);
+    }
+
+    function updateHpItems() {
+      // occasional spawn (不定期)
+      const HP_SPAWN_CHANCE = 0.00064; // reduced to ~1/5 the previous rate
+      if (Math.random() < HP_SPAWN_CHANCE) spawnHpItem();
+
+      const collected = new Set();
+      for (let i = 0; i < state.hpItems.length; i++) {
+        const it = state.hpItems[i];
+        it.x -= state.scrollSpeed * 0.9 + it.vx;
+        // bobbing using global frame so movement is smooth
+        it.y = it.baseY + Math.sin(state.frame * 0.06 + it.phase) * it.bobAmp;
+
+        // collision with ship
+        const dx = it.x - state.ship.x;
+        const dy = it.y - state.ship.y;
+        const dist2 = dx * dx + dy * dy;
+        const r = it.radius + state.ship.radius;
+        if (dist2 <= r * r) {
+          collected.add(i);
+          // heal
+          state.ship.hp = Math.min(100, (state.ship.hp || 0) + 10);
+          state.bonusText = "HP +10";
+          state.bonusTimer = 90;
+          // small visual feedback
+          createExplosion(it.x, it.y, "blue");
+        }
+      }
+
+      if (collected.size > 0) {
+        state.hpItems = state.hpItems.filter((_, idx) => !collected.has(idx));
+      }
+
+      // remove offscreen
+      state.hpItems = state.hpItems.filter((it) => it.x > -40 && it.y > -40 && it.y < canvas.height + 40);
+    }
+
+    function drawHpItems() {
+      if (!hpItemImg.complete || !hpItemImg.naturalWidth) return;
+      const size = 50; // 40 * 1.25
+      // no shadowBlur — cost multiplies per floating item, and this runs every frame
+      for (const it of state.hpItems) {
+        ctx.drawImage(hpItemImg, it.x - size / 2, it.y - size / 2, size, size);
+      }
+    }
+
+    // --- Mega HP (stage-once, full heal) ---
+    function spawnMegaHp() {
+      const x = canvas.width + 40;
+      const col = state.columns[Math.max(0, canvas.width - 2)];
+      let baseY = canvas.height / 2;
+      if (col) baseY = Math.max(col.top + 24, Math.min(col.bottom - 24, col.top + Math.random() * (col.bottom - col.top - 48)));
+      state.megaHp = {
+        x,
+        baseY,
+        y: baseY,
+        vx: 0.5 + Math.random() * 0.6,
+        phase: Math.random() * Math.PI * 2,
+        bobAmp: 8,
+        radius: 18,
+        hue: Math.floor(Math.random() * 360)
+      };
+      state.megaHpSpawned = true;
+    }
+
+    function updateMegaHp() {
+      if (!state.megaHp) {
+        // check spawn timing: spawn once per stage in later half (60%)
+        const stageSecs = state.stageDuration + (state.stage - 1) * 10;
+        const stageFrames = Math.round(stageSecs * 60);
+        const spawnFrame = Math.round(stageFrames * 0.6);
+        if (!state.megaHpSpawned && state.stageTimer >= spawnFrame) {
+          spawnMegaHp();
+        }
+        return;
+      }
+
+      const it = state.megaHp;
+      it.x -= state.scrollSpeed * 0.9 + it.vx;
+      it.y = it.baseY + Math.sin(state.frame * 0.06 + it.phase) * it.bobAmp;
+
+      // collision with ship
+      const dx = it.x - state.ship.x;
+      const dy = it.y - state.ship.y;
+      const dist2 = dx * dx + dy * dy;
+      const r = it.radius + state.ship.radius;
+      if (dist2 <= r * r) {
+        // full heal
+        state.ship.hp = 100;
+        state.bonusText = "HP FULL";
+        state.bonusTimer = 140;
+        createExplosion(it.x, it.y, "yellow");
+        state.megaHp = null;
+      }
+
+      // remove if offscreen
+      if (it.x < -80) state.megaHp = null;
+    }
+
+    function drawMegaHp() {
+      const it = state.megaHp;
+      if (!it) return;
+      // pulsing radial glow with hue
+      const pulse = 0.5 + 0.5 * Math.sin(state.frame * 0.08 + it.phase);
+      const outerR = it.radius * (1.6 + pulse * 0.6);
+      const grd = ctx.createRadialGradient(it.x, it.y, it.radius * 0.2, it.x, it.y, outerR);
+      const h = it.hue;
+      grd.addColorStop(0, `hsla(${h},100%,75%,0.98)`);
+      grd.addColorStop(0.4, `hsla(${h},90%,60%,0.55)`);
+      grd.addColorStop(1, `hsla(${(h + 40) % 360},80%,50%,0.08)`);
+      ctx.fillStyle = grd;
+      ctx.beginPath();
+      ctx.arc(it.x, it.y, outerR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // central badge (white circle)
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(it.x, it.y, it.radius * 0.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      // plus sign
+      ctx.fillStyle = `hsl(${h},70%,30%)`;
+      ctx.fillRect(it.x - 3, it.y - 10, 6, 20);
+      ctx.fillRect(it.x - 10, it.y - 3, 20, 6);
+    }
+
+    // Arena bullets during stage intro
+    // return arena parameters based on stage (difficulty scales with stage)
+    function getArenaParams(stage) {
+      const s = Math.max(1, stage);
+      // stage 1 = 66 frames between waves (~1.1s); each stage -5 frames; floor 20
+      const spawnInterval = Math.max(20, 66 - (s - 1) * 5);
+      // fixed speed in px/frame: stage 1 = 1.8, each stage +0.4
+      const bulletSpeed = 1.8 + (s - 1) * 0.4;
+      return { spawnInterval, bulletSpeed };
+    }
+    function spawnArenaBullets() {
+      const shipX = state.ship.x;
+      const shipY = state.ship.y;
+      const params = getArenaParams(state.stage);
+      const speed = params.bulletSpeed; // fixed speed, independent of ship velocity
+      const margin = 12;
+      // all 4 sides always fire
+      const positions = [
+        { x: -margin, y: Math.random() * canvas.height },
+        { x: canvas.width + margin, y: Math.random() * canvas.height },
+        { x: Math.random() * canvas.width, y: -margin },
+        { x: Math.random() * canvas.width, y: canvas.height + margin }
+      ];
+      for (const p of positions) {
+        const dx = shipX - p.x;
+        const dy = shipY - p.y;
+        const len = Math.hypot(dx, dy) || 1;
+        const vx = (dx / len) * speed;
+        const vy = (dy / len) * speed;
+        state.arena.bullets.push({ x: p.x, y: p.y, vx, vy, radius: 4 });
+      }
+    }
+
+    function updateArenaBullets() {
+      // spawn timing
+      state.arena.spawnTimer++;
+        const params = getArenaParams(state.stage);
+        if (state.arena.spawnTimer >= params.spawnInterval) {
+          state.arena.spawnTimer = 0;
+          spawnArenaBullets();
+        }
+
+      const toRemove = new Set();
+      for (let i = 0; i < state.arena.bullets.length; i++) {
+        const b = state.arena.bullets[i];
+        b.x += b.vx;
+        b.y += b.vy;
+        // collision with ship
+        const dx = b.x - state.ship.x;
+        const dy = b.y - state.ship.y;
+        if (dx * dx + dy * dy <= (b.radius + state.ship.radius) * (b.radius + state.ship.radius)) {
+          toRemove.add(i);
+          // allow one-time shield when laser is fully charged
+          if (!tryUseLaserShield()) {
+            // reset any in-progress laser charge when actually taking damage
+            releaseLaserChargeOnHit();
+            state.ship.hp = Math.max(0, state.ship.hp - 5);
+            state.portrait.hitTimer = 18;
+            createExplosion(b.x, b.y, "red");
+            if (state.ship.hp <= 0) {
+              triggerShipDeath();
+            }
+          }
+        }
+        // remove offscreen far
+        if (b.x < -120 || b.x > canvas.width + 120 || b.y < -120 || b.y > canvas.height + 120) {
+          toRemove.add(i);
+        }
+      }
+      if (toRemove.size > 0) {
+        state.arena.bullets = state.arena.bullets.filter((_, idx) => !toRemove.has(idx));
+      }
+    }
+
+    function drawArenaBullets() {
+      for (const b of state.arena.bullets) {
+        ctx.fillStyle = "rgba(255,80,60,0.95)";
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "rgba(255,160,140,0.35)";
+        ctx.fillRect(b.x - 6, b.y - 1, 12, 2);
+      }
+    }
+
+    function updateExplosions() {
+      for (const p of state.explosions) {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vx *= 0.97;
+        p.vy *= 0.97;
+        p.life -= 1;
+      }
+      state.explosions = state.explosions.filter((p) => p.life > 0);
+    }
+
+    function update() {
+      // always advance global frame (keeps animations consistent) and caption timer
+      state.frame++;
+      if (state.captionTimer > 0) state.captionTimer--;
+      if (state.portrait.hitTimer > 0) state.portrait.hitTimer--;
+
+      // HP hit 0: freeze gameplay and play the big explosion before GAME OVER shows
+      if (state.dying.active) {
+        state.dying.timer++;
+        updateExplosions();
+        state.displayScore += (state.score - state.displayScore) * 0.18;
+        if (state.dying.timer >= state.dying.duration) {
+          state.dying.active = false;
+          state.gameOver = true;
+        }
+        return;
+      }
+
+      // handle goal hold countdown (runs even while paused)
+      if (state.goalHold && state.goalHold.active) {
+        state.goalHold.frames--;
+        // update arena bullets during goal hold
+        updateArenaBullets();
+        if (state.goalHold.frames <= 0) {
+          state.goalHold.active = false;
+          state.pendingStageAdvance = false;
+          // part 2 (arena dodge) cleared — the floor opens, begin the part 3 fall
+          beginFall();
+        }
+      }
+
+      // part 3: vertical fall through the shaft, separate from the tunnel/arena flow above
+      if (state.fall.active) {
+        if (!state.running) return;
+
+        // intro: bullets already stopped, ship rotates 90° while easing downward —
+        // no screen wipe, so the transition reads as continuing straight down
+        if (state.fall.introActive) {
+          state.fall.introTimer++;
+          const p = Math.min(1, state.fall.introTimer / state.fall.introDuration);
+          const eased = 1 - Math.pow(1 - p, 2); // ease-out, so the descent starts gently and picks up
+          // rotate nose-up (negative = counter-clockwise in canvas' y-down space)
+          state.fall.shipAngle = p * (-Math.PI / 2);
+          // ship keeps easing toward the top of the shaft instead of sitting still
+          state.ship.y = state.fall.introStartY + (70 - state.fall.introStartY) * eased;
+          // scroll speed ramps up from 0 instead of freezing, so motion never fully stops
+          state.scrollSpeed = state.speed * 0.7 * eased;
+          updateStars();
+          updateExplosions();
+          updateLaser();
+          state.displayScore += (state.score - state.displayScore) * 0.18;
+          if (p >= 1) {
+            state.fall.introActive = false;
+            state.fall.timer = 0;
+          }
+          return;
+        }
+
+        // landing: auto-fly to the floor and settle down, then show CLEAR
+        if (state.fall.landing.active) {
+          state.fall.landing.timer++;
+          const p = Math.min(1, state.fall.landing.timer / state.fall.landing.duration);
+          state.fall.landing.progress = p;
+          const targetX = canvas.width / 2;
+          const targetY = canvas.height - 70;
+          state.ship.x += (targetX - state.ship.x) * 0.07;
+          state.ship.y += (targetY - state.ship.y) * 0.07;
+          state.ship.vx = 0;
+          state.ship.vy = 0;
+          state.scrollSpeed = 0;
+          updateStars();
+          updateExplosions();
+          state.displayScore += (state.score - state.displayScore) * 0.18;
+          if (p >= 1) {
+            state.fall.landing.active = false;
+            state.fall.active = false;
+            state.running = false;
+            state.cleared = true;
+            // クリアボーナス：残りHP x10 ポイント加算
+            state.score += Math.max(0, state.ship.hp) * 10;
+          }
+          return;
+        }
+
+        state.fall.timer++;
+        // fall scroll speed is ~30% slower than the normal forward speed
+        state.scrollSpeed = state.speed * 0.7;
+        // holding X flares the under-ship thruster and brakes the descent by ~10%
+        if (state.laser.charging) state.scrollSpeed *= 0.9;
+        updateStars();
+        updateFallRows();
+        updateArenaBullets();
+        updateShip();
+        updateBullets();
+        updateBombs();
+        updateExplosions();
+        updateLaser();
+        state.displayScore += (state.score - state.displayScore) * 0.18;
+
+        const penetration = getFallPenetration();
+        const CONTACT_FRAMES_THRESHOLD = Math.max(1, Math.round(0.1 * 60));
+        if (penetration > 0) {
+          state.ship.contactFrames++;
+          if (state.ship.contactFrames >= CONTACT_FRAMES_THRESHOLD) {
+            state.ship.contactFrames = 0;
+            if (!tryUseLaserShield()) {
+              releaseLaserChargeOnHit();
+              state.ship.hp = Math.max(0, state.ship.hp - 5);
+            state.portrait.hitTimer = 18;
+              if (state.ship.hp <= 0) {
+                triggerShipDeath();
+              }
+            }
+          }
+        } else {
+          state.ship.contactFrames = 0;
+          state.score += 1;
+        }
+
+        if (state.fall.timer >= state.fall.duration) {
+          state.fall.landing.active = true;
+          state.fall.landing.timer = 0;
+        }
+        return;
+      }
+
+      if (!state.running) return;
+
+      // advance stage timer (frames)
+      state.stageTimer++;
+      // stage duration increases by 10 seconds per stage (stage 1 = base duration)
+      const stageSecs = state.stageDuration + (state.stage - 1) * 10;
+      const stageFrames = Math.round(stageSecs * 60);
+      if (state.stageTimer >= stageFrames) {
+        // stage goal reached — trigger goal caption once and mark pending advance
+        state.stageTimer = stageFrames;
+        if (!state.pendingStageAdvance) {
+          state.pendingStageAdvance = true;
+          // show GOAL caption
+          showCaption("STAGE " + state.stage + " GOAL", 180);
+          // initialize goal hold: create full-width chamber and pause scroll for 30s
+          state.goalHold.active = true;
+          state.goalHold.frames = 30 * 60;
+          // reset arena spawn timer and bullets for hold
+          state.arena.spawnTimer = 0;
+          state.arena.bullets.length = 0;
+          // start the NEXT STAGE countdown when entering the wide chamber
+          state.stageIntro.active = true;
+          state.stageIntro.phase = 'countdown';
+          state.stageIntro.total = state.goalHold.frames;
+          state.stageIntro.frames = state.goalHold.frames;
+          state.stageIntro.startGap = tunnel.gap;
+          // widen the entire visible tunnel to form a chamber (full screen)
+          for (let cx = 0; cx < canvas.width; cx++) {
+            state.columns[cx] = { top: 24, bottom: canvas.height - 24 };
+          }
+        }
+      }
+
+      state.speed = Math.min(state.maxSpeed, state.speed + 0.00075);
+      state.scrollSpeed = state.effects.slowTimer > 0 ? state.speed * 0.72 : state.speed;
+      // enforce scroll freeze during goal hold
+      if (state.goalHold && state.goalHold.active) state.scrollSpeed = 0;
+      // handle stage intro phases
+      if (state.stageIntro && state.stageIntro.active) {
+        // countdown phase
+        if (state.stageIntro.phase === 'countdown') {
+          state.stageIntro.frames = Math.max(0, state.stageIntro.frames - 1);
+          if (state.stageIntro.frames <= 0) {
+            // switch to narrowing phase
+            state.stageIntro.phase = 'narrow';
+            state.stageIntro.total = Math.round(3 * 60);
+            state.stageIntro.frames = state.stageIntro.total;
+            state.stageIntro.startGap = tunnel.gap;
+            // clear arena bullets
+            state.arena.bullets.length = 0;
+          }
+        } else if (state.stageIntro.phase === 'narrow') {
+          state.stageIntro.frames = Math.max(0, state.stageIntro.frames - 1);
+          const total = Math.max(1, state.stageIntro.total || 1);
+          const progress = 1 - state.stageIntro.frames / total; // 0..1
+          const targetGap = 170;
+          const startGap = state.stageIntro.startGap || tunnel.gap;
+          tunnel.gap = startGap * (1 - progress) + targetGap * progress;
+          if (state.stageIntro.frames <= 0) {
+            state.stageIntro.active = false;
+          }
+        }
+      }
+      if (state.effects.slowTimer > 0) state.effects.slowTimer--;
+      if (state.effects.wideTimer > 0) state.effects.wideTimer--;
+      if (state.bonusTimer > 0) state.bonusTimer--;
+      updateStars();
+      updateColumns();
+      updateShip();
+      updateBullets();
+      updateBombs();
+      updateExplosions();
+      updateLaser();
+      updateHpItems();
+      updateMegaHp();
+      // smooth display score for visible count-up
+      state.displayScore += (state.score - state.displayScore) * 0.18;
+      // collision handling: count contact duration and apply 5 HP every 0.1s
+      const penetration = getCollisionPenetration();
+      // assume ~60fps; 0.1s -> ~6 frames (round to nearest)
+      const CONTACT_FRAMES_THRESHOLD = Math.max(1, Math.round(0.1 * 60));
+      if (penetration > 0) {
+        state.ship.contactFrames++;
+        if (state.ship.contactFrames >= CONTACT_FRAMES_THRESHOLD) {
+          state.ship.contactFrames = 0;
+          if (!tryUseLaserShield()) {
+            // reset any in-progress laser charge when actually taking contact damage
+            releaseLaserChargeOnHit();
+            state.ship.hp = Math.max(0, state.ship.hp - 5);
+            state.portrait.hitTimer = 18;
+            if (state.ship.hp <= 0) {
+              triggerShipDeath();
+            }
+          }
+        }
+      } else {
+        // reset contact counter and award score when not touching
+        state.ship.contactFrames = 0;
+        state.score += 1;
+      }
+    }
+
+    function drawBackground() {
+      ctx.fillStyle = "#030611";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      for (const s of state.stars) {
+        const a = 0.3 + s.z * 0.5;
+        ctx.fillStyle = `rgba(180, 200, 255, ${a})`;
+        ctx.fillRect(s.x, s.y, s.z * 2, s.z * 2);
+      }
+    }
+
+    function drawTunnel() {
+      ctx.fillStyle = "#193164";
+      for (let x = 0; x < state.columns.length; x++) {
+        const c = state.columns[x];
+        ctx.fillRect(x, 0, 1, c.top);
+        ctx.fillRect(x, c.bottom, 1, canvas.height - c.bottom);
+      }
+
+      ctx.fillStyle = "#5ca2ff";
+      for (let x = 0; x < state.columns.length; x += 3) {
+        const c = state.columns[x];
+        ctx.fillRect(x, c.top - 2, 2, 2);
+        ctx.fillRect(x, c.bottom, 2, 2);
+      }
+
+      for (const base of state.bases) {
+        const style = baseStyles[base.color];
+        ctx.fillStyle = style.fill;
+        ctx.fillRect(base.x, base.y, base.w, base.h);
+        ctx.strokeStyle = style.edge;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(base.x + 0.5, base.y + 0.5, base.w - 1, base.h - 1);
+      }
+    }
+
+    // part 3: vertical fall shaft — walls on left/right, rows indexed by y
+    function drawFallTunnel() {
+      // same base colors as the horizontal tunnel, for visual continuity across the stage transition
+      ctx.fillStyle = "#193164";
+      for (let y = 0; y < state.fall.rows.length; y++) {
+        const r = state.fall.rows[y];
+        ctx.fillRect(0, y, r.left, 1);
+        ctx.fillRect(r.right, y, canvas.width - r.right, 1);
+      }
+
+      ctx.fillStyle = "#5ca2ff";
+      for (let y = 0; y < state.fall.rows.length; y += 3) {
+        const r = state.fall.rows[y];
+        ctx.fillRect(r.left - 2, y, 2, 2);
+        ctx.fillRect(r.right, y, 2, 2);
+      }
+    }
+
+    // ground the ship auto-lands on at the end of the fall (0 = not visible, 1 = fully risen)
+    function drawFallLanding(progress) {
+      const groundH = 70 * progress;
+      const grd = ctx.createLinearGradient(0, canvas.height - groundH, 0, canvas.height);
+      grd.addColorStop(0, "#3a2f55");
+      grd.addColorStop(1, "#150f22");
+      ctx.fillStyle = grd;
+      ctx.fillRect(0, canvas.height - groundH, canvas.width, groundH);
+      ctx.fillStyle = "rgba(180,150,255,0.55)";
+      ctx.fillRect(0, canvas.height - groundH - 2, canvas.width, 2);
+    }
+
+    function drawShip() {
+      if (state.dying.active) return; // ship is gone — the explosion particles are the visual now
+      const { x, y, radius } = state.ship;
+      // holding X during the fall flares the under-ship thruster to brake the descent
+      const boosting = state.fall.active && !state.fall.introActive && !state.fall.landing.active && state.laser.charging;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(state.ship.vy * 0.05 + (state.fall.shipAngle || 0));
+
+      ctx.fillStyle = "#ffd966";
+      ctx.beginPath();
+      ctx.moveTo(radius + 6, 0);
+      ctx.lineTo(-radius, -radius * 0.85);
+      ctx.lineTo(-radius + 4, 0);
+      ctx.lineTo(-radius, radius * 0.85);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = "#6fc2ff";
+      ctx.beginPath();
+      ctx.arc(-2, 0, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (state.running) {
+        const flame = (boosting ? 18 : 8) + Math.random() * (boosting ? 16 : 8);
+        const flameW = boosting ? 6 : 3;
+        ctx.fillStyle = boosting ? "#ffe27a" : "#ff8c42";
+        ctx.beginPath();
+        ctx.moveTo(-radius + 2, 0);
+        ctx.lineTo(-radius - flame, -flameW);
+        ctx.lineTo(-radius - flame, flameW);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawBullets() {
+      for (const b of state.bullets) {
+        ctx.fillStyle = "#ffcf70";
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "rgba(255, 180, 80, 0.45)";
+        ctx.fillRect(b.x - 12, b.y - 1, 10, 2);
+      }
+    }
+
+    function drawBombs() {
+      for (const b of state.bombs) {
+        // shadow
+        ctx.fillStyle = "rgba(0,0,0,0.28)";
+        ctx.beginPath();
+        ctx.ellipse(b.x + 3, b.y + 6, b.radius + 2, b.radius * 0.6, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // bomb body
+        ctx.fillStyle = "#b05b2c";
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // small fuse glow
+        ctx.fillStyle = "rgba(255,140,40,0.18)";
+        ctx.fillRect(b.x - 2, b.y - 6, 4, 6);
+      }
+    }
+
+    function drawExplosions() {
+      for (const p of state.explosions) {
+        const alpha = Math.max(0, p.life / p.maxLife);
+        const style = baseStyles[p.color];
+        ctx.fillStyle = `${style.edge}${alpha < 0.7 ? "" : ""}`;
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 1.6 + (1 - alpha) * 2.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    function drawHud() {
+      ctx.fillStyle = "#dbe6ff";
+      ctx.font = "20px ui-monospace, SFMono-Regular, Menlo, monospace";
+      ctx.fillText(`SCORE ${Math.floor(state.displayScore)}`, 20, 32);
+      ctx.fillText(`SPD ${state.scrollSpeed.toFixed(2)}`, 20, 58);
+
+      // remaining time for current stage / fall
+      if (state.running && state.fall.active) {
+        const remainingFrames = Math.max(0, state.fall.duration - state.fall.timer);
+        const remainingSecs = Math.ceil(remainingFrames / 60);
+        ctx.fillText(`DIVE ${remainingSecs}s`, 20, 84);
+      } else if (state.running) {
+        const stageSecs = state.stageDuration + (state.stage - 1) * 10;
+        const stageFrames = Math.round(stageSecs * 60);
+        const remainingFrames = Math.max(0, stageFrames - state.stageTimer);
+        const remainingSecs = Math.ceil(remainingFrames / 60);
+        ctx.fillText(`TIME ${remainingSecs}s`, 20, 84);
+      }
+
+      // HP bar (右上)
+      const hp = typeof state.ship.hp === 'number' ? state.ship.hp : 0;
+      const maxHp = 100;
+      const barW = 200;
+      const barH = 14;
+      const bx = canvas.width - barW - 20;
+      const by = 18;
+      ctx.fillStyle = "rgba(0,0,0,0.45)";
+      ctx.fillRect(bx, by, barW, barH);
+      const pct = Math.max(0, Math.min(1, hp / maxHp));
+      ctx.fillStyle = pct > 0.6 ? "#4caf50" : pct > 0.3 ? "#ffb300" : "#e53935";
+      ctx.fillRect(bx + 1, by + 1, Math.max(2, (barW - 2) * pct), barH - 2);
+      ctx.strokeStyle = "#9db0ff";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(bx + 0.5, by + 0.5, barW - 0, barH - 0);
+      ctx.fillStyle = "#dbe6ff";
+      ctx.font = "12px ui-monospace, SFMono-Regular, Menlo, monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(`HP ${Math.floor(hp)}/${maxHp}`, bx + barW / 2, by + barH - 3);
+      ctx.textAlign = "left";
+
+      if (state.bonusTimer > 0) {
+        ctx.fillStyle = "#ffe08a";
+        ctx.font = "16px ui-monospace, SFMono-Regular, Menlo, monospace";
+        ctx.fillText(state.bonusText, 20, 110);
+      }
+
+      if (state.gameOver) {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#ffffff";
+        ctx.textAlign = "center";
+        ctx.font = "bold 54px ui-sans-serif, system-ui";
+        ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 20);
+        ctx.font = "24px ui-sans-serif, system-ui";
+        ctx.fillText("Space で再スタート", canvas.width / 2, canvas.height / 2 + 28);
+        ctx.textAlign = "left";
+      }
+
+      if (state.cleared) {
+        ctx.fillStyle = "rgba(6, 20, 16, 0.75)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        let textTop = canvas.height / 2 - 30;
+        if (clearImg.complete && clearImg.naturalWidth) {
+          const imgW = 560;
+          const imgH = imgW * (clearImg.naturalHeight / clearImg.naturalWidth);
+          const imgX = (canvas.width - imgW) / 2;
+          const imgY = 20;
+          ctx.save();
+          ctx.shadowColor = "rgba(0,0,0,0.5)";
+          ctx.shadowBlur = 20;
+          ctx.drawImage(clearImg, imgX, imgY, imgW, imgH);
+          ctx.restore();
+          ctx.strokeStyle = "#bffcd6";
+          ctx.lineWidth = 1;
+          ctx.strokeRect(imgX + 0.5, imgY + 0.5, imgW - 1, imgH - 1);
+          textTop = imgY + imgH + 40;
+        }
+
+        ctx.fillStyle = "#bffcd6";
+        ctx.textAlign = "center";
+        ctx.font = "bold 44px ui-sans-serif, system-ui";
+        ctx.fillText("CLEAR", canvas.width / 2, textTop);
+        ctx.font = "bold 24px ui-sans-serif, system-ui";
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(`SCORE ${Math.floor(state.score)}`, canvas.width / 2, textTop + 34);
+        ctx.font = "18px ui-sans-serif, system-ui";
+        ctx.fillText("Space で再スタート", canvas.width / 2, textTop + 64);
+        ctx.textAlign = "left";
+      }
+
+      // arena countdown display (during stage intro countdown, before the floor opens)
+      if (state.stageIntro && state.stageIntro.active && state.stageIntro.phase === 'countdown') {
+        const remaining = Math.ceil(state.stageIntro.frames / 60);
+        ctx.save();
+        ctx.fillStyle = "rgba(0,0,0,0.6)";
+        ctx.fillRect(canvas.width / 2 - 140, 16, 280, 46);
+        ctx.fillStyle = "#fff6c8";
+        ctx.textAlign = "center";
+        ctx.font = "bold 24px ui-sans-serif, system-ui";
+        ctx.fillText(`床が開くまで ${remaining}s`, canvas.width / 2, 16 + 32);
+        ctx.restore();
+        ctx.textAlign = "left";
+      }
+
+      // caption (stage start / goal)
+      if (state.captionTimer > 0 && state.caption) {
+        ctx.save();
+        ctx.fillStyle = "rgba(0,0,0,0.6)";
+        ctx.fillRect(canvas.width / 2 - 260, 60, 520, 64);
+        ctx.fillStyle = "#ffffff";
+        ctx.textAlign = "center";
+        ctx.font = "bold 28px ui-sans-serif, system-ui";
+        ctx.fillText(state.caption, canvas.width / 2, 60 + 42);
+        ctx.restore();
+        ctx.textAlign = "left";
+      }
+    }
+
+    function getPortraitFrameIndex() {
+      if (state.portrait.hitTimer > 0) return 1; // ② 被弾(衝撃)
+      const hp = typeof state.ship.hp === "number" ? state.ship.hp : 100;
+      if (hp > 70) return 0; // ① 通常(冷静)
+      if (hp > 40) return 2; // ③ 怒り(戦闘モード)
+      if (hp > 20) return 3; // ④ 苦痛(ダメージ大)
+      return 4; // ⑤ 決意(集中・反撃準備)
+    }
+
+    // picks a corner that keeps clear of the ship's current position
+    function getPortraitPosition(w, h) {
+      const margin = 20;
+      const rightX = canvas.width - w - margin;
+      const leftX = margin;
+      const topY = 40; // below the HP gauge
+      const bottomY = canvas.height - h - margin;
+      const nearRightEdge = state.ship.x > canvas.width - (w + margin + 80);
+      if (nearRightEdge) {
+        return { x: leftX, y: bottomY };
+      }
+      return state.ship.y < canvas.height / 2 ? { x: rightX, y: bottomY } : { x: rightX, y: topY };
+    }
+
+    function drawPilotPortrait() {
+      if (!pilotImg.complete || !pilotImg.naturalWidth) return;
+      const w = 156; // 120 * 1.3
+      const h = 117; // 90 * 1.3
+      const crop = PILOT_CROPS[getPortraitFrameIndex()];
+      const pos = getPortraitPosition(w, h);
+      // no shadowBlur — this draws every frame during actual gameplay, and
+      // shadowBlur is expensive enough on mobile to noticeably slow the game down
+      ctx.save();
+      ctx.strokeStyle = "#4d5f95";
+      ctx.lineWidth = 1;
+      ctx.drawImage(pilotImg, crop.x, crop.y, crop.w, crop.h, pos.x, pos.y, w, h);
+      ctx.strokeRect(pos.x + 0.5, pos.y + 0.5, w - 1, h - 1);
+      ctx.restore();
+    }
+
+    // start screen: image01.jpg centered, shown until the player presses スタート
+    // fixed canvas-space anchor for the "start here" hint — the スタート button is
+    // positioned on top of this same spot each frame (see positionStartButton)
+    const TITLE_HINT_X = canvas.width / 2;
+    const TITLE_HINT_Y = canvas.height - 34;
+
+    function drawTitleScreen() {
+      drawBackground();
+      if (titleImg.complete && titleImg.naturalWidth) {
+        const maxW = canvas.width * 0.72;
+        const maxH = canvas.height * 0.6;
+        const scale = Math.min(maxW / titleImg.naturalWidth, maxH / titleImg.naturalHeight);
+        const w = titleImg.naturalWidth * scale;
+        const h = titleImg.naturalHeight * scale;
+        const x = (canvas.width - w) / 2;
+        const y = (canvas.height - h) / 2 - 30;
+        ctx.save();
+        ctx.shadowColor = "rgba(0,0,0,0.5)";
+        ctx.shadowBlur = 24;
+        ctx.drawImage(titleImg, x, y, w, h);
+        ctx.restore();
+        ctx.strokeStyle = "#4d5f95";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+      }
+    }
+
+    // maps a canvas-internal coordinate to CSS pixels within .wrap (canvas sits at
+    // its top-left corner), so the DOM button lines up with the drawn hint spot
+    // regardless of how much the canvas is scaled down on smaller screens
+    function positionStartButton() {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = rect.width / canvas.width;
+      const scaleY = rect.height / canvas.height;
+      startButton.style.left = `${TITLE_HINT_X * scaleX}px`;
+      startButton.style.top = `${TITLE_HINT_Y * scaleY}px`;
+    }
+
+    // start button only shows while waiting to start: before the first スタート press,
+    // or after GAME OVER / CLEAR (where it doubles as the restart trigger)
+    let _startButtonWasShown = false;
+    function updateStartButtonVisibility() {
+      const shouldShow = !state.started || state.gameOver || state.cleared;
+      startButton.style.display = shouldShow ? "" : "none";
+      // getBoundingClientRect() forces a layout reflow — only pay that cost on the
+      // rising edge (button just appeared), not every single frame it stays visible.
+      // window resize/orientationchange (below) keep it correctly positioned otherwise.
+      if (shouldShow && !_startButtonWasShown) positionStartButton();
+      _startButtonWasShown = shouldShow;
+    }
+    window.addEventListener("resize", () => {
+      if (_startButtonWasShown) positionStartButton();
+    });
+
+    // ランキングパネルはタイトル画面とクリア画面の下段にのみ表示。
+    // クリア直後、TOP10入りしていれば一度だけ登録フォームを開く。
+    function updateLeaderboardVisibility() {
+      const shouldShow = !state.started || state.cleared;
+      setLeaderboardVisible(shouldShow);
+      if (state.cleared && !scoreSubmitted) {
+        scoreSubmitted = true;
+        if (qualifiesForTop10(state.score)) {
+          showScoreRegisterForm();
+        } else {
+          hideScoreRegisterForm();
+        }
+      }
+      if (!shouldShow) {
+        hideScoreRegisterForm();
+      }
+    }
+
+    function render() {
+      updateStartButtonVisibility();
+      updateLeaderboardVisibility();
+      if (!state.started) {
+        drawTitleScreen();
+        return;
+      }
+      drawBackground();
+      if (state.fall.active && state.fall.introActive) {
+        // no screen wipe here on purpose — keep the open chamber visible so the
+        // ship's rotation + descent reads as continuous motion, not a scene cut
+        drawTunnel();
+      } else if (state.fall.active && state.fall.landing.active) {
+        drawFallTunnel();
+        drawFallLanding(state.fall.landing.progress);
+      } else if (state.fall.active) {
+        drawFallTunnel();
+      } else {
+        drawTunnel();
+      }
+      drawMegaHp();
+      drawArenaBullets();
+      drawHpItems();
+      drawBullets();
+      drawBombs();
+      drawExplosions();
+      drawShip();
+      drawLaser();
+      drawHud();
+      drawPilotPortrait();
+    }
+
+    function showCaption(text, frames) {
+      state.caption = text;
+      state.captionTimer = Math.max(0, frames | 0);
+    }
+
+    function beginStage() {
+      // show caption
+      showCaption(`STAGE ${state.stage} START`, 120);
+      // set wide starting gap and seed columns to show wide space
+      const wideGap = Math.max(tunnel.maxGap, tunnel.gap, 360);
+      tunnel.gap = wideGap;
+      // immediately enter narrowing phase for stage start (no initial countdown)
+      state.stageIntro.total = Math.round(3 * 60);
+      state.stageIntro.frames = state.stageIntro.total;
+      state.stageIntro.startGap = wideGap;
+      state.stageIntro.phase = 'narrow';
+      state.stageIntro.active = true;
+      // rebuild columns as wide
+      for (let cx = 0; cx < canvas.width; cx++) {
+        state.columns[cx] = { top: 24, bottom: canvas.height - 24 };
+      }
+      // ensure game runs and scrolling happens
+      state.running = true;
+      // reset arena bullets
+      state.arena.bullets.length = 0;
+      state.arena.spawnTimer = 0;
+    }
+
+    // ── Laser beam ──────────────────────────────────────────────────────────
+    function startLaserCharge() {
+      if (!state.running) { fireVulcan(); return; }
+      state.laser.charging = true;
+      state.laser.chargeFrames = 0;
+      state.laser._pressStartFrame = state.frame;
+      // reset one-time shield consumption when starting a new charge
+      state.laser._shieldConsumed = false;
+    }
+
+    function stopLaserCharge() {
+      const laser = state.laser;
+      if (laser.charging) {
+        const pressFrames = (laser._pressStartFrame != null) ? (state.frame - laser._pressStartFrame) : laser.chargeFrames;
+        const TAP_THRESHOLD = 8; // frames (~133ms at 60fps) considered a tap
+        if (laser.chargeFrames >= laser.chargeDuration) {
+          // fully charged on release → fire laser
+          fireLaserBeam();
+        } else if (pressFrames <= TAP_THRESHOLD) {
+          // short tap -> fire vulcan
+          fireVulcan();
+        }
+        // reset charge state in all cases
+        laser.charging = false;
+        laser.chargeFrames = 0;
+        laser._pressStartFrame = null;
+        laser._shieldConsumed = false;
+      }
+    }
+
+    function fireLaserBeam() {
+      const laser = state.laser;
+      const height = state.ship.radius * 2; // beam height = ship diameter
+      const yCenter = state.ship.y;
+      laser.beam = { x: state.ship.x + state.ship.radius + 4, yCenter, height, speed: 22, frames: 0 };
+      laser.chargeFrames = 0;
+      laser.charging = false;
+      // firing clears the one-time shield state
+      laser._shieldConsumed = false;
+    }
+
+    function updateLaser() {
+      const laser = state.laser;
+      // accumulate charge (no auto-fire; beam fires on release via stopLaserCharge)
+      if (laser.charging && !laser.beam) {
+        laser.chargeFrames = Math.min(laser.chargeDuration, laser.chargeFrames + 1);
+      }
+      // update charge glow on X button
+      if (touchFire) {
+        const pct = laser.chargeFrames / laser.chargeDuration;
+        if (laser.charging && pct > 0 && !laser.beam) {
+          touchFire.style.boxShadow = `0 0 ${6 + pct * 22}px rgba(80,210,255,${0.4 + pct * 0.6})`;
+          touchFire.style.borderColor = `hsl(${190 + pct * 30},100%,70%)`;
+        } else if (!laser.charging) {
+          touchFire.style.boxShadow = '';
+          touchFire.style.borderColor = '';
+        }
+      }
+      // move beam
+      if (!laser.beam) return;
+      const b = laser.beam;
+      b.x += b.speed;
+      b.frames++;
+      // break walls: widen columns swept by beam
+      const cx0 = Math.max(0, Math.floor(b.x) - 6);
+      const cx1 = Math.min(state.columns.length - 1, Math.floor(b.x) + 6);
+      for (let cx = cx0; cx <= cx1; cx++) {
+        const col = state.columns[cx];
+        const beamTop    = b.yCenter - b.height / 2 - 6;
+        const beamBottom = b.yCenter + b.height / 2 + 6;
+        if (col.top  > beamTop)    col.top    = Math.max(4, beamTop);
+        if (col.bottom < beamBottom) col.bottom = Math.min(canvas.height - 4, beamBottom);
+      }
+      // beam exits screen → clean up
+      if (b.x > canvas.width + 60) laser.beam = null;
+    }
+
+    function tryUseLaserShield() {
+      const laser = state.laser;
+      // only while fully charged and before beam has been fired
+      if (laser && laser.chargeFrames >= laser.chargeDuration && !laser.beam && !laser._shieldConsumed) {
+        // consume single-use shield without releasing the charge
+        laser._shieldConsumed = true;
+        // small visual feedback
+        createExplosion(state.ship.x, state.ship.y, "cyan");
+        return true;
+      }
+      return false;
+    }
+
+    function releaseLaserChargeOnHit() {
+      const laser = state.laser;
+      if (!laser) return;
+      // If currently charging (but not necessarily full), release/reset the charge
+      if (laser.charging || laser.chargeFrames > 0) {
+        laser.charging = false;
+        laser.chargeFrames = 0;
+        laser._pressStartFrame = null;
+        laser._shieldConsumed = false;
+        // clear touch button visuals if present
+        if (touchFire) {
+          touchFire.style.boxShadow = '';
+          touchFire.style.borderColor = '';
+        }
+      }
+    }
+
+    function drawLaser() {
+      const laser = state.laser;
+      // charge ring around ship
+      if (laser.charging && laser.chargeFrames > 0 && !laser.beam) {
+        const pct = laser.chargeFrames / laser.chargeDuration;
+        ctx.save();
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = `rgba(80,210,255,${0.5 + 0.5 * pct})`;
+        ctx.shadowColor = '#44ccff';
+        ctx.shadowBlur = 10 * pct;
+        ctx.beginPath();
+        ctx.arc(state.ship.x, state.ship.y,
+          state.ship.radius + 8 + pct * 6,
+          -Math.PI / 2,
+          -Math.PI / 2 + Math.PI * 2 * pct);
+        ctx.stroke();
+        // fully charged flash
+        if (pct >= 1) {
+          ctx.globalAlpha = 0.3 + 0.3 * Math.sin(state.frame * 0.4);
+          ctx.fillStyle = 'rgba(80,210,255,0.25)';
+          ctx.beginPath();
+          ctx.arc(state.ship.x, state.ship.y, state.ship.radius + 16, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+      // draw beam
+      if (!laser.beam) return;
+      const b = laser.beam;
+      const tailX   = state.ship.x;
+      const headX   = b.x;
+      const halfH   = b.height / 2;
+      ctx.save();
+      // no shadowBlur here on purpose — blurring a full-width filled rect every
+      // frame is one of the costliest things you can do on canvas, especially on
+      // mobile; the gradient glow below already reads as a bloom without it
+      // wide glow
+      const glowGrad = ctx.createLinearGradient(tailX, 0, headX + 10, 0);
+      glowGrad.addColorStop(0,   'rgba(40,180,255,0.0)');
+      glowGrad.addColorStop(0.15,'rgba(40,180,255,0.55)');
+      glowGrad.addColorStop(1,   'rgba(180,240,255,0.35)');
+      ctx.fillStyle = glowGrad;
+      ctx.fillRect(tailX, b.yCenter - halfH, headX - tailX + 10, b.height);
+      // bright core
+      const coreGrad = ctx.createLinearGradient(tailX, 0, headX + 10, 0);
+      coreGrad.addColorStop(0, 'rgba(200,240,255,0.0)');
+      coreGrad.addColorStop(0.2,'rgba(255,255,255,0.95)');
+      coreGrad.addColorStop(1, 'rgba(255,255,255,1.0)');
+      ctx.fillStyle = coreGrad;
+      ctx.fillRect(tailX, b.yCenter - 4, headX - tailX + 10, 8);
+      ctx.restore();
+    }
+    // ── End laser ──────────────────────────────────────────────────────────────
+
+    // Fixed-timestep loop with catch-up: runs one 60Hz update() per 16.67ms of real
+    // time elapsed, running extra update() calls (bounded) when the browser can't
+    // sustain 60fps. Without this, a device stuck at e.g. 30fps only advances game
+    // time at half speed — every timer (frames assume 60/sec) then takes ~2x as
+    // long in real seconds, which is exactly the "1秒が1秒以上かかる" symptom.
+    const TARGET_FRAME_MS = 1000 / 60;
+    const MAX_CATCHUP_STEPS = 5; // avoid a death-spiral on very slow devices/tab switches
+    let _accumulatedMs = 0;
+    let _lastFrameTime = 0;
+    function loop(timestamp) {
+      requestAnimationFrame(loop);
+      // the very first call (from the direct loop() invocation at the bottom of this
+      // script, not from rAF) has no timestamp — treat that, or any other non-finite
+      // value, as "no time has passed yet". Without this guard, undefined - undefined
+      // produces NaN, which poisons _accumulatedMs forever (NaN + anything is NaN),
+      // permanently failing the while-loop condition below and freezing the game.
+      if (!Number.isFinite(timestamp)) timestamp = _lastFrameTime || 0;
+      if (!_lastFrameTime) _lastFrameTime = timestamp;
+      let elapsed = timestamp - _lastFrameTime;
+      _lastFrameTime = timestamp;
+      if (elapsed > 1000) elapsed = TARGET_FRAME_MS; // tab was backgrounded — don't try to catch up on that gap
+      _accumulatedMs += elapsed;
+      let steps = 0;
+      while (_accumulatedMs >= TARGET_FRAME_MS && steps < MAX_CATCHUP_STEPS) {
+        if (state.started) update();
+        _accumulatedMs -= TARGET_FRAME_MS;
+        steps++;
+      }
+      if (steps === MAX_CATCHUP_STEPS) _accumulatedMs = 0; // device can't keep up — drop the debt instead of spiraling
+      render();
+    }
+
+    // ランキング登録フォームなどの入力欄にフォーカスがある間は、ゲーム操作キー
+    // （WASD/矢印/X/Z/Space）を奪わない。スマホの仮想キーボードで "a" などの
+    // 半角文字が入力できなくなっていたのはこれが原因。
+    function isTypingInFormField(e) {
+      const el = e.target;
+      return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+    }
+
+    window.addEventListener("keydown", (e) => {
+      if (isTypingInFormField(e)) return;
+      if (e.code === "ArrowUp" || e.code === "KeyW") {
+        state.input.up = true;
+        e.preventDefault();
+      } else if (e.code === "ArrowDown" || e.code === "KeyS") {
+        state.input.down = true;
+        e.preventDefault();
+      } else if (e.code === "ArrowLeft" || e.code === "KeyA") {
+        state.input.left = true;
+        e.preventDefault();
+      } else if (e.code === "ArrowRight" || e.code === "KeyD") {
+        state.input.right = true;
+        e.preventDefault();
+      } else if (e.code === "KeyX" && !e.repeat) {
+        startLaserCharge();
+        e.preventDefault();
+      } else if (e.code === "KeyZ" && !e.repeat) {
+        dropBomb();
+        e.preventDefault();
+      } else if (e.code === "Space" && !state.running) {
+        if (gyro.active) recalibrateGyro();
+        startGame();
+        e.preventDefault();
+      }
+    });
+
+    window.addEventListener("keyup", (e) => {
+      if (isTypingInFormField(e)) return;
+      if (e.code === "ArrowUp" || e.code === "KeyW") {
+        state.input.up = false;
+      } else if (e.code === "ArrowDown" || e.code === "KeyS") {
+        state.input.down = false;
+      } else if (e.code === "ArrowLeft" || e.code === "KeyA") {
+        state.input.left = false;
+      } else if (e.code === "ArrowRight" || e.code === "KeyD") {
+        state.input.right = false;
+      } else if (e.code === "KeyX") {
+        stopLaserCharge();
+      }
+    });
+
+    // restart button removed for mobile UI; use in-game controls to restart
+
+    startButton.addEventListener("click", async () => {
+      // first start: try to enable gyro automatically. after that, respect the toggle button's choice.
+      if (!gyro.userChoiceMade) {
+        await enableGyroIfAvailable();
+      } else if (gyro.active) {
+        recalibrateGyro();
+      }
+      startGame();
+    });
+
+    gyroToggleButton.addEventListener("click", toggleGyroControls);
+
+    function setTouchControl(button, actionKey, enabled) {
+      state.input[actionKey] = enabled;
+      button.classList.toggle("active", enabled);
+    }
+
+    function bindTouchControl(button, actionKey) {
+      const start = (e) => {
+        e.preventDefault();
+        setTouchControl(button, actionKey, true);
+      };
+      const end = (e) => {
+        e.preventDefault();
+        setTouchControl(button, actionKey, false);
+      };
+
+      button.addEventListener("pointerdown", start, { passive: false });
+      button.addEventListener("pointerup", end, { passive: false });
+      button.addEventListener("pointerleave", end, { passive: false });
+      button.addEventListener("pointercancel", end, { passive: false });
+      button.addEventListener("touchstart", start, { passive: false });
+      button.addEventListener("touchend", end, { passive: false });
+      button.addEventListener("touchcancel", end, { passive: false });
+    }
+
+    bindTouchControl(touchUp, "up");
+    bindTouchControl(touchLeft, "left");
+    bindTouchControl(touchRight, "right");
+    bindTouchControl(touchDown, "down");
+
+    // Fire and Bomb buttons: single tap only, no repeat
+    function makeTapButton(button, action) {
+      if (!button) return;
+      const press   = (e) => { e.preventDefault(); action(); button.classList.add('active'); };
+      const release = () => button.classList.remove('active');
+      button.addEventListener('touchstart', press,   { passive: false });
+      button.addEventListener('touchend',   release, { passive: true });
+      button.addEventListener('touchcancel',release, { passive: true });
+      button.addEventListener('mousedown',  press,   { passive: false });
+      window.addEventListener('mouseup',    release, { passive: true });
+    }
+
+    // X button: short tap = vulcan, hold 3s = laser beam
+    if (touchFire) {
+      const firePress   = (e) => { e.preventDefault(); startLaserCharge(); touchFire.classList.add('active'); };
+      const fireRelease = ()  => { stopLaserCharge();  touchFire.classList.remove('active'); };
+      touchFire.addEventListener('touchstart',  firePress,   { passive: false });
+      touchFire.addEventListener('touchend',    fireRelease, { passive: true });
+      touchFire.addEventListener('touchcancel', fireRelease, { passive: true });
+      touchFire.addEventListener('mousedown',   firePress,   { passive: false });
+      window.addEventListener('mouseup',        fireRelease, { passive: true });
+    }
+    makeTapButton(touchBomb, () => dropBomb());
+
+    if ("ontouchstart" in window || navigator.maxTouchPoints > 0) {
+      // shown by default; hidden automatically once real tilt events start arriving
+      touchPad.style.display = "grid";
+      firePad.style.display = "block";
+      if (window.DeviceOrientationEvent) {
+        gyroToggleButton.style.display = "inline-block";
+        updateGyroToggleLabel();
+        updateGyroStatus("スタートを押すと、対応端末では傾き操作に切り替わります（右のXでバルカン発射）");
+      } else {
+        updateGyroStatus("iPhoneは右下の十字キーで移動、右のXでバルカン発射できます");
+      }
+    } else {
+      updateGyroStatus("PCはキーボード、スマホは右下コントローラーで移動と発射ができます");
+    }
+
+    // populate an idle scene (columns/ship/stars) before the player presses スタート
+    resetGame();
+    loadLeaderboard();
+    loop();
+  </script>
+</body>
+</html>
