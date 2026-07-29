@@ -21,6 +21,9 @@
     :root {
       color-scheme: dark;
     }
+    html, body {
+      overscroll-behavior: none;
+    }
     body {
       margin: 0;
       font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -30,9 +33,16 @@
       flex-direction: column;
       align-items: center;
       gap: 18px;
-      min-height: 100vh;
+      min-height: 100dvh;
       padding: 20px 12px 40px;
       box-sizing: border-box;
+      touch-action: manipulation;
+    }
+    /* プレイ中のみ付与: スワイプでのページスクロール／pull-to-refreshを止める。
+       ゲームオーバー/クリア後はランキングを読めるよう外す */
+    body.is-playing-lock {
+      touch-action: none;
+      overflow: hidden;
     }
     .wrap {
       position: relative;
@@ -46,6 +56,7 @@
       box-shadow: 0 0 32px rgba(90, 140, 255, 0.2);
       background: linear-gradient(#02040a, #060b18);
       image-rendering: pixelated;
+      touch-action: none;
     }
     .help {
       margin-top: 10px;
@@ -2483,6 +2494,14 @@
     const MAX_CATCHUP_STEPS = 5; // avoid a death-spiral on very slow devices/tab switches
     let _accumulatedMs = 0;
     let _lastFrameTime = 0;
+    // プレイ中(スタート後〜ゲームオーバー/クリア前)かつタッチデバイスの間だけ、
+    // ページ全体のスクロール/pull-to-refreshを止める。終了後はランキングを
+    // 読めるようロックを外す
+    function updatePlayLock() {
+      const shouldLock = isMobileDevice && state.started && !state.gameOver && !state.cleared;
+      document.body.classList.toggle("is-playing-lock", shouldLock);
+    }
+
     function loop(timestamp) {
       requestAnimationFrame(loop);
       // the very first call (from the direct loop() invocation at the bottom of this
@@ -2503,6 +2522,7 @@
         steps++;
       }
       if (steps === MAX_CATCHUP_STEPS) _accumulatedMs = 0; // device can't keep up — drop the debt instead of spiraling
+      updatePlayLock();
       render();
     }
 
