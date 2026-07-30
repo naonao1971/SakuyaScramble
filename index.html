@@ -223,6 +223,20 @@
       border-color: #7db0ff;
       transform: translateY(1px);
     }
+    /* X/💣より一回り小さい常設トグル。ONの間だけ暖色でハイライトする */
+    .auto-fire-toggle {
+      width: 34px;
+      height: 34px;
+      font-size: 15px;
+      border-radius: 10px;
+      align-self: center;
+      opacity: 0.6;
+    }
+    .auto-fire-toggle.on {
+      opacity: 1;
+      border-color: #f2c14e;
+      background: rgba(154, 110, 10, 0.88);
+    }
     .controls-bottom {
       /* fire-pad と同じ position: fixed に統一し、画面サイズ/向きが変わっても
          2つのボタン群の相対位置がズレないようにする */
@@ -409,6 +423,7 @@
       <div id="firePad" class="fire-pad" aria-label="発射ボタン">
         <button id="touchFire" class="touch-btn touch-fire" type="button" aria-label="バルカン発射">X</button>
         <button id="touchBomb" class="touch-btn touch-bomb" type="button" aria-label="爆弾投下">💣</button>
+        <button id="autoFireToggle" class="touch-btn auto-fire-toggle" type="button" aria-label="自動連射:オン(タップでオフ)">🔫</button>
       </div>
       <div id="touchPad" class="touch-pad" aria-label="タッチコントローラー">
         <button id="touchUp" class="touch-btn touch-up" type="button" aria-label="上昇">▲</button>
@@ -666,6 +681,14 @@
     const touchBomb = document.getElementById("touchBomb");
     const touchRight = document.getElementById("touchRight");
     const touchDown = document.getElementById("touchDown");
+    const autoFireToggle = document.getElementById("autoFireToggle");
+
+    // 十字4ボタンでは親指1本で斜め移動しながらXも押せないため、タッチデバイス
+    // では既定でバルカンを自動連射し、Xボタンはレーザーのチャージ専用として
+    // 空ける。チャージ中/ビーム発射中は自動連射を止め、競合しないようにする
+    let autoFireEnabled = isMobileDevice;
+    let autoFireTimer = 0;
+    const AUTO_FIRE_INTERVAL = 10; // frames (60fpsで約6発/秒)
 
     // gyro tilt controls: when available, replace the on-screen d-pad with device tilt.
     // baseline is calibrated to however the phone is being held right when the game starts.
@@ -1148,6 +1171,7 @@
       state.running = true;
       state.score = 0;
       state.speed = 2.6;
+      autoFireTimer = 0;
       scoreSubmitted = false;
       hideScoreRegisterForm();
       state.frame = 0;
@@ -1742,9 +1766,22 @@
       state.explosions = state.explosions.filter((p) => p.life > 0);
     }
 
+    // レーザーのチャージ/ビーム発射中は自動連射を止める。stopLaserCharge()の
+    // 「タップならバルカン」判定と競合しないよう、あくまで手動発射(startLaserCharge/
+    // stopLaserCharge)とは別経路でfireVulcan()を呼ぶだけに留める
+    function updateAutoFire() {
+      if (!autoFireEnabled || !state.running || state.dying.active) return;
+      if (state.laser.charging || state.laser.beam) return;
+      autoFireTimer++;
+      if (autoFireTimer < AUTO_FIRE_INTERVAL) return;
+      autoFireTimer = 0;
+      fireVulcan();
+    }
+
     function update() {
       // always advance global frame (keeps animations consistent) and caption timer
       state.frame++;
+      updateAutoFire();
       if (state.captionTimer > 0) state.captionTimer--;
       if (state.portrait.hitTimer > 0) state.portrait.hitTimer--;
 
@@ -2740,9 +2777,23 @@
       button.classList.toggle("active", enabled);
     }
 
+    // Pointer Events だけで統一して管理する。setPointerCapture() したポインタは
+    // 指が要素の外に滑り出ても pointerup/pointercancel が必ずこの要素に届くため、
+    // 従来 pointerleave に頼っていた「指がボタン外に出たら離したとみなす」判定
+    // (ブラウザによっては touch 由来のポインタで信頼できない) が不要になる。
+    // Pointer Events はマウス/タッチ/ペンを一本化しているので touchstart や
+    // mousedown の別系統リスナーは重複となり削除。各ボタン・各指(pointerId)は
+    // 独立して捕捉されるため、複数ボタン同時押し(斜め移動など)もそのまま効く
+    function capture(button, e) {
+      if (button.setPointerCapture) {
+        try { button.setPointerCapture(e.pointerId); } catch (err) { /* すでに解放済み等は無視 */ }
+      }
+    }
+
     function bindTouchControl(button, actionKey) {
       const start = (e) => {
         e.preventDefault();
+        capture(button, e);
         setTouchControl(button, actionKey, true);
       };
       const end = (e) => {
@@ -2752,11 +2803,8 @@
 
       button.addEventListener("pointerdown", start, { passive: false });
       button.addEventListener("pointerup", end, { passive: false });
-      button.addEventListener("pointerleave", end, { passive: false });
       button.addEventListener("pointercancel", end, { passive: false });
-      button.addEventListener("touchstart", start, { passive: false });
-      button.addEventListener("touchend", end, { passive: false });
-      button.addEventListener("touchcancel", end, { passive: false });
+      button.addEventListener("lostpointercapture", end, { passive: false });
     }
 
     bindTouchControl(touchUp, "up");
@@ -2767,26 +2815,69 @@
     // Fire and Bomb buttons: single tap only, no repeat
     function makeTapButton(button, action) {
       if (!button) return;
-      const press   = (e) => { e.preventDefault(); action(); button.classList.add('active'); };
+      const press   = (e) => { e.preventDefault(); capture(button, e); action(); button.classList.add('active'); };
       const release = () => button.classList.remove('active');
-      button.addEventListener('touchstart', press,   { passive: false });
-      button.addEventListener('touchend',   release, { passive: true });
-      button.addEventListener('touchcancel',release, { passive: true });
-      button.addEventListener('mousedown',  press,   { passive: false });
-      window.addEventListener('mouseup',    release, { passive: true });
+      button.addEventListener('pointerdown', press,   { passive: false });
+      button.addEventListener('pointerup',   release, { passive: false });
+      button.addEventListener('pointercancel', release, { passive: false });
+      button.addEventListener('lostpointercapture', release, { passive: false });
     }
 
     // X button: short tap = vulcan, hold 3s = laser beam
     if (touchFire) {
-      const firePress   = (e) => { e.preventDefault(); startLaserCharge(); touchFire.classList.add('active'); };
-      const fireRelease = ()  => { stopLaserCharge();  touchFire.classList.remove('active'); };
-      touchFire.addEventListener('touchstart',  firePress,   { passive: false });
-      touchFire.addEventListener('touchend',    fireRelease, { passive: true });
-      touchFire.addEventListener('touchcancel', fireRelease, { passive: true });
-      touchFire.addEventListener('mousedown',   firePress,   { passive: false });
-      window.addEventListener('mouseup',        fireRelease, { passive: true });
+      const firePress   = (e) => { e.preventDefault(); capture(touchFire, e); startLaserCharge(); touchFire.classList.add('active'); };
+      const fireRelease = (e) => { e.preventDefault(); stopLaserCharge();  touchFire.classList.remove('active'); };
+      touchFire.addEventListener('pointerdown', firePress, { passive: false });
+      touchFire.addEventListener('pointerup',   fireRelease, { passive: false });
+      touchFire.addEventListener('pointercancel', fireRelease, { passive: false });
+      touchFire.addEventListener('lostpointercapture', fireRelease, { passive: false });
     }
     makeTapButton(touchBomb, () => dropBomb());
+
+    // 自動連射のオン/オフ。押している間だけの操作ではなく単純なトグルなので
+    // ポインタキャプチャは不要(タップの押下だけを見ればよい)
+    function updateAutoFireToggleUI() {
+      if (!autoFireToggle) return;
+      autoFireToggle.classList.toggle("on", autoFireEnabled);
+      autoFireToggle.setAttribute(
+        "aria-label",
+        autoFireEnabled ? "自動連射:オン(タップでオフ)" : "自動連射:オフ(タップでオン)"
+      );
+    }
+    if (autoFireToggle) {
+      autoFireToggle.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        autoFireEnabled = !autoFireEnabled;
+        autoFireTimer = 0;
+        updateAutoFireToggleUI();
+        autoFireToggle.classList.add("active");
+      }, { passive: false });
+      const clearPress = () => autoFireToggle.classList.remove("active");
+      autoFireToggle.addEventListener("pointerup", clearPress, { passive: true });
+      autoFireToggle.addEventListener("pointercancel", clearPress, { passive: true });
+      updateAutoFireToggleUI();
+    }
+
+    // タッチ操作の途中でアプリがバックグラウンドに回った/タブが非表示になった
+    // 場合、pointerup/pointercancel が届かないことがある(通知バナーやOSの
+    // ジェスチャーに割り込まれる等)。その場合に方向入力が押しっぱなしのまま
+    // 残って自機が動き続けないよう、blur/visibilitychangeで全入力を強制リセット
+    function resetAllInputs() {
+      state.input.up = false;
+      state.input.down = false;
+      state.input.left = false;
+      state.input.right = false;
+      state.input.gyroX = 0;
+      state.input.gyroY = 0;
+      [touchUp, touchLeft, touchRight, touchDown, touchFire, touchBomb, autoFireToggle].forEach((btn) => {
+        if (btn) btn.classList.remove("active");
+      });
+      releaseLaserChargeOnHit();
+    }
+    window.addEventListener("blur", resetAllInputs);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) resetAllInputs();
+    });
 
     if ("ontouchstart" in window || navigator.maxTouchPoints > 0) {
       // shown by default; hidden automatically once real tilt events start arriving
