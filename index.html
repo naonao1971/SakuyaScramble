@@ -836,11 +836,16 @@
 
     function updateGyroToggleLabel() {
       if (!gyroToggleButton) return;
-      // icon-only: 🕹️ = tap to switch to key/touch, 📱 = tap to switch to tilt
-      gyroToggleButton.textContent = gyro.active ? "🕹️" : "📱";
+      // icon-only: 🕹️ = tap to switch to key/touch, 📱 = tap to switch to tilt.
+      // スタート初回はジャイロが既定モードで自動的に有効化されるため、ユーザーが
+      // まだ切替操作をしていない間(userChoiceMade === false)はジャイロ中と
+      // 同じ🕹️を出しておく。実際に有効化される前のスタート画面がいきなり
+      // 「タップでジャイロに切替」(📱)を出すのはこの前提と矛盾するため
+      const showAsGyroMode = gyro.active || !gyro.userChoiceMade;
+      gyroToggleButton.textContent = showAsGyroMode ? "🕹️" : "📱";
       gyroToggleButton.setAttribute(
         "aria-label",
-        gyro.active ? "キー/タッチ操作に切り替え" : "傾き操作に切り替え"
+        showAsGyroMode ? "キー/タッチ操作に切り替え" : "傾き操作に切り替え"
       );
     }
 
@@ -857,7 +862,7 @@
     gyroToggleButton.id = "gyroToggleButton";
     gyroToggleButton.type = "button";
     gyroToggleButton.className = "touch-btn gyro-toggle";
-    gyroToggleButton.textContent = "📱";
+    gyroToggleButton.textContent = "🕹️"; // ジャイロが既定モードのため。実際の表示は updateGyroToggleLabel() が上書きする
     gyroToggleButton.setAttribute("aria-label", "傾き操作とキー/タッチ操作を切り替え");
     gyroToggleButton.style.display = "none"; // only shown once we know the device might support it
     touchPad.appendChild(gyroToggleButton);
