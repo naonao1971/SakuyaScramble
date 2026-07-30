@@ -2324,14 +2324,31 @@
 
     // PC (isMobileDevice === false) は縦長ウィンドウでも絶対に出さない。
     // 表示中は loop() 内の update() をスキップしてゲームを一時停止し、
-    // 横向きに戻ったら自動的に再開する
+    // 横向きに戻ったら自動的に再開する。
+    //
+    // 判定はイベント任せにせず loop() から毎フレーム呼び直す。iOS Safari の
+    // orientationchange はビューポート(=メディアクエリ)の更新より先に発火する
+    // ことがあり、その時点の古い値で orientationBlocked = true を書くと、実際は
+    // 横向きなのに二度と再評価されず、ゲームが一時停止のまま固まってしまう
+    // （ジャイロの傾き値は正常に届いているのに宇宙船が動かせない状態になる）。
+    let _orientationBlockedApplied = null;
     function updateOrientationOverlay() {
       const shouldBlock = isMobileDevice && portraitMQ.matches;
       orientationBlocked = shouldBlock;
+      // DOM操作は状態が変わった時だけ。positionOrientationOverlay() は
+      // getBoundingClientRect() でリフローを起こすので毎フレームは走らせない
+      if (shouldBlock === _orientationBlockedApplied) return;
       if (shouldBlock) positionOrientationOverlay();
       orientationOverlay.classList.toggle("visible", shouldBlock);
+      _orientationBlockedApplied = shouldBlock;
     }
-    portraitMQ.addEventListener("change", updateOrientationOverlay);
+    // 即応性のためイベントも購読する（毎フレームの再評価が最終的な保険）。
+    // addEventListener 未対応の古い Safari では addListener にフォールバック
+    if (typeof portraitMQ.addEventListener === "function") {
+      portraitMQ.addEventListener("change", updateOrientationOverlay);
+    } else if (typeof portraitMQ.addListener === "function") {
+      portraitMQ.addListener(updateOrientationOverlay);
+    }
     window.addEventListener("orientationchange", updateOrientationOverlay);
     updateOrientationOverlay();
 
@@ -2605,6 +2622,9 @@
       _lastFrameTime = timestamp;
       if (elapsed > 1000) elapsed = TARGET_FRAME_MS; // tab was backgrounded — don't try to catch up on that gap
       _accumulatedMs += elapsed;
+      // 毎フレーム、実際の画面の向きから orientationBlocked を引き直す。
+      // イベントの取りこぼしや発火順序に関係なく必ず現状に追従させるため
+      updateOrientationOverlay();
       let steps = 0;
       while (_accumulatedMs >= TARGET_FRAME_MS && steps < MAX_CATCHUP_STEPS) {
         if (state.started && !orientationBlocked) update();
