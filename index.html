@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>SAKUYA SCRAMBLE</title>
   <!-- OGP / Twitter Card -->
   <meta property="og:type" content="website" />
@@ -181,10 +181,11 @@
       grid-row: 3;
     }
     .fire-pad {
-      /* pin fire/bomb buttons to the left-bottom of the viewport */
+      /* pin fire/bomb buttons to the left-bottom of the viewport, clear of
+         the iPhone home-indicator / notch via safe-area-inset */
       position: fixed;
-      left: 18px;
-      bottom: 18px;
+      left: calc(18px + env(safe-area-inset-left));
+      bottom: calc(18px + env(safe-area-inset-bottom));
       z-index: 6;
       display: none;
       pointer-events: auto;
@@ -193,7 +194,7 @@
     }
     .touch-fire {
       border-color: #9d6038;
-      background: rgba(80, 34, 14, 0.82);
+      background: rgba(80, 34, 14, 0.92);
       font-size: 18px;
       width: 62px;
       height: 62px;
@@ -204,7 +205,7 @@
       height: 56px;
       border-radius: 14px;
       border: 1px solid #3f558e;
-      background: rgba(16, 28, 56, 0.72);
+      background: rgba(16, 28, 56, 0.85);
       color: #f2f6ff;
       font-size: 22px;
       font-weight: 800;
@@ -223,9 +224,11 @@
       transform: translateY(1px);
     }
     .controls-bottom {
-      position: absolute;
-      right: 12px;
-      bottom: 18px;
+      /* fire-pad と同じ position: fixed に統一し、画面サイズ/向きが変わっても
+         2つのボタン群の相対位置がズレないようにする */
+      position: fixed;
+      right: calc(12px + env(safe-area-inset-right));
+      bottom: calc(18px + env(safe-area-inset-bottom));
       z-index: 3;
       display: flex;
       gap: 14px;
