@@ -659,6 +659,7 @@
     }
     const touchPad = document.getElementById("touchPad");
     const firePad = document.getElementById("firePad");
+    const controlsBottom = document.querySelector(".controls-bottom");
     const touchUp = document.getElementById("touchUp");
     const touchLeft = document.getElementById("touchLeft");
     const touchFire = document.getElementById("touchFire");
@@ -2289,6 +2290,23 @@
       if (shouldShow && !_startButtonWasShown) positionStartButton();
       _startButtonWasShown = shouldShow;
     }
+
+    // 操作ボタン(十字/ジャイロトグル/X/💣)はプレイ中だけ出す。スタートボタンが
+    // 出ている間(タイトル・ゲームオーバー・クリア)は、押しても update() が動かず
+    // 反応しないうえ、タイトルイラストやクリア時のランキング登録フォームに
+    // position: fixed のまま重なってしまうため隠す。
+    // PCでは touchControlsEnabled が false のままなので従来通り常に非表示。
+    let touchControlsEnabled = false;
+    let _gameControlsWereShown = null;
+    function updateGameControlsVisibility() {
+      if (!touchControlsEnabled) return;
+      const shouldShow = state.started && !state.gameOver && !state.cleared;
+      if (shouldShow === _gameControlsWereShown) return;
+      firePad.style.display = shouldShow ? "block" : "none";
+      controlsBottom.style.display = shouldShow ? "flex" : "none";
+      _gameControlsWereShown = shouldShow;
+    }
+
     window.addEventListener("resize", () => {
       if (_startButtonWasShown) positionStartButton();
       if (orientationBlocked) positionOrientationOverlay();
@@ -2337,6 +2355,7 @@
 
     function render() {
       updateStartButtonVisibility();
+      updateGameControlsVisibility();
       updateLeaderboardVisibility();
       if (!state.started) {
         drawTitleScreen();
@@ -2718,6 +2737,8 @@
       // shown by default; hidden automatically once real tilt events start arriving
       touchPad.style.display = "grid";
       firePad.style.display = "block";
+      // ここから先は updateGameControlsVisibility() がプレイ中だけ出すよう制御する
+      touchControlsEnabled = true;
       if (window.DeviceOrientationEvent) {
         gyroToggleButton.style.display = "inline-block";
         updateGyroToggleLabel();
