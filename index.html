@@ -2692,10 +2692,27 @@
     // プレイ中(スタート後〜ゲームオーバー/クリア前)かつタッチデバイスの間だけ、
     // ページ全体のスクロール/pull-to-refreshを止める。終了後はランキングを
     // 読めるようロックを外す
-    function updatePlayLock() {
-      const shouldLock = isMobileDevice && state.started && !state.gameOver && !state.cleared;
-      document.body.classList.toggle("is-playing-lock", shouldLock);
+    function isActivelyPlaying() {
+      return isMobileDevice && state.started && !state.gameOver && !state.cleared;
     }
+    function updatePlayLock() {
+      document.body.classList.toggle("is-playing-lock", isActivelyPlaying());
+    }
+
+    // iOSのピンチズームは touch-action だけでは塞ぎきれないことがある
+    // (gesturestart/gesturechange という WebKit独自イベント経由で発生するため)。
+    // プレイ中だけ明示的に打ち消す。タイトル/ランキング閲覧時はズームできる
+    // ままにして、アクセシビリティ(文字を拡大して読みたい場合)を残す
+    ["gesturestart", "gesturechange", "gestureend"].forEach((type) => {
+      document.addEventListener(type, (e) => {
+        if (isActivelyPlaying()) e.preventDefault();
+      });
+    });
+    // 上記に対応しないブラウザ(Android Chrome等)向けの保険。touch-action: none
+    // で通常は止まるはずだが、2本指の動きそのものも念のため打ち消しておく
+    document.addEventListener("touchmove", (e) => {
+      if (isActivelyPlaying() && e.touches.length > 1) e.preventDefault();
+    }, { passive: false });
 
     function loop(timestamp) {
       requestAnimationFrame(loop);
