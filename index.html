@@ -549,6 +549,31 @@
       leaderboardPanel.classList.toggle("visible", !!visible);
     }
 
+    // モバイルだと登録フォームがcanvasより下にあり、スクロールしないと存在に
+    // 気づけない。かといって即スクロールするとcanvas上のCLEAR画像/スコアを
+    // 見る前に飛んでしまうので、クリア演出を見せてから誘導する
+    const SCORE_FORM_SCROLL_DELAY_MS = 2000;
+    let _scoreFormScrollTimer = null;
+
+    function scrollToScoreRegisterForm() {
+      if (!scoreRegisterForm || !scoreRegisterForm.classList.contains("visible")) return;
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      scoreRegisterForm.scrollIntoView({
+        behavior: reduceMotion ? "auto" : "smooth",
+        block: "center"
+      });
+      // preventScroll: フォーカスによる瞬間スクロールが上のスムーズ移動と
+      // 競合しないように。iOSはユーザー操作を伴わないfocus()ではキーボードを
+      // 開かない仕様なので、あくまで開けば得という位置づけ
+      if (rankNicknameInput) {
+        try {
+          rankNicknameInput.focus({ preventScroll: true });
+        } catch (e) {
+          /* preventScroll未対応ブラウザなどは無視 */
+        }
+      }
+    }
+
     function showScoreRegisterForm() {
       if (!scoreRegisterForm) return;
       scoreRegisterForm.classList.add("visible");
@@ -558,10 +583,16 @@
       xidVerifyState = "empty";
       setXidPreview(null, "");
       updateSubmitAvailability();
+      clearTimeout(_scoreFormScrollTimer);
+      _scoreFormScrollTimer = setTimeout(scrollToScoreRegisterForm, SCORE_FORM_SCROLL_DELAY_MS);
     }
 
     function hideScoreRegisterForm() {
       if (!scoreRegisterForm) return;
+      // 2秒待たずに再スタートされた場合、ゲーム中に誘導スクロールが
+      // 割り込まないよう必ず取り消す(resetGame()からも呼ばれる)
+      clearTimeout(_scoreFormScrollTimer);
+      _scoreFormScrollTimer = null;
       scoreRegisterForm.classList.remove("visible");
     }
 
