@@ -37,6 +37,22 @@
       padding: 20px 12px 40px;
       box-sizing: border-box;
       touch-action: manipulation;
+      /* スマホでボタンや画面を長押し/ドラッグしたときに、テキストや要素が
+         選択状態(青い反転)になったり、iOSのコピー/調べる のメニューが
+         出たり、タップのたびに灰色のハイライトが乗るのを止める。
+         いずれも継承プロパティなので body に指定すれば全体に効く */
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    /* ランキング登録の入力欄だけは、文字の選択・カーソル移動ができないと
+       困るので選択を戻す */
+    input,
+    textarea {
+      -webkit-user-select: text;
+      user-select: text;
+      -webkit-touch-callout: default;
     }
     /* プレイ中のみ付与: スワイプでのページスクロール／pull-to-refreshを止める。
        ゲームオーバー/クリア後はランキングを読めるよう外す */
