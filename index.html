@@ -45,6 +45,9 @@
       /* 角丸はレトロでは立てる。7種あったものを0に統一 */
       --radius: 0px;
 
+      /* 長押しトグルの必要保持時間。JS側の閾値と必ず同じ値にする */
+      --hold-ms: 600ms;
+
       /* 和欧混植は欧文を先に書き、数字とラテンを欧文側へ拾わせる */
       --font-display: "Press Start 2P", "DotGothic16", monospace;
       --font-body: "DotGothic16", "Press Start 2P", monospace;
@@ -281,13 +284,47 @@
       user-select: none;
       -webkit-user-select: none;
     }
-    .touch-btn:active,
+    /* 長押しトグルは :active から除外する。押した瞬間に縁が徴の色になると
+       「確定した」見た目になり、閾値に到達したかどうかが区別できなくなる */
+    .touch-btn:not(.hold-toggle):active,
     .touch-btn.active {
       /* 押下でベベルを反転させ、物理的に沈み込ませる */
       border-color: var(--amber);
       color: var(--amber);
       box-shadow: var(--bevel-down);
       transform: translateY(2px);
+    }
+    /* 長押しトグル: 十字の中央や発射ボタンの隣にあり、指がかすめただけで
+       作動すると誤爆になる。押している間だけ琥珀が下から満ちていき、
+       満ちてから指を離したときに初めて切り替わる */
+    .hold-toggle {
+      position: relative;
+      overflow: hidden;
+    }
+    .hold-toggle::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 100%;
+      height: 0;
+      background: rgba(255, 176, 32, 0.38);
+      pointer-events: none;
+    }
+    .hold-toggle.holding::after {
+      height: 100%;
+      transition: height var(--hold-ms) linear;
+    }
+    /* 押している間は沈ませるだけで、縁の色は変えない。ここで .active と
+       同じ「確定した見た目」にすると、閾値に達したかどうかが区別できない */
+    .hold-toggle.holding {
+      box-shadow: var(--bevel-down);
+      transform: translateY(2px);
+    }
+    /* 閾値に到達＝「離せば切り替わる」。ここで初めて縁を徴の色にする */
+    .hold-toggle.hold-ready {
+      border-color: var(--amber);
+      color: var(--amber);
     }
     /* X/💣より一回り小さい常設トグル。ONの間だけ徴の色で縁取る。
        小さくしても44ptの床は割らない（モバイルのタップ目標の最小） */
@@ -515,7 +552,7 @@
       <div id="firePad" class="fire-pad" aria-label="発射ボタン">
         <button id="touchFire" class="touch-btn touch-fire" type="button" aria-label="バルカン発射">X</button>
         <button id="touchBomb" class="touch-btn touch-bomb" type="button" aria-label="爆弾投下">💣</button>
-        <button id="autoFireToggle" class="touch-btn auto-fire-toggle" type="button" aria-label="自動連射:オン(タップでオフ)">🔫</button>
+        <button id="autoFireToggle" class="touch-btn auto-fire-toggle hold-toggle" type="button" aria-label="自動連射:オン(長押しでオフ)">🔫</button>
       </div>
       <div id="touchPad" class="touch-pad" aria-label="タッチコントローラー">
         <button id="touchUp" class="touch-btn touch-up" type="button" aria-label="上昇">▲</button>
@@ -1043,7 +1080,7 @@
     const gyroToggleButton = document.createElement("button");
     gyroToggleButton.id = "gyroToggleButton";
     gyroToggleButton.type = "button";
-    gyroToggleButton.className = "touch-btn gyro-toggle";
+    gyroToggleButton.className = "touch-btn gyro-toggle hold-toggle";
     gyroToggleButton.textContent = "🕹️"; // ジャイロが既定モードのため。実際の表示は updateGyroToggleLabel() が上書きする
     gyroToggleButton.setAttribute("aria-label", "傾き操作とキー/タッチ操作を切り替え");
     gyroToggleButton.style.display = "none"; // only shown once we know the device might support it
@@ -2550,8 +2587,19 @@
       const rect = canvas.getBoundingClientRect();
       const scaleX = rect.width / canvas.width;
       const scaleY = rect.height / canvas.height;
-      startButton.style.left = `${TITLE_HINT_X * scaleX}px`;
-      startButton.style.top = `${TITLE_HINT_Y * scaleY}px`;
+      let left = TITLE_HINT_X * scaleX;
+      let top = TITLE_HINT_Y * scaleY;
+      // ボタンは transform: translate(-50%, -50%) で中心合わせなので、
+      // アンカーが縁に近いと半分がキャンバスの外へ出る。表示倍率によって
+      // 縮尺が変わるぶん、座標を決め打ちで上げるのではなく実寸で内側へ
+      // クランプする（将来ボタンの大きさを変えても破綻しない）
+      const halfW = startButton.offsetWidth / 2;
+      const halfH = startButton.offsetHeight / 2;
+      const inset = 6; // 筐体ベゼルに食い込ませないための余白
+      left = Math.max(halfW + inset, Math.min(rect.width - halfW - inset, left));
+      top = Math.max(halfH + inset, Math.min(rect.height - halfH - inset, top));
+      startButton.style.left = `${left}px`;
+      startButton.style.top = `${top}px`;
     }
 
     // start button only shows while waiting to start: before the first スタート press,
@@ -2996,7 +3044,52 @@
       startGame();
     });
 
-    gyroToggleButton.addEventListener("click", toggleGyroControls);
+    // 十字の中央(🕹️)と発射ボタンの隣(🔫)にあるトグルは、方向ボタン間を
+    // 親指が移動するたびに通過するため、タップ即作動だと誤爆する。
+    // 長押ししてから指を離したときだけ切り替える。
+    //
+    // 閾値に到達した瞬間ではなく pointerup で実行するのは、iOSのジャイロ
+    // 許可ダイアログ(DeviceOrientationEvent.requestPermission)がユーザー操作
+    // 起点でないと出せないため。setTimeout から呼ぶと許可を求められなくなる。
+    const HOLD_TOGGLE_MS = 600; // CSSの --hold-ms と一致させること
+    function bindHoldToggle(button, action, onShortTap) {
+      if (!button) return;
+      let startedAt = 0;
+      let readyTimer = null;
+      const clearHold = () => {
+        clearTimeout(readyTimer);
+        readyTimer = null;
+        startedAt = 0;
+        button.classList.remove("holding", "hold-ready", "active");
+      };
+      button.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        capture(button, e);
+        startedAt = performance.now();
+        // .active は付けない——一瞬かすめただけで「押して確定した」見た目に
+        // なってしまい、長押しにした意味が視覚的に消えるため
+        button.classList.add("holding");
+        readyTimer = setTimeout(() => button.classList.add("hold-ready"), HOLD_TOGGLE_MS);
+      }, { passive: false });
+      button.addEventListener("pointerup", (e) => {
+        e.preventDefault();
+        const heldLongEnough = startedAt > 0 && (performance.now() - startedAt) >= HOLD_TOGGLE_MS;
+        clearHold();
+        // 短いタップは切り替えず、代わりに操作方法を伝える（誤爆を防ぎつつ
+        // 「押しても効かない」と誤解させない）
+        if (heldLongEnough) action();
+        else if (onShortTap) onShortTap();
+      }, { passive: false });
+      button.addEventListener("pointercancel", clearHold, { passive: false });
+      button.addEventListener("lostpointercapture", clearHold, { passive: false });
+      button._clearHold = clearHold; // resetAllInputs から呼べるように
+    }
+
+    bindHoldToggle(
+      gyroToggleButton,
+      toggleGyroControls,
+      () => updateGyroStatus("長押しで傾き操作とキー/タッチを切り替えます")
+    );
 
     function setTouchControl(button, actionKey, enabled) {
       state.input[actionKey] = enabled;
@@ -3060,29 +3153,26 @@
     }
     makeTapButton(touchBomb, () => dropBomb());
 
-    // 自動連射のオン/オフ。押している間だけの操作ではなく単純なトグルなので
-    // ポインタキャプチャは不要(タップの押下だけを見ればよい)
+    // 自動連射のオン/オフ。X/💣のすぐ隣にあるので、🕹️と同じく長押しで切り替える
     function updateAutoFireToggleUI() {
       if (!autoFireToggle) return;
       autoFireToggle.classList.toggle("on", autoFireEnabled);
       autoFireToggle.setAttribute(
         "aria-label",
-        autoFireEnabled ? "自動連射:オン(タップでオフ)" : "自動連射:オフ(タップでオン)"
+        autoFireEnabled ? "自動連射:オン(長押しでオフ)" : "自動連射:オフ(長押しでオン)"
       );
     }
-    if (autoFireToggle) {
-      autoFireToggle.addEventListener("pointerdown", (e) => {
-        e.preventDefault();
+    bindHoldToggle(
+      autoFireToggle,
+      () => {
         autoFireEnabled = !autoFireEnabled;
         autoFireTimer = 0;
         updateAutoFireToggleUI();
-        autoFireToggle.classList.add("active");
-      }, { passive: false });
-      const clearPress = () => autoFireToggle.classList.remove("active");
-      autoFireToggle.addEventListener("pointerup", clearPress, { passive: true });
-      autoFireToggle.addEventListener("pointercancel", clearPress, { passive: true });
-      updateAutoFireToggleUI();
-    }
+        updateGyroStatus(autoFireEnabled ? "自動連射: オン" : "自動連射: オフ");
+      },
+      () => updateGyroStatus("長押しで自動連射を切り替えます")
+    );
+    updateAutoFireToggleUI();
 
     // タッチ操作の途中でアプリがバックグラウンドに回った/タブが非表示になった
     // 場合、pointerup/pointercancel が届かないことがある(通知バナーやOSの
@@ -3095,8 +3185,12 @@
       state.input.right = false;
       state.input.gyroX = 0;
       state.input.gyroY = 0;
-      [touchUp, touchLeft, touchRight, touchDown, touchFire, touchBomb, autoFireToggle].forEach((btn) => {
-        if (btn) btn.classList.remove("active");
+      [touchUp, touchLeft, touchRight, touchDown, touchFire, touchBomb, autoFireToggle, gyroToggleButton].forEach((btn) => {
+        if (!btn) return;
+        btn.classList.remove("active");
+        // 長押し中に割り込まれた場合、進捗と計測をここで確実に捨てる
+        // （復帰後に古い開始時刻が残っていると一瞬のタップで作動してしまう）
+        if (btn._clearHold) btn._clearHold();
       });
       releaseLaserChargeOnHit();
     }
@@ -3135,7 +3229,11 @@
       Promise.all([
         document.fonts.load('16px "Press Start 2P"'),
         document.fonts.load('16px "DotGothic16"')
-      ]).catch(() => { /* 取得失敗時は monospace にフォールバックする */ });
+      ])
+        // 書体が変わるとスタートボタンの実寸も変わる。読み込み前に測った
+        // 寸法でクランプしたままだと位置がずれるので、確定後に測り直す
+        .then(() => { if (_startButtonWasShown) positionStartButton(); })
+        .catch(() => { /* 取得失敗時は monospace にフォールバックする */ });
     }
 
     // populate an idle scene (columns/ship/stars) before the player presses スタート
