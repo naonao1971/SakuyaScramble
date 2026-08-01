@@ -2522,6 +2522,8 @@
 
     function drawTitleScreen() {
       drawBackground();
+      // 走査線は背景の星空まで。この後のタイトルイラストには乗せない
+      drawCrtOverlay();
       if (titleImg.complete && titleImg.naturalWidth) {
         const maxW = canvas.width * 0.72;
         const maxH = canvas.height * 0.6;
@@ -2649,8 +2651,7 @@
       updateGameControlsVisibility();
       updateLeaderboardVisibility();
       if (!state.started) {
-        drawTitleScreen();
-        drawCrtOverlay();
+        drawTitleScreen(); // 走査線は関数内で星空にだけ敷く
         return;
       }
       drawBackground();
@@ -2666,6 +2667,11 @@
       } else {
         drawTunnel();
       }
+      // 走査線とビネットは「背景と洞窟」にだけ敷く。ここより後に描くものは
+      // 一切削らない——アイテム画像やイラストの上に走査線が乗ると、
+      // レトロではなく単に低解像度に見えるため（既定の描画順は変えていないので
+      // 自機とアイテムの重なり順は従来どおり）
+      drawCrtOverlay();
       drawMegaHp();
       drawArenaBullets();
       drawHpItems();
@@ -2674,9 +2680,6 @@
       drawExplosions();
       drawShip();
       drawLaser();
-      // 走査線はゲーム画面の上・HUDの下に敷く。HUDまで走査線で削ると
-      // スコアの可読性が落ちるため、順序はここで固定する
-      drawCrtOverlay();
       drawHud();
       drawPilotPortrait();
     }
