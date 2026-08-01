@@ -553,6 +553,7 @@
         <button id="touchFire" class="touch-btn touch-fire" type="button" aria-label="バルカン発射">X</button>
         <button id="touchBomb" class="touch-btn touch-bomb" type="button" aria-label="爆弾投下">💣</button>
         <button id="autoFireToggle" class="touch-btn auto-fire-toggle hold-toggle" type="button" aria-label="自動連射:オン(長押しでオフ)">🔫</button>
+        <button id="muteToggle" class="touch-btn auto-fire-toggle hold-toggle on" type="button" aria-label="効果音:オン(長押しでオフ)">🔊</button>
       </div>
       <div id="touchPad" class="touch-pad" aria-label="タッチコントローラー">
         <button id="touchUp" class="touch-btn touch-up" type="button" aria-label="上昇">▲</button>
@@ -842,6 +843,7 @@
     const touchRight = document.getElementById("touchRight");
     const touchDown = document.getElementById("touchDown");
     const autoFireToggle = document.getElementById("autoFireToggle");
+    const muteToggle = document.getElementById("muteToggle");
 
     // 十字4ボタンでは親指1本で斜め移動しながらXも押せないため、タッチデバイス
     // では既定でバルカンを自動連射し、Xボタンはレーザーのチャージ専用として
@@ -1404,6 +1406,169 @@
       gyroStatus.textContent = message;
     }
 
+    // ── 効果音 ────────────────────────────────────────────────────────────
+    // 音声ファイルは持たず、Web Audio で矩形波とノイズを合成する。80年代
+    // アーケードのチップチューンそのものの音になり、配信容量もライセンスの
+    // 制約も増えない。音色は下の数値を変えるだけで調整できる。
+    //
+    // 演出は3階層（頻度と強度は逆相関。全部を鳴らすと何も特別でなくなる）:
+    //   弱 毎秒        バルカン        極小音・ピッチを散らす
+    //   中 ときどき    被弾/取得/開始   中音量
+    //   強 まれ        レーザー/終了    専用の音
+    const SFX = {
+      ctx: null,
+      master: null,
+      muted: false,
+      _noiseBuf: null,
+
+      // AudioContext はユーザー操作を経ないと鳴らせない(特にiOS)。
+      // スタートボタンのタップから呼んで起こす
+      unlock() {
+        if (!SFX.ctx) {
+          const AC = window.AudioContext || window.webkitAudioContext;
+          if (!AC) return;
+          SFX.ctx = new AC();
+          SFX.master = SFX.ctx.createGain();
+          SFX.master.gain.value = SFX.muted ? 0 : 0.5;
+          SFX.master.connect(SFX.ctx.destination);
+        }
+        if (SFX.ctx.state === "suspended") SFX.ctx.resume().catch(() => {});
+      },
+
+      setMuted(m) {
+        SFX.muted = m;
+        if (SFX.master) SFX.master.gain.value = m ? 0 : 0.5;
+      },
+
+      // 単発のトーン。type は square/sawtooth/triangle など
+      tone({ freq = 440, to = null, dur = 0.12, type = "square", gain = 0.2, delay = 0 }) {
+        if (!SFX.ctx || SFX.muted) return;
+        const t0 = SFX.ctx.currentTime + delay;
+        const osc = SFX.ctx.createOscillator();
+        const g = SFX.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, t0);
+        if (to !== null) osc.frequency.exponentialRampToValueAtTime(Math.max(1, to), t0 + dur);
+        // 立ち上がりを一瞬で、減衰を指数で。矩形波の「カチッ」とした質感が出る
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(gain, t0 + 0.005);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        osc.connect(g).connect(SFX.master);
+        osc.start(t0);
+        osc.stop(t0 + dur + 0.02);
+      },
+
+      // 爆発・ヒット用のホワイトノイズ。バッファは一度だけ作って使い回す
+      noise({ dur = 0.2, gain = 0.2, delay = 0, filterFrom = 1800, filterTo = 200 }) {
+        if (!SFX.ctx || SFX.muted) return;
+        if (!SFX._noiseBuf) {
+          const len = SFX.ctx.sampleRate * 1.0;
+          const buf = SFX.ctx.createBuffer(1, len, SFX.ctx.sampleRate);
+          const d = buf.getChannelData(0);
+          for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+          SFX._noiseBuf = buf;
+        }
+        const t0 = SFX.ctx.currentTime + delay;
+        const src = SFX.ctx.createBufferSource();
+        src.buffer = SFX._noiseBuf;
+        src.loop = true;
+        const lp = SFX.ctx.createBiquadFilter();
+        lp.type = "lowpass";
+        lp.frequency.setValueAtTime(filterFrom, t0);
+        lp.frequency.exponentialRampToValueAtTime(Math.max(40, filterTo), t0 + dur);
+        const g = SFX.ctx.createGain();
+        g.gain.setValueAtTime(gain, t0);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        src.connect(lp).connect(g).connect(SFX.master);
+        src.start(t0);
+        src.stop(t0 + dur + 0.02);
+      },
+
+      // --- 弱: 毎秒鳴る音 -------------------------------------------------
+      // 自動連射は10フレーム間隔＝毎秒6発。同じ音を6回/秒鳴らすと必ず耳障りに
+      // なるので、音量を絞りピッチを散らして「機関砲の連なり」に溶かす
+      vulcan() {
+        const f = 820 + Math.random() * 140;
+        SFX.tone({ freq: f, to: f * 0.45, dur: 0.05, type: "square", gain: 0.045 });
+      },
+
+      // --- 中: ときどき鳴る音 ---------------------------------------------
+      hit() {
+        SFX.noise({ dur: 0.22, gain: 0.28, filterFrom: 1400, filterTo: 120 });
+        SFX.tone({ freq: 180, to: 60, dur: 0.2, type: "square", gain: 0.16 });
+      },
+      pickup() {
+        // 上昇する2音＝取得の定番。短く歯切れよく
+        SFX.tone({ freq: 660, dur: 0.07, type: "square", gain: 0.15 });
+        SFX.tone({ freq: 990, dur: 0.09, type: "square", gain: 0.15, delay: 0.07 });
+      },
+      bonus() {
+        SFX.tone({ freq: 523, dur: 0.08, type: "square", gain: 0.14 });
+        SFX.tone({ freq: 659, dur: 0.08, type: "square", gain: 0.14, delay: 0.08 });
+        SFX.tone({ freq: 784, dur: 0.14, type: "square", gain: 0.14, delay: 0.16 });
+      },
+      bomb() {
+        SFX.noise({ dur: 0.3, gain: 0.22, filterFrom: 900, filterTo: 80 });
+      },
+      stage() {
+        SFX.tone({ freq: 392, dur: 0.1, type: "square", gain: 0.16 });
+        SFX.tone({ freq: 523, dur: 0.1, type: "square", gain: 0.16, delay: 0.1 });
+        SFX.tone({ freq: 784, dur: 0.22, type: "square", gain: 0.16, delay: 0.2 });
+      },
+
+      // --- 強: まれにしか鳴らない音 ---------------------------------------
+      _chargeNodes: null,
+      charge() {
+        // 溜め: 低音から上昇していく。3秒のチャージ時間に合わせる。
+        // 途中で指を離した場合(＝バルカン)に鳴り続けないよう、停止できる形で持つ
+        SFX.stopCharge();
+        if (!SFX.ctx || SFX.muted) return;
+        const t0 = SFX.ctx.currentTime;
+        const dur = 3.0;
+        const osc = SFX.ctx.createOscillator();
+        const g = SFX.ctx.createGain();
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(110, t0);
+        osc.frequency.exponentialRampToValueAtTime(880, t0 + dur);
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(0.06, t0 + 0.08);
+        osc.connect(g).connect(SFX.master);
+        osc.start(t0);
+        osc.stop(t0 + dur + 0.05);
+        SFX._chargeNodes = { osc, g };
+      },
+      stopCharge() {
+        const n = SFX._chargeNodes;
+        SFX._chargeNodes = null;
+        if (!n || !SFX.ctx) return;
+        try {
+          const t = SFX.ctx.currentTime;
+          // 急に切るとプツッと鳴るので、ごく短いフェードで落とす
+          n.g.gain.cancelScheduledValues(t);
+          n.g.gain.setValueAtTime(Math.max(0.0001, n.g.gain.value), t);
+          n.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
+          n.osc.stop(t + 0.06);
+        } catch (e) { /* すでに停止済みなら無視 */ }
+      },
+      laser() {
+        SFX.tone({ freq: 1200, to: 180, dur: 0.5, type: "sawtooth", gain: 0.3 });
+        SFX.noise({ dur: 0.4, gain: 0.16, filterFrom: 3000, filterTo: 300 });
+      },
+      gameOver() {
+        // 下降する4音。アーケードの敗北ジングル
+        [392, 330, 262, 196].forEach((f, i) =>
+          SFX.tone({ freq: f, dur: 0.3, type: "square", gain: 0.2, delay: i * 0.18 })
+        );
+      },
+      clear() {
+        // 上昇するファンファーレ。最も稀なので一番派手にする
+        [523, 659, 784, 1047].forEach((f, i) =>
+          SFX.tone({ freq: f, dur: 0.24, type: "square", gain: 0.2, delay: i * 0.13 })
+        );
+        SFX.tone({ freq: 1319, dur: 0.5, type: "square", gain: 0.22, delay: 0.52 });
+      }
+    };
+
     function grantBaseBonus(color) {
       if (color === "red") {
         state.score += 180;
@@ -1417,6 +1582,7 @@
         state.bonusText = "YELLOW BONUS WIDE GAP";
       }
       state.bonusTimer = 140;
+      SFX.bonus();
     }
 
     function createExplosion(x, y, color) {
@@ -1521,6 +1687,7 @@
         vy: state.ship.vy * 0.12,
         radius: 3
       });
+      SFX.vulcan();
     }
 
     function updateTunnel() {
@@ -1635,6 +1802,7 @@
         vy: 0,
         radius: 6
       });
+      SFX.bomb();
     }
 
     function updateBombs() {
@@ -1725,6 +1893,7 @@
           collected.add(i);
           // heal
           state.ship.hp = Math.min(100, (state.ship.hp || 0) + 10);
+          SFX.pickup();
           state.bonusText = "HP +10";
           state.bonusTimer = 90;
           // small visual feedback
@@ -1793,6 +1962,7 @@
         // full heal
         state.ship.hp = 100;
         state.bonusText = "HP FULL";
+        SFX.bonus();
         state.bonusTimer = 140;
         createExplosion(it.x, it.y, "yellow");
         state.megaHp = null;
@@ -1888,6 +2058,7 @@
             releaseLaserChargeOnHit();
             state.ship.hp = Math.max(0, state.ship.hp - 5);
             state.portrait.hitTimer = 18;
+            SFX.hit();
             createExplosion(b.x, b.y, "red");
             if (state.ship.hp <= 0) {
               triggerShipDeath();
@@ -1953,6 +2124,7 @@
         if (state.dying.timer >= state.dying.duration) {
           state.dying.active = false;
           state.gameOver = true;
+          SFX.gameOver();
         }
         return;
       }
@@ -2017,6 +2189,7 @@
             state.fall.active = false;
             state.running = false;
             state.cleared = true;
+            SFX.clear();
             // クリアボーナス：残りHP x10 ポイント加算
             state.score += Math.max(0, state.ship.hp) * 10;
           }
@@ -2048,6 +2221,7 @@
               releaseLaserChargeOnHit();
               state.ship.hp = Math.max(0, state.ship.hp - 5);
             state.portrait.hitTimer = 18;
+            SFX.hit();
               if (state.ship.hp <= 0) {
                 triggerShipDeath();
               }
@@ -2155,6 +2329,7 @@
             releaseLaserChargeOnHit();
             state.ship.hp = Math.max(0, state.ship.hp - 5);
             state.portrait.hitTimer = 18;
+            SFX.hit();
             if (state.ship.hp <= 0) {
               triggerShipDeath();
             }
@@ -2740,6 +2915,7 @@
     function beginStage() {
       // show caption
       showCaption(`STAGE ${state.stage} START`, 120);
+      SFX.stage();
       // set wide starting gap and seed columns to show wide space
       const wideGap = Math.max(tunnel.maxGap, tunnel.gap, 360);
       tunnel.gap = wideGap;
@@ -2768,10 +2944,12 @@
       state.laser._pressStartFrame = state.frame;
       // reset one-time shield consumption when starting a new charge
       state.laser._shieldConsumed = false;
+      SFX.charge();
     }
 
     function stopLaserCharge() {
       const laser = state.laser;
+      SFX.stopCharge(); // 溜め音は発射・不発を問わずここで必ず止める
       if (laser.charging) {
         const pressFrames = (laser._pressStartFrame != null) ? (state.frame - laser._pressStartFrame) : laser.chargeFrames;
         const TAP_THRESHOLD = 8; // frames (~133ms at 60fps) considered a tap
@@ -2799,6 +2977,7 @@
       laser.charging = false;
       // firing clears the one-time shield state
       laser._shieldConsumed = false;
+      SFX.laser();
     }
 
     function updateLaser() {
@@ -2855,6 +3034,7 @@
       if (!laser) return;
       // If currently charging (but not necessarily full), release/reset the charge
       if (laser.charging || laser.chargeFrames > 0) {
+        SFX.stopCharge(); // 被弾でチャージが解けたら溜め音も止める
         laser.charging = false;
         laser.chargeFrames = 0;
         laser._pressStartFrame = null;
@@ -3035,6 +3215,9 @@
     // restart button removed for mobile UI; use in-game controls to restart
 
     startButton.addEventListener("click", async () => {
+      // AudioContext はユーザー操作を経ないと鳴らない(特にiOS)。ジャイロ許可と
+      // 同じく、ここが唯一の起こせる場所なので await より前に呼ぶ
+      SFX.unlock();
       // first start: try to enable gyro automatically. after that, respect the toggle button's choice.
       if (!gyro.userChoiceMade) {
         await enableGyroIfAvailable();
@@ -3174,6 +3357,30 @@
     );
     updateAutoFireToggleUI();
 
+    // 効果音のオン/オフ。音が出るゲームには必須の逃げ道で、特にモバイルでは
+    // 「音を出せない場所で開いてしまった」を即座に解消できる必要がある
+    function updateMuteToggleUI() {
+      if (!muteToggle) return;
+      muteToggle.classList.toggle("on", !SFX.muted);
+      muteToggle.textContent = SFX.muted ? "🔇" : "🔊";
+      muteToggle.setAttribute(
+        "aria-label",
+        SFX.muted ? "効果音:オフ(長押しでオン)" : "効果音:オン(長押しでオフ)"
+      );
+    }
+    bindHoldToggle(
+      muteToggle,
+      () => {
+        SFX.unlock(); // オンに戻した直後から鳴るように、ここでも起こしておく
+        SFX.setMuted(!SFX.muted);
+        updateMuteToggleUI();
+        updateGyroStatus(SFX.muted ? "効果音: オフ" : "効果音: オン");
+        if (!SFX.muted) SFX.pickup(); // 音量の確認用に一発鳴らす
+      },
+      () => updateGyroStatus("長押しで効果音を切り替えます")
+    );
+    updateMuteToggleUI();
+
     // タッチ操作の途中でアプリがバックグラウンドに回った/タブが非表示になった
     // 場合、pointerup/pointercancel が届かないことがある(通知バナーやOSの
     // ジェスチャーに割り込まれる等)。その場合に方向入力が押しっぱなしのまま
@@ -3185,7 +3392,7 @@
       state.input.right = false;
       state.input.gyroX = 0;
       state.input.gyroY = 0;
-      [touchUp, touchLeft, touchRight, touchDown, touchFire, touchBomb, autoFireToggle, gyroToggleButton].forEach((btn) => {
+      [touchUp, touchLeft, touchRight, touchDown, touchFire, touchBomb, autoFireToggle, muteToggle, gyroToggleButton].forEach((btn) => {
         if (!btn) return;
         btn.classList.remove("active");
         // 長押し中に割り込まれた場合、進捗と計測をここで確実に捨てる
