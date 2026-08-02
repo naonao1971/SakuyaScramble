@@ -134,6 +134,14 @@
     .orientation-overlay-icon {
       font-size: 42px;
     }
+    .orientation-overlay-title {
+      margin: 0;
+      font-family: var(--font-display);
+      color: var(--amber);
+      font-size: 15px;
+      line-height: 1.6;
+      letter-spacing: 0.02em;
+    }
     .orientation-overlay p {
       margin: 0;
       font-family: var(--font-body);
@@ -579,6 +587,7 @@
   <div class="wrap">
     <canvas id="game" width="960" height="540" aria-label="Scramble tunnel game"></canvas>
     <div id="orientationOverlay" class="orientation-overlay" role="alert" aria-live="assertive">
+      <p class="orientation-overlay-title">SAKUYA SCRAMBLE</p>
       <div class="orientation-overlay-icon">📱⤾</div>
       <p>横向きにしてね ⌐◨-◨</p>
     </div>
@@ -2848,7 +2857,8 @@
       ctx.translate(x, y);
       ctx.rotate(state.ship.vy * 0.05 + (state.fall.shipAngle || 0));
 
-      ctx.fillStyle = "#ffd966";
+      // 咲耶カラー: 基調はピンク、サブ(コックピット窓)は黒
+      ctx.fillStyle = "#ff3da6";
       ctx.beginPath();
       ctx.moveTo(radius + 6, 0);
       ctx.lineTo(-radius, -radius * 0.85);
@@ -2857,7 +2867,7 @@
       ctx.closePath();
       ctx.fill();
 
-      ctx.fillStyle = "#6fc2ff";
+      ctx.fillStyle = "#15121a";
       ctx.beginPath();
       ctx.arc(-2, 0, 4, 0, Math.PI * 2);
       ctx.fill();
@@ -3181,6 +3191,13 @@
       drawBackground();
       // 走査線は背景の星空まで。この後のタイトルイラストには乗せない
       drawCrtOverlay();
+      // ゲームタイトル。イラストの上、canvas上端の余白に収まる位置
+      ctx.save();
+      ctx.textAlign = "center";
+      ctx.fillStyle = RETRO.amber;
+      ctx.font = RETRO.font(30);
+      ctx.fillText("SAKUYA SCRAMBLE", canvas.width / 2, 48);
+      ctx.restore();
       if (titleImg.complete && titleImg.naturalWidth) {
         const maxW = canvas.width * 0.72;
         const maxH = canvas.height * 0.6;
