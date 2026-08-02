@@ -436,6 +436,41 @@
       text-align: right;
       font-variant-numeric: tabular-nums;
     }
+    /* 救出ロスター: 行の全幅を使う2段目に置く。1段目に並べると
+       スマホ幅でニックネームが潰れるため */
+    .leaderboard-row .lb-roster {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      margin-top: 2px;
+    }
+    .leaderboard-row .lb-slot {
+      width: 16px;
+      height: 16px;
+      border-radius: 3px;
+      border: 1px solid rgba(255, 176, 32, 0.2);
+      background: rgba(0, 0, 0, 0.32);
+      overflow: hidden;
+      flex: none;
+    }
+    .leaderboard-row .lb-slot.got {
+      border-color: hsl(var(--h), 85%, 62%);
+      background: hsl(var(--h), 60%, 40%);
+    }
+    .leaderboard-row .lb-slot img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+    .leaderboard-row .lb-roster-count {
+      color: var(--dim);
+      font-family: var(--font-display);
+      font-size: 9px;
+      margin-left: 4px;
+      font-variant-numeric: tabular-nums;
+    }
     .leaderboard-empty {
       color: var(--dim);
       font-size: 12px;
@@ -610,6 +645,27 @@
       return String(s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
     }
 
+    // ランキング1行ぶんの救出ロスター。canvas側と同じ「額縁が埋まる」見え方を
+    // DOMで再現する。救出キャラを持たない過去の記録では行ごと出さない
+    function rescueRosterHTML(rescued) {
+      const raw = String(rescued == null ? "" : rescued).trim();
+      if (!raw) return "";
+      const got = new Set(
+        raw.split(",").map((s) => Number(s)).filter((v) => Number.isInteger(v) && v >= 1 && v <= cnpChars.length)
+      );
+      if (!got.size) return "";
+      const slots = cnpChars
+        .map((ch) => {
+          const on = got.has(ch.index + 1);
+          // 画像が未配置でも救出済みかどうかが読めるよう、枠の地色もキャラ色にする。
+          // 画像が404のときは onerror で img だけ消え、色の付いた額が残る
+          const img = on ? `<img src="assets/cnp/${ch.id}.png" alt="" loading="lazy" onerror="this.remove()">` : "";
+          return `<span class="lb-slot${on ? " got" : ""}" style="--h:${ch.hue}" title="${escapeHTML(ch.label)}">${img}</span>`;
+        })
+        .join("");
+      return `<span class="lb-roster">${slots}<span class="lb-roster-count">${got.size}/${cnpChars.length}</span></span>`;
+    }
+
     function renderLeaderboard() {
       if (!leaderboardList) return;
       if (!leaderboardCache.length) {
@@ -634,6 +690,7 @@
               <span class="lb-name">${deviceIcon ? `<span class="lb-device" title="${escapeHTML(r.device)}">${deviceIcon}</span> ` : ""}${escapeHTML(r.nickname)}</span>
               <span class="lb-xname">${xPart}</span>
               <span class="lb-score">${Math.floor(r.score)}</span>
+              ${rescueRosterHTML(r.rescued)}
             </li>`;
         })
         .join("");
@@ -803,12 +860,17 @@
         const xid = rankXidInput.value.trim().replace(/^@/, "");
         rankSubmitBtn.disabled = true;
         rankSubmitStatus.textContent = "登録中...";
+        // 救出キャラは「このプレイで救出した」1始まりのID。通算の収集状況ではなく
+        // その記録のプレイで取った顔ぶれを残す（スコアと同じ単位に揃える）
+        const rescuedIds = [];
+        for (let i = 0; i < state.rescuedChars.length; i++) if (state.rescuedChars[i]) rescuedIds.push(i + 1);
         const record = {
           nickname,
           xid,
           score: Math.floor(state.score),
           created: Date.now(),
-          device: isMobileDevice ? "モバイル" : "PC"
+          device: isMobileDevice ? "モバイル" : "PC",
+          rescued: rescuedIds.join(",")
         };
         if (!GAS_URL) {
           rankSubmitStatus.textContent = "ランキング機能が未設定です（GAS_URL 未設定）";
@@ -1180,14 +1242,49 @@
       return ch;
     });
 
-    // 重み付き抽選のために累積和を先に作っておく（毎フレーム走る処理ではないが、
-    // スポーンのたびに全体を舐め直す必要をなくす）
-    const cnpTotalWeight = cnpChars.reduce((sum, ch) => sum + ch.tier.weight, 0);
+    // 収集状況はプレイをまたいで持ち越す。1プレイ(約2分)で湧くのは約8体、
+    // 重複を除くと平均5.2種類しか集まらないため、1プレイ完結では11体制覇に届かない
+    const CNP_SAVE_KEY = "sakuyaScramble.cnpCollection.v1";
+
+    // localStorage はプライベートモードや容量超過で例外を投げる。保存できなくても
+    // ゲーム自体は成立するので、失敗しても黙って諦める
+    function loadCnpCollection(size) {
+      const got = new Array(size).fill(false);
+      try {
+        const raw = localStorage.getItem(CNP_SAVE_KEY);
+        if (raw) {
+          for (const s of raw.split(",")) {
+            const i = Number(s) - 1;
+            if (Number.isInteger(i) && i >= 0 && i < size) got[i] = true;
+          }
+        }
+      } catch (e) { /* 保存が使えないだけ。今回のプレイ分は動く */ }
+      return got;
+    }
+
+    function saveCnpCollection() {
+      try {
+        const ids = [];
+        for (let i = 0; i < state.collected.length; i++) if (state.collected[i]) ids.push(i + 1);
+        localStorage.setItem(CNP_SAVE_KEY, ids.join(","));
+      } catch (e) { /* 同上 */ }
+    }
+
+    // 未収集のキャラを優遇する倍率。レア度の重みをそのまま使うと最上位が0.57%で、
+    // 制覇までの中央値が17プレイになる。5倍優遇なら中央値5プレイに収まり、
+    // かつ「レアほど出にくい」関係自体は崩れない
+    const CNP_UNCOLLECTED_BOOST = 5;
+
+    function cnpWeightOf(ch) {
+      return ch.tier.weight * (state.collected[ch.index] ? 1 : CNP_UNCOLLECTED_BOOST);
+    }
 
     function pickCnpChar() {
-      let r = Math.random() * cnpTotalWeight;
+      let total = 0;
+      for (const ch of cnpChars) total += cnpWeightOf(ch);
+      let r = Math.random() * total;
       for (const ch of cnpChars) {
-        r -= ch.tier.weight;
+        r -= cnpWeightOf(ch);
         if (r <= 0) return ch;
       }
       return cnpChars[0];
@@ -1227,9 +1324,11 @@
       // CNP 救出対象（浮遊する仲間）と、通しでの救出数
       rescues: [],
       rescuedCount: 0,
-      // 上段ロスター用: 11体それぞれの救出済みフラグと、救出直後の発光タイマー
+      // このプレイで救出した11体。リスタートで消える（ランキング登録にも使う）
       rescuedChars: new Array(cnpChars.length).fill(false),
       rescueFlash: new Array(cnpChars.length).fill(0),
+      // 通算の収集状況。プレイをまたいで残り、制覇はこちらで判定する
+      collected: loadCnpCollection(cnpChars.length),
       // up/down/left/right: digital (keyboard/touch). gyroX/gyroY: analog -1..1 (device tilt)
       input: { up: false, down: false, left: false, right: false, gyroX: 0, gyroY: 0 },
       effects: {
@@ -2093,6 +2192,11 @@
           state.rescuedCount++;
           state.rescuedChars[it.ch.index] = true;
           state.rescueFlash[it.ch.index] = CNP_ROSTER.flash;
+          // 新規収集のときだけ書き込む（毎回の救出で保存を叩かない）
+          if (!state.collected[it.ch.index]) {
+            state.collected[it.ch.index] = true;
+            saveCnpCollection();
+          }
           state.bonusText = "RESCUED " + it.ch.label + " +" + tier.score;
           // 高レアほど余韻を長く。取れたことが演出の大きさで分かるようにする
           state.bonusTimer = 120 + tier.rank * 12;
@@ -2208,8 +2312,11 @@
       }
     }
 
-    // 画面上段の額縁ロスター。11体のうち誰を救出済みかを常時見せる。
-    // 未救出は黒シルエット、救出済みはキャラの絵（未配置ならプレースホルダ）が入る
+    // 画面上段の額縁ロスター。制覇の進捗は通算(state.collected)で見せつつ、
+    // このプレイで救出した枠だけを起こして、今どれを取ったのかも同時に読ませる。
+    //   未収集         … 黒シルエット + 減光した琥珀の枠
+    //   収集済み(通算)  … 絵を落として表示 + くすんだキャラ色の枠
+    //   今回救出        … 絵を全光量で表示 + キャラ色の枠
     function drawRescueRoster() {
       const n = cnpChars.length;
       const s = CNP_ROSTER.slot;
@@ -2220,11 +2327,12 @@
       for (let i = 0; i < n; i++) {
         const ch = cnpChars[i];
         const x = x0 + i * (s + CNP_ROSTER.gap);
-        const got = state.rescuedChars[i];
+        const got = state.rescuedChars[i];   // このプレイで救出した
+        const have = state.collected[i];     // 通算で収集済み
         const fl = state.rescueFlash[i] > 0 ? state.rescueFlash[i] / CNP_ROSTER.flash : 0;
 
         // 額の中身。走査線の上に乗るので下地はしっかり沈めておく
-        ctx.fillStyle = got ? "rgba(6,10,20,0.92)" : "rgba(4,6,12,0.82)";
+        ctx.fillStyle = have ? "rgba(6,10,20,0.92)" : "rgba(4,6,12,0.82)";
         ctx.fillRect(x, y, s, s);
 
         ctx.save();
@@ -2232,19 +2340,24 @@
         ctx.rect(x, y, s, s);
         ctx.clip();
         ctx.translate(x + s / 2, y + s / 2 + s * 0.04);
-        if (got && ch.ready) {
+        // 今回の救出だけ全光量。通算で持っているだけの枠は落として、
+        // 「今回どれを取ったか」が一目で分かるようにする
+        if (!got) ctx.globalAlpha = have ? 0.42 : 1;
+        if (have && ch.ready) {
           const d = s * 0.88;
           ctx.drawImage(ch.img, -d / 2, -d / 2, d, d);
         } else {
-          drawCnpPlaceholder(ch, s * 0.8, !got);
+          drawCnpPlaceholder(ch, s * 0.8, !have);
         }
         ctx.restore();
 
-        // 額縁。未救出は琥珀を落として沈ませ、救出済みはキャラ色で起こす
+        // 額縁。未収集は琥珀を落として沈ませ、収集済みはキャラ色で起こす
         ctx.lineWidth = 2;
         ctx.strokeStyle = got
           ? `hsla(${ch.hue},90%,${66 + fl * 30}%,${0.85 + fl * 0.15})`
-          : "rgba(255, 176, 32, 0.26)";
+          : have
+            ? `hsla(${ch.hue},45%,52%,0.55)`
+            : "rgba(255, 176, 32, 0.26)";
         ctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
 
         // 救出した瞬間だけ額が白く光る（どの枠が埋まったか視線を誘導する）
@@ -2254,8 +2367,9 @@
         }
       }
 
-      // 収集率。全員そろったら琥珀で点滅させて達成を知らせる
-      const done = state.rescuedChars.reduce((a, b) => a + (b ? 1 : 0), 0);
+      // 収集率は通算で出す（制覇はプレイをまたいで狙うものなので）。
+      // 全員そろったら琥珀で点滅させて達成を知らせる
+      const done = state.collected.reduce((a, b) => a + (b ? 1 : 0), 0);
       const complete = done === n;
       ctx.fillStyle = complete && !RETRO.blinkOn() ? RETRO.ink : RETRO.amber;
       ctx.font = RETRO.font(9);
