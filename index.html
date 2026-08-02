@@ -1133,20 +1133,56 @@
     const CNP_RESCUE = {
       size: 60,          // 描画サイズ(px四方)
       radius: 20,        // 当たり判定
-      spawnChance: 0.0011,
-      score: 300,
-      heal: 5
+      spawnChance: 0.0011
     };
-    // 11体ぶんのスロット。hue はプレースホルダ描画とオーラの色に使う
-    const cnpChars = [352, 24, 46, 92, 150, 174, 196, 220, 262, 292, 322].map((hue, i) => {
+
+    // レア度。得点だけ変えて出現率を据え置くと「高得点キャラを狙う」動機が
+    // 生まれないので、点が高いものほど weight を下げて出にくくしている。
+    // rank は見た目のピップ数にも使う（プレイヤーが遠目に価値を判断できる）
+    const CNP_TIERS = [
+      { rank: 1, score: 100,  heal: 4,  weight: 26 },
+      { rank: 2, score: 200,  heal: 6,  weight: 16 },
+      { rank: 3, score: 400,  heal: 8,  weight: 9 },
+      { rank: 4, score: 800,  heal: 10, weight: 4 },
+      { rank: 5, score: 1500, heal: 14, weight: 1 }
+    ];
+
+    // 11体ぶんのスロット。hue はプレースホルダとオーラの色、tier は CNP_TIERS の添字。
+    // どのキャラを何点にするかはここの tier を差し替えるだけで変えられる
+    const cnpChars = [
+      { hue: 196, tier: 0 },
+      { hue: 150, tier: 0 },
+      { hue: 46,  tier: 0 },
+      { hue: 24,  tier: 0 },
+      { hue: 220, tier: 1 },
+      { hue: 92,  tier: 1 },
+      { hue: 322, tier: 1 },
+      { hue: 262, tier: 2 },
+      { hue: 174, tier: 2 },
+      { hue: 292, tier: 3 },
+      { hue: 352, tier: 4 }
+    ].map((def, i) => {
       const id = "cnp" + String(i + 1).padStart(2, "0");
-      const ch = { id, label: id.toUpperCase(), hue, img: new Image(), ready: false };
+      const ch = { id, label: id.toUpperCase(), hue: def.hue, tier: CNP_TIERS[def.tier], img: new Image(), ready: false };
       // 画像が無い場合は onerror が飛ぶだけで、ready:false のままプレースホルダに落ちる
       ch.img.onload = () => { ch.ready = ch.img.naturalWidth > 0; };
       ch.img.onerror = () => { ch.ready = false; };
       ch.img.src = "assets/cnp/" + id + ".png";
       return ch;
     });
+
+    // 重み付き抽選のために累積和を先に作っておく（毎フレーム走る処理ではないが、
+    // スポーンのたびに全体を舐め直す必要をなくす）
+    const cnpTotalWeight = cnpChars.reduce((sum, ch) => sum + ch.tier.weight, 0);
+
+    function pickCnpChar() {
+      let r = Math.random() * cnpTotalWeight;
+      for (const ch of cnpChars) {
+        r -= ch.tier.weight;
+        if (r <= 0) return ch;
+      }
+      return cnpChars[0];
+    }
 
     const state = {
       running: true,
@@ -1959,7 +1995,7 @@
         baseY = 50 + Math.random() * (canvas.height - 100);
       }
       state.rescues.push({
-        ch: cnpChars[Math.floor(Math.random() * cnpChars.length)],
+        ch: pickCnpChar(),
         x: canvas.width + 40,
         sx: canvas.width + 40,
         baseY,
@@ -1992,13 +2028,16 @@
         const r = it.radius + state.ship.radius;
         if (dist2 <= r * r) {
           rescued.add(i);
-          state.score += CNP_RESCUE.score;
-          state.ship.hp = Math.min(100, (state.ship.hp || 0) + CNP_RESCUE.heal);
+          const tier = it.ch.tier;
+          state.score += tier.score;
+          state.ship.hp = Math.min(100, (state.ship.hp || 0) + tier.heal);
           state.rescuedCount++;
-          state.bonusText = "RESCUED " + it.ch.label + " +" + CNP_RESCUE.score;
-          state.bonusTimer = 140;
+          state.bonusText = "RESCUED " + it.ch.label + " +" + tier.score;
+          // 高レアほど余韻を長く。取れたことが演出の大きさで分かるようにする
+          state.bonusTimer = 120 + tier.rank * 12;
           SFX.bonus();
-          createExplosion(it.sx, it.y, "yellow");
+          createExplosion(it.sx, it.y, tier.rank >= 4 ? "yellow" : "blue");
+          if (tier.rank >= 3) createExplosion(it.sx, it.y, "yellow");
         }
       }
 
@@ -2041,13 +2080,16 @@
       const s = CNP_RESCUE.size;
       for (const it of state.rescues) {
         const ch = it.ch;
+        const rank = ch.tier.rank;
         const pulse = 0.5 + 0.5 * Math.sin(state.frame * 0.07 + it.phase);
 
-        // 背後のオーラ。接地影が置けない洞窟内で「浮いている」ことを読ませる役
-        const glowR = s * (0.52 + pulse * 0.1);
+        // 背後のオーラ。接地影が置けない洞窟内で「浮いている」ことを読ませる役。
+        // 高レアほど広く濃くして、遠目でも価値が分かるようにしている
+        const glowR = s * (0.5 + rank * 0.045 + pulse * 0.1);
+        const glowA = 0.3 + rank * 0.055;
         const grd = ctx.createRadialGradient(it.sx, it.y, s * 0.12, it.sx, it.y, glowR);
-        grd.addColorStop(0, `hsla(${ch.hue},95%,72%,0.42)`);
-        grd.addColorStop(0.55, `hsla(${ch.hue},90%,60%,0.18)`);
+        grd.addColorStop(0, `hsla(${ch.hue},95%,72%,${glowA})`);
+        grd.addColorStop(0.55, `hsla(${ch.hue},90%,60%,${glowA * 0.45})`);
         grd.addColorStop(1, `hsla(${ch.hue},85%,55%,0)`);
         ctx.fillStyle = grd;
         ctx.beginPath();
@@ -2064,7 +2106,8 @@
         }
         ctx.restore();
 
-        // 救出フィールドの弧。2本を別パスで引く（1パスだと弧同士が線で繋がる）
+        // 救出フィールドの弧。別パスで引く（1パスに繋げると弧同士が線で結ばれる）。
+        // rank4以上は逆回転の弧をもう1周足して、最上位だと一目で分かるようにする
         ctx.strokeStyle = `hsla(${ch.hue},95%,70%,${0.35 + pulse * 0.3})`;
         ctx.lineWidth = 2;
         const ringR = s * 0.46;
@@ -2073,6 +2116,32 @@
           ctx.beginPath();
           ctx.arc(it.sx, it.y, ringR, a0 + Math.PI * k, a0 + Math.PI * k + Math.PI * 0.55);
           ctx.stroke();
+        }
+        if (rank >= 4) {
+          ctx.lineWidth = 1.5;
+          const a1 = -state.frame * 0.05 + it.phase;
+          for (let k = 0; k < 2; k++) {
+            ctx.beginPath();
+            ctx.arc(it.sx, it.y, ringR * 1.2, a1 + Math.PI * k, a1 + Math.PI * k + Math.PI * 0.4);
+            ctx.stroke();
+          }
+        }
+
+        // レア度ピップ。得点表示は救出後にしか出ないので、取る前に価値を
+        // 判断できる手掛かりを足元に置く（rankぶんの菱形）
+        const pipY = it.y + s * 0.5;
+        const pipGap = 7;
+        const pipX = it.sx - ((rank - 1) * pipGap) / 2;
+        ctx.fillStyle = `hsla(${ch.hue},95%,${68 + rank * 3}%,0.95)`;
+        for (let k = 0; k < rank; k++) {
+          const px = pipX + k * pipGap;
+          ctx.beginPath();
+          ctx.moveTo(px, pipY - 3);
+          ctx.lineTo(px + 2.6, pipY);
+          ctx.lineTo(px, pipY + 3);
+          ctx.lineTo(px - 2.6, pipY);
+          ctx.closePath();
+          ctx.fill();
         }
       }
     }
