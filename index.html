@@ -1242,37 +1242,9 @@
       return ch;
     });
 
-    // 収集状況はプレイをまたいで持ち越す。1プレイ(約2分)で湧くのは約8体、
-    // 重複を除くと平均5.2種類しか集まらないため、1プレイ完結では11体制覇に届かない
-    const CNP_SAVE_KEY = "sakuyaScramble.cnpCollection.v1";
-
-    // localStorage はプライベートモードや容量超過で例外を投げる。保存できなくても
-    // ゲーム自体は成立するので、失敗しても黙って諦める
-    function loadCnpCollection(size) {
-      const got = new Array(size).fill(false);
-      try {
-        const raw = localStorage.getItem(CNP_SAVE_KEY);
-        if (raw) {
-          for (const s of raw.split(",")) {
-            const i = Number(s) - 1;
-            if (Number.isInteger(i) && i >= 0 && i < size) got[i] = true;
-          }
-        }
-      } catch (e) { /* 保存が使えないだけ。今回のプレイ分は動く */ }
-      return got;
-    }
-
-    function saveCnpCollection() {
-      try {
-        const ids = [];
-        for (let i = 0; i < state.collected.length; i++) if (state.collected[i]) ids.push(i + 1);
-        localStorage.setItem(CNP_SAVE_KEY, ids.join(","));
-      } catch (e) { /* 同上 */ }
-    }
-
     // 未収集のキャラを優遇する倍率。レア度の重みをそのまま使うと最上位が0.57%で、
-    // 制覇までの中央値が17プレイになる。5倍優遇なら中央値5プレイに収まり、
-    // かつ「レアほど出にくい」関係自体は崩れない
+    // 同じキャラばかり出て収集が進まない。5倍優遇でも「レアほど出にくい」関係
+    // 自体は崩れない
     const CNP_UNCOLLECTED_BOOST = 5;
 
     function cnpWeightOf(ch) {
@@ -1327,8 +1299,9 @@
       // このプレイで救出した11体。リスタートで消える（ランキング登録にも使う）
       rescuedChars: new Array(cnpChars.length).fill(false),
       rescueFlash: new Array(cnpChars.length).fill(0),
-      // 通算の収集状況。プレイをまたいで残り、制覇はこちらで判定する
-      collected: loadCnpCollection(cnpChars.length),
+      // 通算の収集状況。リスタートしても残り、制覇はこちらで判定する。
+      // 保存はしていないのでページを離れるとリセットされる
+      collected: new Array(cnpChars.length).fill(false),
       // up/down/left/right: digital (keyboard/touch). gyroX/gyroY: analog -1..1 (device tilt)
       input: { up: false, down: false, left: false, right: false, gyroX: 0, gyroY: 0 },
       effects: {
@@ -2192,11 +2165,7 @@
           state.rescuedCount++;
           state.rescuedChars[it.ch.index] = true;
           state.rescueFlash[it.ch.index] = CNP_ROSTER.flash;
-          // 新規収集のときだけ書き込む（毎回の救出で保存を叩かない）
-          if (!state.collected[it.ch.index]) {
-            state.collected[it.ch.index] = true;
-            saveCnpCollection();
-          }
+          state.collected[it.ch.index] = true;
           state.bonusText = "RESCUED " + it.ch.label + " +" + tier.score;
           // 高レアほど余韻を長く。取れたことが演出の大きさで分かるようにする
           state.bonusTimer = 120 + tier.rank * 12;
@@ -2313,6 +2282,7 @@
     }
 
     // 画面上段の額縁ロスター。制覇の進捗は通算(state.collected)で見せつつ、
+    // ※通算はページを開いている間だけ。保存はしていない
     // このプレイで救出した枠だけを起こして、今どれを取ったのかも同時に読ませる。
     //   未収集         … 黒シルエット + 減光した琥珀の枠
     //   収集済み(通算)  … 絵を落として表示 + くすんだキャラ色の枠
@@ -2367,7 +2337,7 @@
         }
       }
 
-      // 収集率は通算で出す（制覇はプレイをまたいで狙うものなので）。
+      // 収集率は通算で出す（1プレイでは平均5.2種類しか集まらないため）。
       // 全員そろったら琥珀で点滅させて達成を知らせる
       const done = state.collected.reduce((a, b) => a + (b ? 1 : 0), 0);
       const complete = done === n;
