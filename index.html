@@ -2710,6 +2710,9 @@
     }
 
     function drawPilotPortrait() {
+      // クリア画面は image02png.png(メイン画像)が主役。コックピット窓が
+      // 隣に残っていると視線が割れるので、クリア中は描かない
+      if (state.cleared) return;
       if (!pilotImg.complete || !pilotImg.naturalWidth) return;
       const w = 156; // 120 * 1.3
       const h = 117; // 90 * 1.3
