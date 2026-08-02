@@ -1136,6 +1136,15 @@
       spawnChance: 0.0011
     };
 
+    // 画面上段に並べる額縁ロスター。左のSCORE(〜x230)、右のHPバー(x753〜)、
+    // 下のキャプション枠(y60〜)のいずれにも触れない寸法にしてある
+    const CNP_ROSTER = {
+      slot: 36,          // 額1枚の一辺
+      gap: 4,
+      y: 10,
+      flash: 45          // 救出した瞬間に額が光るフレーム数
+    };
+
     // レア度。得点だけ変えて出現率を据え置くと「高得点キャラを狙う」動機が
     // 生まれないので、点が高いものほど weight を下げて出にくくしている。
     // rank は見た目のピップ数にも使う（プレイヤーが遠目に価値を判断できる）
@@ -1163,7 +1172,7 @@
       { hue: 352, tier: 4 }
     ].map((def, i) => {
       const id = "cnp" + String(i + 1).padStart(2, "0");
-      const ch = { id, label: id.toUpperCase(), hue: def.hue, tier: CNP_TIERS[def.tier], img: new Image(), ready: false };
+      const ch = { id, index: i, label: id.toUpperCase(), hue: def.hue, tier: CNP_TIERS[def.tier], img: new Image(), ready: false };
       // 画像が無い場合は onerror が飛ぶだけで、ready:false のままプレースホルダに落ちる
       ch.img.onload = () => { ch.ready = ch.img.naturalWidth > 0; };
       ch.img.onerror = () => { ch.ready = false; };
@@ -1218,6 +1227,9 @@
       // CNP 救出対象（浮遊する仲間）と、通しでの救出数
       rescues: [],
       rescuedCount: 0,
+      // 上段ロスター用: 11体それぞれの救出済みフラグと、救出直後の発光タイマー
+      rescuedChars: new Array(cnpChars.length).fill(false),
+      rescueFlash: new Array(cnpChars.length).fill(0),
       // up/down/left/right: digital (keyboard/touch). gyroX/gyroY: analog -1..1 (device tilt)
       input: { up: false, down: false, left: false, right: false, gyroX: 0, gyroY: 0 },
       effects: {
@@ -1427,6 +1439,8 @@
       state.megaHpSpawned = false;
       state.rescues.length = 0;
       state.rescuedCount = 0;
+      state.rescuedChars.fill(false);
+      state.rescueFlash.fill(0);
       state.stageIntro = { active: false, frames: 0, total: 0, startGap: 0 };
       state.arena.bullets.length = 0;
       state.arena.spawnTimer = 0;
@@ -2014,6 +2028,10 @@
     function updateRescues() {
       if (Math.random() < CNP_RESCUE.spawnChance) spawnRescue();
 
+      for (let i = 0; i < state.rescueFlash.length; i++) {
+        if (state.rescueFlash[i] > 0) state.rescueFlash[i]--;
+      }
+
       const rescued = new Set();
       for (let i = 0; i < state.rescues.length; i++) {
         const it = state.rescues[i];
@@ -2032,6 +2050,8 @@
           state.score += tier.score;
           state.ship.hp = Math.min(100, (state.ship.hp || 0) + tier.heal);
           state.rescuedCount++;
+          state.rescuedChars[it.ch.index] = true;
+          state.rescueFlash[it.ch.index] = CNP_ROSTER.flash;
           state.bonusText = "RESCUED " + it.ch.label + " +" + tier.score;
           // 高レアほど余韻を長く。取れたことが演出の大きさで分かるようにする
           state.bonusTimer = 120 + tier.rank * 12;
@@ -2049,8 +2069,9 @@
 
     // 画像が未配置のスロット用の仮絵。原点はキャラ中心。
     // 差し替え待ちだと一目で分かるよう「?」を入れてある
-    function drawCnpPlaceholder(ch, s) {
-      ctx.fillStyle = `hsl(${ch.hue},70%,62%)`;
+    // mono を立てると色を落として黒シルエットになる（ロスターの未救出枠用）
+    function drawCnpPlaceholder(ch, s, mono) {
+      ctx.fillStyle = mono ? "hsl(220,14%,24%)" : `hsl(${ch.hue},70%,62%)`;
       ctx.beginPath();
       ctx.ellipse(0, s * 0.16, s * 0.24, s * 0.26, 0, 0, Math.PI * 2);
       ctx.fill();
@@ -2144,6 +2165,62 @@
           ctx.fill();
         }
       }
+    }
+
+    // 画面上段の額縁ロスター。11体のうち誰を救出済みかを常時見せる。
+    // 未救出は黒シルエット、救出済みはキャラの絵（未配置ならプレースホルダ）が入る
+    function drawRescueRoster() {
+      const n = cnpChars.length;
+      const s = CNP_ROSTER.slot;
+      const totalW = n * s + (n - 1) * CNP_ROSTER.gap;
+      const x0 = Math.round((canvas.width - totalW) / 2);
+      const y = CNP_ROSTER.y;
+
+      for (let i = 0; i < n; i++) {
+        const ch = cnpChars[i];
+        const x = x0 + i * (s + CNP_ROSTER.gap);
+        const got = state.rescuedChars[i];
+        const fl = state.rescueFlash[i] > 0 ? state.rescueFlash[i] / CNP_ROSTER.flash : 0;
+
+        // 額の中身。走査線の上に乗るので下地はしっかり沈めておく
+        ctx.fillStyle = got ? "rgba(6,10,20,0.92)" : "rgba(4,6,12,0.82)";
+        ctx.fillRect(x, y, s, s);
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x, y, s, s);
+        ctx.clip();
+        ctx.translate(x + s / 2, y + s / 2 + s * 0.04);
+        if (got && ch.ready) {
+          const d = s * 0.88;
+          ctx.drawImage(ch.img, -d / 2, -d / 2, d, d);
+        } else {
+          drawCnpPlaceholder(ch, s * 0.8, !got);
+        }
+        ctx.restore();
+
+        // 額縁。未救出は琥珀を落として沈ませ、救出済みはキャラ色で起こす
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = got
+          ? `hsla(${ch.hue},90%,${66 + fl * 30}%,${0.85 + fl * 0.15})`
+          : "rgba(255, 176, 32, 0.26)";
+        ctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
+
+        // 救出した瞬間だけ額が白く光る（どの枠が埋まったか視線を誘導する）
+        if (fl > 0) {
+          ctx.fillStyle = `rgba(255,255,255,${fl * 0.45})`;
+          ctx.fillRect(x, y, s, s);
+        }
+      }
+
+      // 収集率。全員そろったら琥珀で点滅させて達成を知らせる
+      const done = state.rescuedChars.reduce((a, b) => a + (b ? 1 : 0), 0);
+      const complete = done === n;
+      ctx.fillStyle = complete && !RETRO.blinkOn() ? RETRO.ink : RETRO.amber;
+      ctx.font = RETRO.font(9);
+      ctx.textAlign = "center";
+      ctx.fillText(complete ? "COMPLETE!" : `${done} / ${n}`, canvas.width / 2, y + s + 11);
+      ctx.textAlign = "left";
     }
 
     // --- Mega HP (stage-once, full heal) ---
@@ -2749,6 +2826,9 @@
         ctx.fillText(`RESCUE ${state.rescuedCount}`, 150, 78);
         ctx.fillStyle = RETRO.ink;
       }
+
+      // 額縁ロスターはスタート後のみ。タイトル画面はイラストを見せる場なので出さない
+      if (state.started) drawRescueRoster();
 
       // HP bar (右上): 連続バーではなく10個のセグメント。往年の
       // エナジーゲージの読み方で、残量が「数」で即座に分かる
