@@ -2010,10 +2010,13 @@
       }
       state.rescues.push({
         ch: pickCnpChar(),
+        mode: "h",
         x: canvas.width + 40,
+        baseX: 0,
         sx: canvas.width + 40,
         baseY,
         y: baseY,
+        sy: baseY,
         radius: CNP_RESCUE.radius,
         vx: 0.3 + Math.random() * 0.45,
         phase: Math.random() * Math.PI * 2,
@@ -2025,8 +2028,40 @@
       });
     }
 
-    function updateRescues() {
-      if (Math.random() < CNP_RESCUE.spawnChance) spawnRescue();
+    // パート3(落下)用。縦スクロールなので画面下から湧いて上へ流れる。
+    // 横穴と違い左右の壁が近いため、シャフトの幅に収まる範囲にx位置を取る
+    function spawnRescueFall() {
+      const row = state.fall.rows[canvas.height - 1];
+      let baseX = canvas.width / 2;
+      if (row) {
+        const lo = row.left + 34;
+        const hi = row.right - 34;
+        baseX = hi > lo ? lo + Math.random() * (hi - lo) : (row.left + row.right) / 2;
+      }
+      state.rescues.push({
+        ch: pickCnpChar(),
+        mode: "v",
+        x: baseX,
+        baseX,
+        sx: baseX,
+        baseY: 0,
+        y: canvas.height + 40,
+        sy: canvas.height + 40,
+        radius: CNP_RESCUE.radius,
+        vx: 0.3 + Math.random() * 0.45,
+        phase: Math.random() * Math.PI * 2,
+        bobAmp: 9 + Math.random() * 7,
+        // 縦モードでは揺れが壁への接触に直結するので、振幅は控えめにする
+        swayAmp: 5 + Math.random() * 4,
+        tilt: 0.06 + Math.random() * 0.06
+      });
+    }
+
+    // fall = パート3(落下)中かどうか。スクロール方向が90度変わる
+    function updateRescues(fall) {
+      if (Math.random() < CNP_RESCUE.spawnChance) {
+        if (fall) spawnRescueFall(); else spawnRescue();
+      }
 
       for (let i = 0; i < state.rescueFlash.length; i++) {
         if (state.rescueFlash[i] > 0) state.rescueFlash[i]--;
@@ -2035,13 +2070,19 @@
       const rescued = new Set();
       for (let i = 0; i < state.rescues.length; i++) {
         const it = state.rescues[i];
-        it.x -= state.scrollSpeed * 0.85 + it.vx;
-        it.y = it.baseY + Math.sin(state.frame * 0.05 + it.phase) * it.bobAmp;
-        // sx は描画と当たり判定の両方で使う実効x（スウェイ込み）
-        it.sx = it.x + Math.cos(state.frame * 0.037 + it.phase) * it.swayAmp;
+        // sx/sy が描画と当たり判定の両方で使う実効座標（揺れ込み）
+        if (it.mode === "v") {
+          it.y -= state.scrollSpeed * 0.85 + it.vx;
+          it.sy = it.y + Math.sin(state.frame * 0.05 + it.phase) * it.bobAmp * 0.4;
+          it.sx = it.baseX + Math.cos(state.frame * 0.037 + it.phase) * it.swayAmp;
+        } else {
+          it.x -= state.scrollSpeed * 0.85 + it.vx;
+          it.sy = it.baseY + Math.sin(state.frame * 0.05 + it.phase) * it.bobAmp;
+          it.sx = it.x + Math.cos(state.frame * 0.037 + it.phase) * it.swayAmp;
+        }
 
         const dx = it.sx - state.ship.x;
-        const dy = it.y - state.ship.y;
+        const dy = it.sy - state.ship.y;
         const dist2 = dx * dx + dy * dy;
         const r = it.radius + state.ship.radius;
         if (dist2 <= r * r) {
@@ -2056,15 +2097,15 @@
           // 高レアほど余韻を長く。取れたことが演出の大きさで分かるようにする
           state.bonusTimer = 120 + tier.rank * 12;
           SFX.bonus();
-          createExplosion(it.sx, it.y, tier.rank >= 4 ? "yellow" : "blue");
-          if (tier.rank >= 3) createExplosion(it.sx, it.y, "yellow");
+          createExplosion(it.sx, it.sy, tier.rank >= 4 ? "yellow" : "blue");
+          if (tier.rank >= 3) createExplosion(it.sx, it.sy, "yellow");
         }
       }
 
       if (rescued.size > 0) {
         state.rescues = state.rescues.filter((_, idx) => !rescued.has(idx));
       }
-      state.rescues = state.rescues.filter((it) => it.x > -80);
+      state.rescues = state.rescues.filter((it) => (it.mode === "v" ? it.y > -80 : it.x > -80));
     }
 
     // 画像が未配置のスロット用の仮絵。原点はキャラ中心。
@@ -2108,17 +2149,17 @@
         // 高レアほど広く濃くして、遠目でも価値が分かるようにしている
         const glowR = s * (0.5 + rank * 0.045 + pulse * 0.1);
         const glowA = 0.3 + rank * 0.055;
-        const grd = ctx.createRadialGradient(it.sx, it.y, s * 0.12, it.sx, it.y, glowR);
+        const grd = ctx.createRadialGradient(it.sx, it.sy, s * 0.12, it.sx, it.sy, glowR);
         grd.addColorStop(0, `hsla(${ch.hue},95%,72%,${glowA})`);
         grd.addColorStop(0.55, `hsla(${ch.hue},90%,60%,${glowA * 0.45})`);
         grd.addColorStop(1, `hsla(${ch.hue},85%,55%,0)`);
         ctx.fillStyle = grd;
         ctx.beginPath();
-        ctx.arc(it.sx, it.y, glowR, 0, Math.PI * 2);
+        ctx.arc(it.sx, it.sy, glowR, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.save();
-        ctx.translate(it.sx, it.y);
+        ctx.translate(it.sx, it.sy);
         ctx.rotate(Math.sin(state.frame * 0.03 + it.phase) * it.tilt);
         if (ch.ready) {
           ctx.drawImage(ch.img, -s / 2, -s / 2, s, s);
@@ -2135,7 +2176,7 @@
         const a0 = state.frame * 0.035 + it.phase;
         for (let k = 0; k < 2; k++) {
           ctx.beginPath();
-          ctx.arc(it.sx, it.y, ringR, a0 + Math.PI * k, a0 + Math.PI * k + Math.PI * 0.55);
+          ctx.arc(it.sx, it.sy, ringR, a0 + Math.PI * k, a0 + Math.PI * k + Math.PI * 0.55);
           ctx.stroke();
         }
         if (rank >= 4) {
@@ -2143,14 +2184,14 @@
           const a1 = -state.frame * 0.05 + it.phase;
           for (let k = 0; k < 2; k++) {
             ctx.beginPath();
-            ctx.arc(it.sx, it.y, ringR * 1.2, a1 + Math.PI * k, a1 + Math.PI * k + Math.PI * 0.4);
+            ctx.arc(it.sx, it.sy, ringR * 1.2, a1 + Math.PI * k, a1 + Math.PI * k + Math.PI * 0.4);
             ctx.stroke();
           }
         }
 
         // レア度ピップ。得点表示は救出後にしか出ないので、取る前に価値を
         // 判断できる手掛かりを足元に置く（rankぶんの菱形）
-        const pipY = it.y + s * 0.5;
+        const pipY = it.sy + s * 0.5;
         const pipGap = 7;
         const pipX = it.sx - ((rank - 1) * pipGap) / 2;
         ctx.fillStyle = `hsla(${ch.hue},95%,${68 + rank * 3}%,0.95)`;
@@ -2512,6 +2553,7 @@
         updateShip();
         updateBullets();
         updateBombs();
+        updateRescues(true);
         updateExplosions();
         updateLaser();
         state.displayScore += (state.score - state.displayScore) * 0.18;
