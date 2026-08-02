@@ -1123,6 +1123,31 @@
     const hpItemImg = new Image();
     hpItemImg.src = "noundry-studio-glasses.PNG";
 
+    // --- CNP 救出対象 ---
+    // 洞窟内に浮遊している仲間。触れると救出でスコア+HP。
+    //
+    // 絵は assets/cnp/cnp01.png 〜 cnp11.png を置けばそのまま反映される。
+    // 未配置の間は各キャラの色でシルエットのプレースホルダを描くので、
+    // 画像が揃う前でも当たり判定・浮遊・救出演出はすべて動く。
+    // ファイル名を正式なキャラ名に変えたい場合は id と label を書き換える。
+    const CNP_RESCUE = {
+      size: 60,          // 描画サイズ(px四方)
+      radius: 20,        // 当たり判定
+      spawnChance: 0.0011,
+      score: 300,
+      heal: 5
+    };
+    // 11体ぶんのスロット。hue はプレースホルダ描画とオーラの色に使う
+    const cnpChars = [352, 24, 46, 92, 150, 174, 196, 220, 262, 292, 322].map((hue, i) => {
+      const id = "cnp" + String(i + 1).padStart(2, "0");
+      const ch = { id, label: id.toUpperCase(), hue, img: new Image(), ready: false };
+      // 画像が無い場合は onerror が飛ぶだけで、ready:false のままプレースホルダに落ちる
+      ch.img.onload = () => { ch.ready = ch.img.naturalWidth > 0; };
+      ch.img.onerror = () => { ch.ready = false; };
+      ch.img.src = "assets/cnp/" + id + ".png";
+      return ch;
+    });
+
     const state = {
       running: true,
       // becomes true once the player presses スタート; gates update() so nothing moves before that
@@ -1154,6 +1179,9 @@
       // single mega HP per stage
       megaHp: null,
       megaHpSpawned: false,
+      // CNP 救出対象（浮遊する仲間）と、通しでの救出数
+      rescues: [],
+      rescuedCount: 0,
       // up/down/left/right: digital (keyboard/touch). gyroX/gyroY: analog -1..1 (device tilt)
       input: { up: false, down: false, left: false, right: false, gyroX: 0, gyroY: 0 },
       effects: {
@@ -1325,6 +1353,7 @@
       state.arena.spawnTimer = 0;
       state.stageIntro.active = false;
       state.hpItems.length = 0;
+      state.rescues.length = 0;
       state.megaHp = null;
       showCaption("床が開いた……地底へ落下！", 150);
     }
@@ -1360,6 +1389,8 @@
       state.gameOver = false;
       state.megaHp = null;
       state.megaHpSpawned = false;
+      state.rescues.length = 0;
+      state.rescuedCount = 0;
       state.stageIntro = { active: false, frames: 0, total: 0, startGap: 0 };
       state.arena.bullets.length = 0;
       state.arena.spawnTimer = 0;
@@ -1918,6 +1949,134 @@
       }
     }
 
+    // --- CNP 救出対象 (浮遊する仲間) ---
+    function spawnRescue() {
+      const col = state.columns[Math.max(0, canvas.width - 2)];
+      let baseY = canvas.height / 2;
+      if (col) {
+        baseY = Math.max(col.top + 30, Math.min(col.bottom - 30, col.top + Math.random() * (col.bottom - col.top - 60)));
+      } else {
+        baseY = 50 + Math.random() * (canvas.height - 100);
+      }
+      state.rescues.push({
+        ch: cnpChars[Math.floor(Math.random() * cnpChars.length)],
+        x: canvas.width + 40,
+        sx: canvas.width + 40,
+        baseY,
+        y: baseY,
+        radius: CNP_RESCUE.radius,
+        vx: 0.3 + Math.random() * 0.45,
+        phase: Math.random() * Math.PI * 2,
+        // 上下のボビングに横のスウェイを重ねると、ただ流れるのではなく
+        // 「その場に浮いているものが流されている」ように見える
+        bobAmp: 9 + Math.random() * 7,
+        swayAmp: 4 + Math.random() * 4,
+        tilt: 0.06 + Math.random() * 0.06
+      });
+    }
+
+    function updateRescues() {
+      if (Math.random() < CNP_RESCUE.spawnChance) spawnRescue();
+
+      const rescued = new Set();
+      for (let i = 0; i < state.rescues.length; i++) {
+        const it = state.rescues[i];
+        it.x -= state.scrollSpeed * 0.85 + it.vx;
+        it.y = it.baseY + Math.sin(state.frame * 0.05 + it.phase) * it.bobAmp;
+        // sx は描画と当たり判定の両方で使う実効x（スウェイ込み）
+        it.sx = it.x + Math.cos(state.frame * 0.037 + it.phase) * it.swayAmp;
+
+        const dx = it.sx - state.ship.x;
+        const dy = it.y - state.ship.y;
+        const dist2 = dx * dx + dy * dy;
+        const r = it.radius + state.ship.radius;
+        if (dist2 <= r * r) {
+          rescued.add(i);
+          state.score += CNP_RESCUE.score;
+          state.ship.hp = Math.min(100, (state.ship.hp || 0) + CNP_RESCUE.heal);
+          state.rescuedCount++;
+          state.bonusText = "RESCUED " + it.ch.label + " +" + CNP_RESCUE.score;
+          state.bonusTimer = 140;
+          SFX.bonus();
+          createExplosion(it.sx, it.y, "yellow");
+        }
+      }
+
+      if (rescued.size > 0) {
+        state.rescues = state.rescues.filter((_, idx) => !rescued.has(idx));
+      }
+      state.rescues = state.rescues.filter((it) => it.x > -80);
+    }
+
+    // 画像が未配置のスロット用の仮絵。原点はキャラ中心。
+    // 差し替え待ちだと一目で分かるよう「?」を入れてある
+    function drawCnpPlaceholder(ch, s) {
+      ctx.fillStyle = `hsl(${ch.hue},70%,62%)`;
+      ctx.beginPath();
+      ctx.ellipse(0, s * 0.16, s * 0.24, s * 0.26, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(0, -s * 0.16, s * 0.23, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.20, -s * 0.30);
+      ctx.lineTo(-s * 0.08, -s * 0.46);
+      ctx.lineTo(-s * 0.02, -s * 0.28);
+      ctx.closePath();
+      ctx.moveTo(s * 0.20, -s * 0.30);
+      ctx.lineTo(s * 0.08, -s * 0.46);
+      ctx.lineTo(s * 0.02, -s * 0.28);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = `hsl(${ch.hue},55%,26%)`;
+      ctx.fillRect(-s * 0.23, -s * 0.21, s * 0.46, s * 0.09);
+      ctx.fillStyle = "rgba(255,255,255,0.88)";
+      ctx.font = `${Math.round(s * 0.26)}px "Press Start 2P", monospace`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("?", 0, s * 0.18);
+    }
+
+    function drawRescues() {
+      const s = CNP_RESCUE.size;
+      for (const it of state.rescues) {
+        const ch = it.ch;
+        const pulse = 0.5 + 0.5 * Math.sin(state.frame * 0.07 + it.phase);
+
+        // 背後のオーラ。接地影が置けない洞窟内で「浮いている」ことを読ませる役
+        const glowR = s * (0.52 + pulse * 0.1);
+        const grd = ctx.createRadialGradient(it.sx, it.y, s * 0.12, it.sx, it.y, glowR);
+        grd.addColorStop(0, `hsla(${ch.hue},95%,72%,0.42)`);
+        grd.addColorStop(0.55, `hsla(${ch.hue},90%,60%,0.18)`);
+        grd.addColorStop(1, `hsla(${ch.hue},85%,55%,0)`);
+        ctx.fillStyle = grd;
+        ctx.beginPath();
+        ctx.arc(it.sx, it.y, glowR, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.save();
+        ctx.translate(it.sx, it.y);
+        ctx.rotate(Math.sin(state.frame * 0.03 + it.phase) * it.tilt);
+        if (ch.ready) {
+          ctx.drawImage(ch.img, -s / 2, -s / 2, s, s);
+        } else {
+          drawCnpPlaceholder(ch, s);
+        }
+        ctx.restore();
+
+        // 救出フィールドの弧。2本を別パスで引く（1パスだと弧同士が線で繋がる）
+        ctx.strokeStyle = `hsla(${ch.hue},95%,70%,${0.35 + pulse * 0.3})`;
+        ctx.lineWidth = 2;
+        const ringR = s * 0.46;
+        const a0 = state.frame * 0.035 + it.phase;
+        for (let k = 0; k < 2; k++) {
+          ctx.beginPath();
+          ctx.arc(it.sx, it.y, ringR, a0 + Math.PI * k, a0 + Math.PI * k + Math.PI * 0.55);
+          ctx.stroke();
+        }
+      }
+    }
+
     // --- Mega HP (stage-once, full heal) ---
     function spawnMegaHp() {
       const x = canvas.width + 40;
@@ -2313,6 +2472,7 @@
       updateExplosions();
       updateLaser();
       updateHpItems();
+      updateRescues();
       updateMegaHp();
       // smooth display score for visible count-up
       state.displayScore += (state.score - state.displayScore) * 0.18;
@@ -2512,6 +2672,13 @@
         const remainingFrames = Math.max(0, stageFrames - state.stageTimer);
         const remainingSecs = Math.ceil(remainingFrames / 60);
         ctx.fillText(`TIME ${remainingSecs}S`, 20, 78);
+      }
+
+      // 救出数。TIME/DIVE と同じ行の右隣に置く（下の行はボーナス表示が使う）
+      if (state.running) {
+        ctx.fillStyle = RETRO.amber;
+        ctx.fillText(`RESCUE ${state.rescuedCount}`, 150, 78);
+        ctx.fillStyle = RETRO.ink;
       }
 
       // HP bar (右上): 連続バーではなく10個のセグメント。往年の
@@ -2898,6 +3065,7 @@
       drawMegaHp();
       drawArenaBullets();
       drawHpItems();
+      drawRescues();
       drawBullets();
       drawBombs();
       drawExplosions();
