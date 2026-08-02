@@ -1308,8 +1308,8 @@
       // このプレイで救出した11体。リスタートで消える（ランキング登録にも使う）
       rescuedChars: new Array(cnpChars.length).fill(false),
       rescueFlash: new Array(cnpChars.length).fill(0),
-      // 通算の収集状況。リスタートしても残り、制覇はこちらで判定する。
-      // 保存はしていないのでページを離れるとリセットされる
+      // 収集状況。制覇の判定に使う。resetGame() でリスタートのたびに0/11へ
+      // 戻す(1プレイ完結の仕様)。保存もしていないのでページを離れても残らない
       collected: new Array(cnpChars.length).fill(false),
       // up/down/left/right: digital (keyboard/touch). gyroX/gyroY: analog -1..1 (device tilt)
       input: { up: false, down: false, left: false, right: false, gyroX: 0, gyroY: 0 },
@@ -1522,6 +1522,11 @@
       state.rescuedCount = 0;
       state.rescuedChars.fill(false);
       state.rescueFlash.fill(0);
+      // 通算の収集状況(state.collected)も再スタートのたびに0/11へ戻す。
+      // 以前は意図的に持ち越す仕様だった(1プレイ平均5.2種類しか集まらず
+      // 11/11制覇が統計的にほぼ不可能だったため)が、今回それより
+      // 毎回リセットする挙動を優先する方針に変更した
+      state.collected.fill(false);
       state.stageIntro = { active: false, frames: 0, total: 0, startGap: 0 };
       state.arena.bullets.length = 0;
       state.arena.spawnTimer = 0;
@@ -2290,8 +2295,8 @@
       }
     }
 
-    // 画面上段の額縁ロスター。制覇の進捗は通算(state.collected)で見せつつ、
-    // ※通算はページを開いている間だけ。保存はしていない
+    // 画面上段の額縁ロスター。収集状況(state.collected)は resetGame() で
+    // 毎回0/11に戻る(1プレイ完結の仕様)。
     // このプレイで救出した枠だけを起こして、今どれを取ったのかも同時に読ませる。
     //   未収集         … 黒シルエット + 減光した琥珀の枠
     //   収集済み(通算)  … 絵を落として表示 + くすんだキャラ色の枠
@@ -2346,7 +2351,7 @@
         }
       }
 
-      // 収集率は通算で出す（1プレイでは平均5.2種類しか集まらないため）。
+      // 収集率はこのプレイぶん(resetGame()で毎回0/11に戻る)。
       // 全員そろったら琥珀で点滅させて達成を知らせる
       const done = state.collected.reduce((a, b) => a + (b ? 1 : 0), 0);
       const complete = done === n;
