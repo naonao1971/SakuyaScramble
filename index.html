@@ -1197,10 +1197,9 @@
     // --- CNP 救出対象 ---
     // 洞窟内に浮遊している仲間。触れると救出でスコア+HP。
     //
-    // 絵は assets/cnp/cnp01.png 〜 cnp11.png を置けばそのまま反映される。
+    // 絵は assets/cnp/<id>.png を置けばそのまま反映される(idはcnpCharsで指定)。
     // 未配置の間は各キャラの色でシルエットのプレースホルダを描くので、
     // 画像が揃う前でも当たり判定・浮遊・救出演出はすべて動く。
-    // ファイル名を正式なキャラ名に変えたい場合は id と label を書き換える。
     const CNP_RESCUE = {
       size: 60,          // 描画サイズ(px四方)
       radius: 20,        // 当たり判定
@@ -1228,26 +1227,26 @@
     ];
 
     // 11体ぶんのスロット。hue はプレースホルダとオーラの色、tier は CNP_TIERS の添字。
-    // どのキャラを何点にするかはここの tier を差し替えるだけで変えられる
+    // id は assets/cnp/<id>.png のファイル名(拡張子なし)、label は救出時の
+    // ボーナス表示とランキングロスターのツールチップに出るキャラ名
     const cnpChars = [
-      { hue: 196, tier: 0 },
-      { hue: 150, tier: 0 },
-      { hue: 46,  tier: 0 },
-      { hue: 24,  tier: 0 },
-      { hue: 220, tier: 1 },
-      { hue: 92,  tier: 1 },
-      { hue: 322, tier: 1 },
-      { hue: 262, tier: 2 },
-      { hue: 174, tier: 2 },
-      { hue: 292, tier: 3 },
-      { hue: 352, tier: 4 }
+      { hue: 196, tier: 0, id: "cnp_sotai_leelee",   label: "リーリー" },
+      { hue: 150, tier: 0, id: "cnp_sotai_mitama",   label: "ミタマ" },
+      { hue: 46,  tier: 0, id: "cnp_sotai_narukami", label: "ナルカミ" },
+      { hue: 24,  tier: 0, id: "cnp_sotai_orochi",   label: "オロチ" },
+      { hue: 220, tier: 1, id: "cnp_sotai_luna",     label: "ルナ" },
+      { hue: 92,  tier: 1, id: "cnp_sotai_yama",     label: "ヤマ" },
+      { hue: 322, tier: 1, id: "cnp_sotai_makami",   label: "マカミ" },
+      { hue: 262, tier: 2, id: "cnp_sotai_towa",     label: "トワ" },
+      { hue: 174, tier: 2, id: "cnp_sotai_setsuna",  label: "セツナ" },
+      { hue: 292, tier: 3, id: "cnp_sotai_ema",      label: "エマ" },
+      { hue: 352, tier: 4, id: "cnp_sotai_taruto",   label: "タルト" }
     ].map((def, i) => {
-      const id = "cnp" + String(i + 1).padStart(2, "0");
-      const ch = { id, index: i, label: id.toUpperCase(), hue: def.hue, tier: CNP_TIERS[def.tier], img: new Image(), ready: false };
+      const ch = { id: def.id, index: i, label: def.label, hue: def.hue, tier: CNP_TIERS[def.tier], img: new Image(), ready: false };
       // 画像が無い場合は onerror が飛ぶだけで、ready:false のままプレースホルダに落ちる
       ch.img.onload = () => { ch.ready = ch.img.naturalWidth > 0; };
       ch.img.onerror = () => { ch.ready = false; };
-      ch.img.src = "assets/cnp/" + id + ".png";
+      ch.img.src = "assets/cnp/" + ch.id + ".png";
       return ch;
     });
 

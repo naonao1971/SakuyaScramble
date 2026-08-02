@@ -4,11 +4,13 @@
 
 ## 置き方
 
-このディレクトリに以下のファイル名で置くと、コード変更なしで反映される。
+ファイル名は `index.html` の `cnpChars` の `id` で指定する（現在は下記の11体）。
 
-```
-cnp01.png  cnp02.png  cnp03.png  cnp04.png  cnp05.png  cnp06.png
-cnp07.png  cnp08.png  cnp09.png  cnp10.png  cnp11.png
+```text
+cnp_sotai_leelee.png    cnp_sotai_mitama.png   cnp_sotai_narukami.png
+cnp_sotai_orochi.png    cnp_sotai_luna.png     cnp_sotai_yama.png
+cnp_sotai_makami.png    cnp_sotai_towa.png     cnp_sotai_setsuna.png
+cnp_sotai_ema.png       cnp_sotai_taruto.png
 ```
 
 ファイルが無いスロットは、`index.html` の `drawCnpPlaceholder()` が描く
@@ -65,9 +67,9 @@ const CNP_RESCUE = {
 
 ```js
 const cnpChars = [
-  { hue: 196, tier: 0 },   // cnp01 -> rank1 / 100点
+  { hue: 196, tier: 0, id: "cnp_sotai_leelee", label: "リーリー" },  // rank1 / 100点
   ...
-  { hue: 352, tier: 4 }    // cnp11 -> rank5 / 1500点
+  { hue: 352, tier: 4, id: "cnp_sotai_taruto", label: "タルト" }     // rank5 / 1500点
 ];
 ```
 
@@ -108,9 +110,23 @@ const CNP_ROSTER = {
 ## キャラ名の差し替え
 
 救出時のボーナス表示に出る名前は `index.html` の `cnpChars` の `label`。
-初期値は `CNP01`〜`CNP11` なので、正式なキャラ名に書き換える。ファイル名も
-合わせて変える場合は `id` も同時に変更する（`id` がそのまま
-`assets/cnp/<id>.png` を指す）。
+現在は下記の11体を設定済み（`id` がそのまま `assets/cnp/<id>.png` を指す）。
+
+| id | label |
+| --- | --- |
+| cnp_sotai_leelee | リーリー |
+| cnp_sotai_mitama | ミタマ |
+| cnp_sotai_narukami | ナルカミ |
+| cnp_sotai_orochi | オロチ |
+| cnp_sotai_luna | ルナ |
+| cnp_sotai_yama | ヤマ |
+| cnp_sotai_makami | マカミ |
+| cnp_sotai_towa | トワ |
+| cnp_sotai_setsuna | セツナ |
+| cnp_sotai_ema | エマ |
+| cnp_sotai_taruto | タルト |
+
+さらに変更したい場合はこの2つを書き換える。
 
 `hue` はプレースホルダの色と、キャラ背後に出る浮遊オーラ／救出リングの色に
 使われる。画像を置いた後もオーラの色として効き続けるので、キャラのイメージ
