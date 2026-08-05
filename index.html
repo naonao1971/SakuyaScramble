@@ -120,7 +120,9 @@
       align-items: center;
       justify-content: center;
       gap: 10px;
-      background: rgba(5, 8, 16, 0.94);
+      /* 完全不透過。半透明にすると背後のcanvasが描くタイトル(drawTitleScreen)が
+         透けて、このオーバーレイ自身のタイトルと二重に見える */
+      background: #050810;
       border: 2px solid var(--amber);
       z-index: 30;
       text-align: center;
@@ -134,7 +136,9 @@
     .orientation-overlay-icon {
       font-size: 42px;
     }
-    .orientation-overlay-title {
+    /* p.をつけて詳細度を上げる。単なる .orientation-overlay-title だと後続の
+       .orientation-overlay p に負けて、display書体の指定が捨てられる */
+    .orientation-overlay p.orientation-overlay-title {
       margin: 0;
       font-family: var(--font-display);
       color: var(--amber);
