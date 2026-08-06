@@ -2298,12 +2298,36 @@
       }
     }
 
+    // 未救出スロットに出すシルエット。素材は透過切り抜き(四隅のalphaが0)なので、
+    // source-in で塗り潰すとキャラの輪郭だけが残る。
+    // 誰がまだ埋まっていないかを額の中で読ませるのが目的なので、色は落としつつ
+    // hue は残す(11枠が同じ灰色の塊に見えないように)。
+    // 額の2倍解像度で焼いてから縮小描画し、輪郭のジャギーを均す。
+    const CNP_SIL_PX = CNP_ROSTER.slot * 2;
+
+    function cnpSilhouette(ch) {
+      if (ch.sil) return ch.sil;
+      // 画像がまだ来ていないうちはキャッシュを作らない(次フレームで再試行される)
+      if (!ch.ready) return null;
+      const c = document.createElement("canvas");
+      c.width = c.height = CNP_SIL_PX;
+      const g = c.getContext("2d");
+      g.drawImage(ch.img, 0, 0, CNP_SIL_PX, CNP_SIL_PX);
+      g.globalCompositeOperation = "source-in";
+      g.fillStyle = `hsl(${ch.hue},38%,26%)`;
+      g.fillRect(0, 0, CNP_SIL_PX, CNP_SIL_PX);
+      ch.sil = c;
+      return c;
+    }
+
     // 画面上段の額縁ロスター。収集状況(state.collected)は resetGame() で
     // 毎回0/11に戻る(1プレイ完結の仕様)。
     // このプレイで救出した枠だけを起こして、今どれを取ったのかも同時に読ませる。
-    //   未収集         … 黒シルエット + 減光した琥珀の枠
-    //   収集済み(通算)  … 絵を落として表示 + くすんだキャラ色の枠
-    //   今回救出        … 絵を全光量で表示 + キャラ色の枠
+    //   未収集       … 実際の絵のシルエット + 減光した琥珀の枠
+    //   収集済み     … 絵を落として表示 + くすんだキャラ色の枠
+    //   今回救出      … 絵を全光量で表示 + キャラ色の枠
+    // 未収集に「?」の仮絵を出さないこと。あれは素材未配置を知らせる開発用の絵で、
+    // 「まだ取っていない」の意味に流用すると11枠が全部同じ顔になる。
     function drawRescueRoster() {
       const n = cnpChars.length;
       const s = CNP_ROSTER.slot;
@@ -2315,7 +2339,7 @@
         const ch = cnpChars[i];
         const x = x0 + i * (s + CNP_ROSTER.gap);
         const got = state.rescuedChars[i];   // このプレイで救出した
-        const have = state.collected[i];     // 通算で収集済み
+        const have = state.collected[i];     // 収集済み(resetGameで毎プレイ戻る)
         const fl = state.rescueFlash[i] > 0 ? state.rescueFlash[i] / CNP_ROSTER.flash : 0;
 
         // 額の中身。走査線の上に乗るので下地はしっかり沈めておく
@@ -2330,11 +2354,17 @@
         // 今回の救出だけ全光量。通算で持っているだけの枠は落として、
         // 「今回どれを取ったか」が一目で分かるようにする
         if (!got) ctx.globalAlpha = have ? 0.42 : 1;
+        const d = s * 0.88;
         if (have && ch.ready) {
-          const d = s * 0.88;
           ctx.drawImage(ch.img, -d / 2, -d / 2, d, d);
         } else {
-          drawCnpPlaceholder(ch, s * 0.8, !have);
+          const sil = cnpSilhouette(ch);
+          if (sil) {
+            ctx.drawImage(sil, -d / 2, -d / 2, d, d);
+          } else {
+            // 素材そのものが届いていないときだけ仮絵に落とす
+            drawCnpPlaceholder(ch, s * 0.8, !have);
+          }
         }
         ctx.restore();
 
