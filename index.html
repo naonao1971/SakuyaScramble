@@ -26,13 +26,20 @@
       color-scheme: dark;
 
       /* --- レトロアーケード トークン（方向宣言の正典。ここ以外に色を書かない） --- */
-      --bg: #08090F;        /* 地 */
-      --panel: #12141F;     /* 面 */
-      --ink: #D6E4F0;       /* 文字（燐光の白） */
+      /* --- パレットはキービジュアル(image01.jpg)から採色する ---
+         咲耶の船は「漆黒の機体・金のライン・マゼンタの発光」。
+         この3色以外を画面に足さない。青と緑は世界観に存在しないので持たない */
+      --bg: #06070C;        /* 地 */
+      --panel: #120E1F;     /* 面（地をわずかに紫へ寄せる） */
+      --ink: #E8ECF5;       /* 文字（燐光の白） */
       --dim: #7C8BA6;       /* 減光した補助文字 */
-      --amber: #FFB020;     /* 徴: スコア・CTA・選択のみ。面に塗らない */
-      --danger: #FF3B6B;
-      --hp: #35E08A;
+      --gold: #E8C56A;      /* 二次: 枠・スコア・ランク。面に塗らない */
+      --magenta: #FF2D9B;   /* 徴: CTA・選択・自機の発光。最も希少に使う */
+      --danger: #FF4D2E;    /* 橙赤。徴のマゼンタと弁別できる位置まで離す */
+      --hp: #E8C56A;        /* HP満杯。減ると橙→橙赤へ落ちる(drawHudのladder) */
+      /* 洞窟。画面の6割を占めるので、ここが世界観を決める */
+      --cave: #452066;
+      --cave-edge: #B44BE8;
       /* 筐体のベベル: ぼかし0のハードな3色で金属の縁を作る。
          lit=光の当たる上辺/左辺、lo=影になる下辺/右辺 */
       --edge-hi: #2A3242;
@@ -105,7 +112,7 @@
       box-shadow:
         inset 0 0 0 2px var(--edge-lo),
         0 0 0 2px var(--edge-lo),
-        0 0 24px rgba(255, 176, 32, 0.10);
+        0 0 24px rgba(232, 197, 106, 0.10);
       background: #02040a;
       image-rendering: pixelated;
       touch-action: none;
@@ -123,7 +130,7 @@
       /* 完全不透過。半透明にすると背後のcanvasが描くタイトル(drawTitleScreen)が
          透けて、このオーバーレイ自身のタイトルと二重に見える */
       background: #050810;
-      border: 2px solid var(--amber);
+      border: 2px solid var(--gold);
       z-index: 30;
       text-align: center;
       padding: 16px;
@@ -141,7 +148,7 @@
     .orientation-overlay p.orientation-overlay-title {
       margin: 0;
       font-family: var(--font-display);
-      color: var(--amber);
+      color: var(--gold);
       font-size: 15px;
       line-height: 1.6;
       letter-spacing: 0.02em;
@@ -149,7 +156,7 @@
     .orientation-overlay p {
       margin: 0;
       font-family: var(--font-body);
-      color: var(--amber);
+      color: var(--gold);
       font-size: 16px;
       line-height: 1.5;
     }
@@ -194,8 +201,8 @@
       border-radius: var(--radius);
       background: var(--panel);
       /* 徴の琥珀は「線と文字」に置く。面に塗ると一気に安くなる */
-      color: var(--amber);
-      border: 2px solid var(--amber);
+      color: var(--gold);
+      border: 2px solid var(--gold);
       box-shadow: var(--bevel-up);
       /* アーケードの「PUSH START」の明滅。steps()で矩形波にすると
          フェードでなく本物の点滅になる */
@@ -274,8 +281,8 @@
       /* 発射ボタンだけ徴の琥珀で縁取り、押すべき場所を1つに絞る。
          寸法は .touch-btn の56pxに揃える（筐体の同型ボタンの並び）——
          ここで width/height を書いても後続の .touch-btn に負けるので書かない */
-      border-color: var(--amber);
-      color: var(--amber);
+      border-color: var(--gold);
+      color: var(--gold);
       font-family: var(--font-display);
       font-size: 14px;
     }
@@ -301,8 +308,8 @@
     .touch-btn:not(.hold-toggle):active,
     .touch-btn.active {
       /* 押下でベベルを反転させ、物理的に沈み込ませる */
-      border-color: var(--amber);
-      color: var(--amber);
+      border-color: var(--gold);
+      color: var(--gold);
       box-shadow: var(--bevel-down);
       transform: translateY(2px);
     }
@@ -320,7 +327,7 @@
       bottom: 0;
       width: 100%;
       height: 0;
-      background: rgba(255, 176, 32, 0.38);
+      background: rgba(232, 197, 106, 0.38);
       pointer-events: none;
     }
     .hold-toggle.holding::after {
@@ -335,8 +342,8 @@
     }
     /* 閾値に到達＝「離せば切り替わる」。ここで初めて縁を徴の色にする */
     .hold-toggle.hold-ready {
-      border-color: var(--amber);
-      color: var(--amber);
+      border-color: var(--gold);
+      color: var(--gold);
     }
     /* X/💣より一回り小さい常設トグル。ONの間だけ徴の色で縁取る。
        小さくしても44ptの床は割らない（モバイルのタップ目標の最小） */
@@ -349,7 +356,7 @@
     }
     .auto-fire-toggle.on {
       opacity: 1;
-      border-color: var(--amber);
+      border-color: var(--gold);
     }
     .controls-bottom {
       /* fire-pad と同じ position: fixed に統一し、画面サイズ/向きが変わっても
@@ -386,7 +393,7 @@
       font-family: var(--font-display);
       font-size: 13px;
       line-height: 1.5;
-      color: var(--amber);
+      color: var(--gold);
       text-align: center;
     }
     .leaderboard-list {
@@ -442,7 +449,7 @@
       text-decoration: underline;
     }
     .leaderboard-row .lb-score {
-      color: var(--amber);
+      color: var(--gold);
       font-family: var(--font-display);
       font-size: 11px;
       text-align: right;
@@ -461,7 +468,7 @@
       width: 16px;
       height: 16px;
       border-radius: 3px;
-      border: 1px solid rgba(255, 176, 32, 0.2);
+      border: 1px solid rgba(232, 197, 106, 0.2);
       background: rgba(0, 0, 0, 0.32);
       overflow: hidden;
       flex: none;
@@ -503,7 +510,7 @@
     }
     .score-register-msg {
       margin: 0;
-      color: var(--amber);
+      color: var(--gold);
       font-size: 13px;
       line-height: 1.6;
       text-align: center;
@@ -520,16 +527,16 @@
       box-shadow: inset 2px 2px 0 var(--edge-lo);
     }
     .score-register input:focus {
-      outline: 2px solid var(--amber);
+      outline: 2px solid var(--gold);
       outline-offset: 2px;
-      border-color: var(--amber);
+      border-color: var(--gold);
     }
     .score-register button {
       padding: 12px 22px;
       border-radius: var(--radius);
-      border: 2px solid var(--amber);
+      border: 2px solid var(--gold);
       background: var(--panel);
-      color: var(--amber);
+      color: var(--gold);
       font-family: var(--font-display);
       font-size: 11px;
       box-shadow: var(--bevel-up);
@@ -1384,7 +1391,7 @@
     const baseStyles = {
       red: { fill: "#cf3946", edge: "#ff8f95" },
       blue: { fill: "#2e67c9", edge: "#89b5ff" },
-      yellow: { fill: "#c89c26", edge: "#ffdf85" }
+      yellow: { fill: "#E07A1E", edge: "#FFC46B" }
     };
 
     for (let i = 0; i < 160; i++) {
@@ -2374,7 +2381,7 @@
           ? `hsla(${ch.hue},90%,${66 + fl * 30}%,${0.85 + fl * 0.15})`
           : have
             ? `hsla(${ch.hue},45%,52%,0.55)`
-            : "rgba(255, 176, 32, 0.26)";
+            : "rgba(232, 197, 106, 0.26)";
         ctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
 
         // 救出した瞬間だけ額が白く光る（どの枠が埋まったか視線を誘導する）
@@ -2388,7 +2395,7 @@
       // 全員そろったら琥珀で点滅させて達成を知らせる
       const done = state.collected.reduce((a, b) => a + (b ? 1 : 0), 0);
       const complete = done === n;
-      ctx.fillStyle = complete && !RETRO.blinkOn() ? RETRO.ink : RETRO.amber;
+      ctx.fillStyle = complete && !RETRO.blinkOn() ? RETRO.ink : RETRO.gold;
       ctx.font = RETRO.font(9);
       ctx.textAlign = "center";
       ctx.fillText(complete ? "COMPLETE!" : `${done} / ${n}`, canvas.width / 2, y + s + 11);
@@ -2832,14 +2839,14 @@
     }
 
     function drawTunnel() {
-      ctx.fillStyle = "#193164";
+      ctx.fillStyle = RETRO.cave;
       for (let x = 0; x < state.columns.length; x++) {
         const c = state.columns[x];
         ctx.fillRect(x, 0, 1, c.top);
         ctx.fillRect(x, c.bottom, 1, canvas.height - c.bottom);
       }
 
-      ctx.fillStyle = "#5ca2ff";
+      ctx.fillStyle = RETRO.caveEdge;
       for (let x = 0; x < state.columns.length; x += 3) {
         const c = state.columns[x];
         ctx.fillRect(x, c.top - 2, 2, 2);
@@ -2859,14 +2866,14 @@
     // part 3: vertical fall shaft — walls on left/right, rows indexed by y
     function drawFallTunnel() {
       // same base colors as the horizontal tunnel, for visual continuity across the stage transition
-      ctx.fillStyle = "#193164";
+      ctx.fillStyle = RETRO.cave;
       for (let y = 0; y < state.fall.rows.length; y++) {
         const r = state.fall.rows[y];
         ctx.fillRect(0, y, r.left, 1);
         ctx.fillRect(r.right, y, canvas.width - r.right, 1);
       }
 
-      ctx.fillStyle = "#5ca2ff";
+      ctx.fillStyle = RETRO.caveEdge;
       for (let y = 0; y < state.fall.rows.length; y += 3) {
         const r = state.fall.rows[y];
         ctx.fillRect(r.left - 2, y, 2, 2);
@@ -2896,7 +2903,8 @@
       ctx.rotate(state.ship.vy * 0.05 + (state.fall.shipAngle || 0));
 
       // 咲耶カラー: 基調はピンク、サブ(コックピット窓)は黒
-      ctx.fillStyle = "#ff3da6";
+      // TODO(C): 機体を漆黒+マゼンタのリムライトへ。ここは徴の色をベタ塗りしている
+      ctx.fillStyle = RETRO.magenta;
       ctx.beginPath();
       ctx.moveTo(radius + 6, 0);
       ctx.lineTo(-radius, -radius * 0.85);
@@ -2972,7 +2980,7 @@
     function drawHud() {
       // スコアは琥珀のゼロ埋め7桁。アーケードのスコアパネルの文法で、
       // 桁が伸び縮みしないぶん視線も落ち着く
-      ctx.fillStyle = RETRO.amber;
+      ctx.fillStyle = RETRO.gold;
       ctx.font = RETRO.font(16);
       ctx.fillText(`SCORE ${String(Math.floor(state.displayScore)).padStart(7, "0")}`, 20, 34);
       // 副情報は色でなくサイズで一段落とす。減光色＋小サイズの二重の弱体化は
@@ -2996,7 +3004,7 @@
 
       // 救出数。TIME/DIVE と同じ行の右隣に置く（下の行はボーナス表示が使う）
       if (state.running) {
-        ctx.fillStyle = RETRO.amber;
+        ctx.fillStyle = RETRO.gold;
         ctx.fillText(`RESCUE ${state.rescuedCount}`, 150, 78);
         ctx.fillStyle = RETRO.ink;
       }
@@ -3017,7 +3025,9 @@
       const by = 20;
       const pct = Math.max(0, Math.min(1, hp / maxHp));
       const lit = Math.ceil(pct * segs);
-      const hpColor = pct > 0.6 ? RETRO.hp : pct > 0.3 ? RETRO.amber : RETRO.danger;
+      // 金→橙→橙赤の熱で落とす。緑は世界観に無いので使わない。
+      // 3段とも暖色だが明度と彩度が離れているので、遠目でも残量が読める
+      const hpColor = pct > 0.6 ? RETRO.hp : pct > 0.3 ? "#FF9A3C" : RETRO.danger;
       for (let i = 0; i < segs; i++) {
         const sx = bx + i * (segW + segGap);
         if (i < lit) {
@@ -3032,7 +3042,7 @@
       // この位置はパイロット窓と重なるため（HUDは5秒3点まで）
 
       if (state.bonusTimer > 0) {
-        ctx.fillStyle = RETRO.amber;
+        ctx.fillStyle = RETRO.gold;
         ctx.font = RETRO.font(10);
         ctx.fillText(state.bonusText, 20, 104);
       }
@@ -3068,14 +3078,14 @@
           ctx.shadowBlur = 20;
           ctx.drawImage(clearImg, imgX, imgY, imgW, imgH);
           ctx.restore();
-          ctx.strokeStyle = RETRO.amber;
+          ctx.strokeStyle = RETRO.gold;
           ctx.lineWidth = 2;
           ctx.strokeRect(imgX + 1, imgY + 1, imgW - 2, imgH - 2);
           textTop = imgY + imgH + 42;
         }
 
         ctx.textAlign = "center";
-        ctx.fillStyle = RETRO.amber;
+        ctx.fillStyle = RETRO.gold;
         ctx.font = RETRO.font(30);
         ctx.fillText("CLEAR", canvas.width / 2, textTop);
         ctx.fillStyle = RETRO.ink;
@@ -3091,7 +3101,7 @@
         const remaining = Math.ceil(state.stageIntro.frames / 60);
         ctx.save();
         RETRO.panel(canvas.width / 2 - 150, 16, 300, 46);
-        ctx.fillStyle = RETRO.amber;
+        ctx.fillStyle = RETRO.gold;
         ctx.textAlign = "center";
         ctx.font = RETRO.font(13); // 和文はDotGothic16へフォールバックする
         ctx.fillText(`床が開くまで ${remaining}s`, canvas.width / 2, 16 + 30);
@@ -3113,12 +3123,17 @@
     }
 
     // ── レトロ描画のヘルパー（canvas側の正典。色は方向宣言のトークンと一致） ──
+    // CSSの :root トークンと同じ値を持つ。canvasはCSS変数を読めないので二重管理に
+    // なるが、**必ず両方を同時に変える**こと。片方だけ変えると画面内で色が割れる。
     const RETRO = {
-      ink: "#D6E4F0",
+      ink: "#E8ECF5",
       dim: "#7C8BA6",
-      amber: "#FFB020",
-      danger: "#FF3B6B",
-      hp: "#35E08A",
+      gold: "#E8C56A",      // 二次: 枠・スコア・ランク
+      magenta: "#FF2D9B",   // 徴: 自機・CTA・選択
+      danger: "#FF4D2E",    // 橙赤
+      hp: "#E8C56A",        // 満杯は金。減衰ladderは drawHud 側
+      cave: "#452066",      // 洞窟の面
+      caveEdge: "#B44BE8",  // 洞窟の縁の発光
       // 欧文/数字はPress Start 2P、和文はDotGothic16へ落ちる（和欧混植: 欧文先）
       font(px) {
         return `${px}px "Press Start 2P", "DotGothic16", monospace`;
@@ -3132,7 +3147,7 @@
       panel(x, y, w, h) {
         ctx.fillStyle = "rgba(4, 6, 12, 0.82)";
         ctx.fillRect(x, y, w, h);
-        ctx.strokeStyle = "rgba(255, 176, 32, 0.55)";
+        ctx.strokeStyle = "rgba(232, 197, 106, 0.55)";
         ctx.lineWidth = 2;
         ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
       },
@@ -3212,7 +3227,7 @@
       // shadowBlur is expensive enough on mobile to noticeably slow the game down
       ctx.save();
       // パイロット窓は筐体のモニタ枠に見せる（琥珀のヘアライン2px）
-      ctx.strokeStyle = "rgba(255, 176, 32, 0.5)";
+      ctx.strokeStyle = "rgba(232, 197, 106, 0.5)";
       ctx.lineWidth = 2;
       ctx.drawImage(pilotImg, crop.x, crop.y, crop.w, crop.h, pos.x, pos.y, w, h);
       ctx.strokeRect(pos.x + 1, pos.y + 1, w - 2, h - 2);
@@ -3232,7 +3247,7 @@
       // ゲームタイトル。イラストの上、canvas上端の余白に収まる位置
       ctx.save();
       ctx.textAlign = "center";
-      ctx.fillStyle = RETRO.amber;
+      ctx.fillStyle = RETRO.gold;
       ctx.font = RETRO.font(30);
       ctx.fillText("SAKUYA SCRAMBLE", canvas.width / 2, 48);
       ctx.restore();
@@ -3249,7 +3264,7 @@
         ctx.shadowBlur = 24;
         ctx.drawImage(titleImg, x, y, w, h);
         ctx.restore();
-        ctx.strokeStyle = "rgba(255, 176, 32, 0.5)";
+        ctx.strokeStyle = "rgba(232, 197, 106, 0.5)";
         ctx.lineWidth = 2;
         ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
       }
@@ -3491,7 +3506,7 @@
       if (touchFire) {
         const pct = laser.chargeFrames / laser.chargeDuration;
         if (laser.charging && pct > 0 && !laser.beam) {
-          touchFire.style.boxShadow = `0 0 ${6 + pct * 22}px rgba(80,210,255,${0.4 + pct * 0.6})`;
+          touchFire.style.boxShadow = `0 0 ${6 + pct * 22}px rgba(255,45,155,${0.4 + pct * 0.6})`;
           touchFire.style.borderColor = `hsl(${190 + pct * 30},100%,70%)`;
         } else if (!laser.charging) {
           touchFire.style.boxShadow = '';
@@ -3555,7 +3570,7 @@
         const pct = laser.chargeFrames / laser.chargeDuration;
         ctx.save();
         ctx.lineWidth = 2.5;
-        ctx.strokeStyle = `rgba(80,210,255,${0.5 + 0.5 * pct})`;
+        ctx.strokeStyle = `rgba(255,45,155,${0.5 + 0.5 * pct})`;
         ctx.shadowColor = '#44ccff';
         ctx.shadowBlur = 10 * pct;
         ctx.beginPath();
@@ -3567,7 +3582,7 @@
         // fully charged flash
         if (pct >= 1) {
           ctx.globalAlpha = 0.3 + 0.3 * Math.sin(state.frame * 0.4);
-          ctx.fillStyle = 'rgba(80,210,255,0.25)';
+          ctx.fillStyle = 'rgba(255,45,155,0.25)';
           ctx.beginPath();
           ctx.arc(state.ship.x, state.ship.y, state.ship.radius + 16, 0, Math.PI * 2);
           ctx.fill();
@@ -3586,14 +3601,14 @@
       // mobile; the gradient glow below already reads as a bloom without it
       // wide glow
       const glowGrad = ctx.createLinearGradient(tailX, 0, headX + 10, 0);
-      glowGrad.addColorStop(0,   'rgba(40,180,255,0.0)');
-      glowGrad.addColorStop(0.15,'rgba(40,180,255,0.55)');
-      glowGrad.addColorStop(1,   'rgba(180,240,255,0.35)');
+      glowGrad.addColorStop(0,   'rgba(255,45,155,0.0)');
+      glowGrad.addColorStop(0.15,'rgba(255,45,155,0.55)');
+      glowGrad.addColorStop(1,   'rgba(255,170,225,0.35)');
       ctx.fillStyle = glowGrad;
       ctx.fillRect(tailX, b.yCenter - halfH, headX - tailX + 10, b.height);
       // bright core
       const coreGrad = ctx.createLinearGradient(tailX, 0, headX + 10, 0);
-      coreGrad.addColorStop(0, 'rgba(200,240,255,0.0)');
+      coreGrad.addColorStop(0, 'rgba(255,210,240,0.0)');
       coreGrad.addColorStop(0.2,'rgba(255,255,255,0.95)');
       coreGrad.addColorStop(1, 'rgba(255,255,255,1.0)');
       ctx.fillStyle = coreGrad;
