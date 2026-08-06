@@ -2902,30 +2902,69 @@
       ctx.translate(x, y);
       ctx.rotate(state.ship.vy * 0.05 + (state.fall.shipAngle || 0));
 
-      // 咲耶カラー: 基調はピンク、サブ(コックピット窓)は黒
-      // TODO(C): 機体を漆黒+マゼンタのリムライトへ。ここは徴の色をベタ塗りしている
+      // 咲耶の機体は「漆黒の船体・金のライン・マゼンタの発光」(キービジュアル)。
+      // マゼンタは徴であって地ではないので、全身を塗らずに輪郭光として使う。
+      // 30px前後で実際に読まれるのは輪郭なので、リムライトが視認性も担う——
+      // 洞窟(ベタ面の紫)に対して機体は「黒い塊+鋭い輪郭」になり、面と線で分離する。
+      //
+      // 寸法: 縦は判定(radius)と直結して難度に効くので据え置き、長さだけ伸ばす。
+      // 横トンネルの判定は ship.y±radius しか見ないため、長さは難度に影響しない。
+      const H = radius * 0.85;              // 縦半径。従来と同値
+      const hull = [
+        [radius + 10,  0   ],               // 機首
+        [radius + 2,  -2.5 ],
+        [ 4,          -3.2 ],
+        [-4,          -H   ],               // 上翼端(後退翼)
+        [-10,         -H * 0.9],
+        [-7,          -3.2 ],
+        [-14,         -4.5 ],               // 上尾翼
+        [-12,          0   ],
+        [-14,           4.5],               // 下尾翼
+        [-7,            3.2],
+        [-10,           H * 0.9],
+        [-4,            H  ],               // 下翼端
+        [ 4,            3.2],
+        [radius + 2,    2.5]
+      ];
+      ctx.beginPath();
+      ctx.moveTo(hull[0][0], hull[0][1]);
+      for (let i = 1; i < hull.length; i++) ctx.lineTo(hull[i][0], hull[i][1]);
+      ctx.closePath();
+      ctx.fillStyle = "#16101F";            // 漆黒の船体。空洞(#02040c)より一段明るくして質量を出す
+      ctx.fill();
+      ctx.strokeStyle = RETRO.magenta;      // リムライト。ここが視認性の主役
+      ctx.lineWidth = 1.4;
+      ctx.lineJoin = "round";
+      ctx.stroke();
+
+      // 金のライン。翼の付け根に2本だけ入れて装甲の分割を示す
+      ctx.strokeStyle = RETRO.gold;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, -3.0); ctx.lineTo(-5, -3.0);
+      ctx.moveTo(0,  3.0); ctx.lineTo(-5,  3.0);
+      ctx.stroke();
+
+      // キャノピー。黒い窓にマゼンタの光点を落として「誰かが乗っている」を示す
+      ctx.fillStyle = "#07050C";
+      ctx.beginPath();
+      ctx.ellipse(7, 0, 4.2, 2.6, 0, 0, Math.PI * 2);
+      ctx.fill();
       ctx.fillStyle = RETRO.magenta;
       ctx.beginPath();
-      ctx.moveTo(radius + 6, 0);
-      ctx.lineTo(-radius, -radius * 0.85);
-      ctx.lineTo(-radius + 4, 0);
-      ctx.lineTo(-radius, radius * 0.85);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.fillStyle = "#15121a";
-      ctx.beginPath();
-      ctx.arc(-2, 0, 4, 0, Math.PI * 2);
+      ctx.arc(7.6, 0, 1.2, 0, Math.PI * 2);
       ctx.fill();
 
       if (state.running) {
         const flame = (boosting ? 18 : 8) + Math.random() * (boosting ? 16 : 8);
         const flameW = boosting ? 6 : 3;
+        // 原点は尾部の切り欠き(-12)。船体は-14まであるので、ここより前から
+        // 引くと炎が船体に重なる
         ctx.fillStyle = boosting ? "#ffe27a" : "#ff8c42";
         ctx.beginPath();
-        ctx.moveTo(-radius + 2, 0);
-        ctx.lineTo(-radius - flame, -flameW);
-        ctx.lineTo(-radius - flame, flameW);
+        ctx.moveTo(-12, 0);
+        ctx.lineTo(-14 - flame, -flameW);
+        ctx.lineTo(-14 - flame, flameW);
         ctx.closePath();
         ctx.fill();
       }
