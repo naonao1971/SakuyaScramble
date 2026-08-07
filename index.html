@@ -391,6 +391,31 @@
       opacity: 1;
       border-color: var(--gold);
     }
+    /* D-pad/発射ボタンから離れた右上に単独配置。親指の移動経路から外れて
+       いるので、誤爆防止の長押し化はせず即タップで反応させる */
+    .pause-button {
+      position: fixed;
+      top: calc(10px + env(safe-area-inset-top));
+      right: calc(10px + env(safe-area-inset-right));
+      z-index: 7;
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius);
+      border: 2px solid var(--edge-hi);
+      background: var(--panel);
+      color: var(--ink);
+      font-size: 16px;
+      opacity: 0.7;
+      box-shadow: var(--bevel-up);
+      pointer-events: auto;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .pause-button:active {
+      box-shadow: var(--bevel-down);
+      transform: translateY(2px);
+    }
     .controls-bottom {
       /* fire-pad と同じ position: fixed に統一し、画面サイズ/向きが変わっても
          2つのボタン群の相対位置がズレないようにする */
@@ -636,6 +661,7 @@
       <div class="orientation-overlay-icon">📱⤾</div>
       <p>横向きにしてね ⌐◨-◨</p>
     </div>
+    <button id="pauseButton" class="pause-button" type="button" aria-label="一時停止" style="display: none;">⏸</button>
     <div id="gyroStatus" class="status"></div>
     <div class="controls-bottom" aria-hidden="false">
       <div id="firePad" class="fire-pad" aria-label="発射ボタン">
@@ -958,6 +984,7 @@
     }
     const touchPad = document.getElementById("touchPad");
     const firePad = document.getElementById("firePad");
+    const pauseButton = document.getElementById("pauseButton");
     const controlsBottom = document.querySelector(".controls-bottom");
     const touchUp = document.getElementById("touchUp");
     const touchLeft = document.getElementById("touchLeft");
@@ -1327,6 +1354,8 @@
       running: true,
       // becomes true once the player presses スタート; gates update() so nothing moves before that
       started: false,
+      // 一時停止中はloop()がupdate()を呼ばないので、これだけでゲーム全体が凍結する
+      paused: false,
       score: 0,
       speed: 2.6,
       maxSpeed: 6.2,
@@ -1541,6 +1570,7 @@
 
     function resetGame() {
       state.running = true;
+      state.paused = false;
       state.score = 0;
       state.speed = 2.6;
       autoFireTimer = 0;
@@ -3459,6 +3489,25 @@
       _gameControlsWereShown = shouldShow;
     }
 
+    // ポーズボタンはPC/スマホ問わずプレイ中だけ出す(十字キー等と違いPCでも使う)
+    let _pauseButtonWasShown = null;
+    function updatePauseButtonVisibility() {
+      const shouldShow = state.started && !state.gameOver && !state.cleared;
+      if (shouldShow === _pauseButtonWasShown) return;
+      pauseButton.style.display = shouldShow ? "" : "none";
+      _pauseButtonWasShown = shouldShow;
+    }
+
+    function setPaused(p) {
+      if (!state.started || state.gameOver || state.cleared) return;
+      state.paused = p;
+      pauseButton.textContent = p ? "▶" : "⏸";
+      pauseButton.setAttribute("aria-label", p ? "再開" : "一時停止");
+      if (p) resetAllInputs(); // 入力を離さずポーズすると、再開直後に押しっぱなし扱いになるのを防ぐ
+      updateGyroStatus(p ? "一時停止中" : "");
+    }
+    pauseButton.addEventListener("click", () => setPaused(!state.paused));
+
     window.addEventListener("resize", () => {
       if (_startButtonWasShown) positionStartButton();
       if (orientationBlocked) positionOrientationOverlay();
@@ -3525,6 +3574,7 @@
     function render() {
       updateStartButtonVisibility();
       updateGameControlsVisibility();
+      updatePauseButtonVisibility();
       updateLeaderboardVisibility();
       if (!state.started) {
         drawTitleScreen(); // 走査線は関数内で星空にだけ敷く
@@ -3559,6 +3609,28 @@
       drawLaser();
       drawHud();
       drawPilotPortrait();
+      // その回のHUD/ポートレートすべての上に被せる。最後に描くことで完全に覆う
+      if (state.paused) drawPauseOverlay();
+    }
+
+    function drawPauseOverlay() {
+      ctx.save();
+      ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.textAlign = "center";
+      ctx.fillStyle = RETRO.amber;
+      ctx.font = RETRO.font(28);
+      ctx.fillText("PAUSED", canvas.width / 2, canvas.height / 2 - 10);
+      if (RETRO.blinkOn()) {
+        ctx.fillStyle = RETRO.ink;
+        ctx.font = RETRO.font(11);
+        ctx.fillText(
+          isMobileDevice ? "右上の▶ボタンで再開" : "Pキーまたは右上の▶ボタンで再開",
+          canvas.width / 2,
+          canvas.height / 2 + 26
+        );
+      }
+      ctx.restore();
     }
 
     function showCaption(text, frames) {
@@ -3807,7 +3879,7 @@
       updateOrientationOverlay();
       let steps = 0;
       while (_accumulatedMs >= TARGET_FRAME_MS && steps < MAX_CATCHUP_STEPS) {
-        if (state.started && !orientationBlocked) update();
+        if (state.started && !orientationBlocked && !state.paused) update();
         _accumulatedMs -= TARGET_FRAME_MS;
         steps++;
       }
@@ -3847,6 +3919,9 @@
       } else if (e.code === "Space" && !state.running) {
         if (gyro.active) recalibrateGyro();
         startGame();
+        e.preventDefault();
+      } else if ((e.code === "KeyP" || e.code === "Escape") && !e.repeat) {
+        setPaused(!state.paused);
         e.preventDefault();
       }
     });
