@@ -36,6 +36,9 @@
          この3色以外を画面に足さない。青と緑は世界観に存在しないので持たない */
       --bg: #06070C;        /* 地 */
       --panel: #120E1F;     /* 面（地をわずかに紫へ寄せる） */
+      /* 面の透過版。canvasに重なる操作ボタンにだけ使い、下の自機・地形・敵が
+         透けて見えるようにする。--panel と同じ色相なので筐体の質感は崩さない */
+      --panel-ghost: rgba(18, 14, 31, 0.5);
       --ink: #E8ECF5;       /* 文字（燐光の白） */
       --dim: #7C8BA6;       /* 減光した補助文字 */
       --gold: #E8C56A;      /* 二次: 枠・スコア・ランク。面に塗らない */
@@ -324,8 +327,17 @@
       height: 56px;
       border-radius: var(--radius);
       border: 2px solid var(--edge-hi);
-      background: var(--panel);
+      /* canvasの上に重なるので面を透過させる。自機は左下(初期x=130)に留まり
+         やすく、発射パッドの真下へ潜り込んで見えなくなるため。枠とベベルは
+         不透明のまま残るので、ボタンの輪郭と位置は変わらず読み取れる */
+      background: var(--panel-ghost);
       color: var(--ink);
+      /* 面を透かした分、背後を星や弾がよぎるとグリフが負ける瞬間がある。
+         ぼかし無しの1pxの縁取りで、背景が何色でも字が読める状態を保つ
+         (ベベルと同じくblurを使わないのでレトロの質感は崩さない) */
+      text-shadow:
+        1px 1px 0 var(--edge-lo), -1px -1px 0 var(--edge-lo),
+        1px -1px 0 var(--edge-lo), -1px 1px 0 var(--edge-lo);
       font-size: 20px;
       font-weight: 400;
       /* backdrop-filterは中級端末で15〜30%のFPS低下を招くため、
