@@ -3,6 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#06070C" />
+  <!-- ホーム画面に追加した場合、Safari独自のUIバーなしで全画面起動させる -->
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>SAKUYA SCRAMBLE ─ RESCUE 11 CNP</title>
   <!-- OGP / Twitter Card -->
   <meta property="og:type" content="website" />
@@ -97,6 +102,14 @@
     body.is-playing-lock {
       touch-action: none;
       overflow: hidden;
+    }
+    /* 全画面表示中はアドレスバー分の余白が要らないので、盤面をより大きく使う */
+    body.is-fullscreen {
+      padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+      gap: 8px;
+    }
+    body.is-fullscreen canvas {
+      max-height: 92vh;
     }
     .wrap {
       position: relative;
@@ -630,6 +643,7 @@
         <button id="touchBomb" class="touch-btn touch-bomb" type="button" aria-label="爆弾投下">💣</button>
         <button id="autoFireToggle" class="touch-btn auto-fire-toggle hold-toggle" type="button" aria-label="自動連射:オン(長押しでオフ)">🔫</button>
         <button id="muteToggle" class="touch-btn auto-fire-toggle hold-toggle on" type="button" aria-label="効果音:オン(長押しでオフ)">🔊</button>
+        <button id="fullscreenToggle" class="touch-btn auto-fire-toggle hold-toggle" type="button" aria-label="全画面表示:オフ(長押しでオン)" style="display: none;">⛶</button>
       </div>
       <div id="touchPad" class="touch-pad" aria-label="タッチコントローラー">
         <button id="touchUp" class="touch-btn touch-up" type="button" aria-label="上昇">▲</button>
@@ -953,6 +967,7 @@
     const touchDown = document.getElementById("touchDown");
     const autoFireToggle = document.getElementById("autoFireToggle");
     const muteToggle = document.getElementById("muteToggle");
+    const fullscreenToggle = document.getElementById("fullscreenToggle");
 
     // 十字4ボタンでは親指1本で斜め移動しながらXも押せないため、タッチデバイス
     // では既定でバルカンを自動連射し、Xボタンはレーザーのチャージ専用として
@@ -3857,6 +3872,10 @@
       // AudioContext はユーザー操作を経ないと鳴らない(特にiOS)。ジャイロ許可と
       // 同じく、ここが唯一の起こせる場所なので await より前に呼ぶ
       SFX.unlock();
+      // スマホでは自動で全画面化してアドレスバー分の画面を使い切る
+      // (対応端末のみ。iOS Safariのようにページ全体の全画面化に非対応の
+      // 端末では何も起きないので、失敗しても無視して進める)
+      if (isMobileDevice) requestFullscreen().then(updateFullscreenToggleUI);
       // first start: try to enable gyro automatically. after that, respect the toggle button's choice.
       if (!gyro.userChoiceMade) {
         await enableGyroIfAvailable();
@@ -4020,6 +4039,65 @@
     );
     updateMuteToggleUI();
 
+    // 全画面表示のオン/オフ。Fullscreen APIはユーザー操作を経ないと呼べない
+    // ため、スタートボタン押下時とこのトグルの2箇所から呼ぶ。iOS Safariは
+    // ページ全体の全画面化に対応していないため、非対応端末ではボタン自体を隠す
+    const fsEl = document.documentElement;
+    const supportsFullscreen = !!(
+      fsEl.requestFullscreen || fsEl.webkitRequestFullscreen
+    );
+    function requestFullscreen() {
+      const req = fsEl.requestFullscreen || fsEl.webkitRequestFullscreen;
+      if (!req) return Promise.resolve();
+      try {
+        const result = req.call(fsEl);
+        return result && result.catch ? result.catch(() => {}) : Promise.resolve();
+      } catch (e) {
+        return Promise.resolve();
+      }
+    }
+    function exitFullscreen() {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen;
+      if (!exit) return Promise.resolve();
+      try {
+        const result = exit.call(document);
+        return result && result.catch ? result.catch(() => {}) : Promise.resolve();
+      } catch (e) {
+        return Promise.resolve();
+      }
+    }
+    function isFullscreenActive() {
+      return !!(document.fullscreenElement || document.webkitFullscreenElement);
+    }
+    function updateFullscreenToggleUI() {
+      if (!fullscreenToggle) return;
+      const active = isFullscreenActive();
+      document.body.classList.toggle("is-fullscreen", active);
+      fullscreenToggle.classList.toggle("on", active);
+      fullscreenToggle.setAttribute(
+        "aria-label",
+        active ? "全画面表示:オン(長押しでオフ)" : "全画面表示:オフ(長押しでオン)"
+      );
+    }
+    if (fullscreenToggle) {
+      if (supportsFullscreen && isMobileDevice) {
+        fullscreenToggle.style.display = "";
+        bindHoldToggle(
+          fullscreenToggle,
+          () => {
+            if (isFullscreenActive()) {
+              exitFullscreen().then(updateFullscreenToggleUI);
+            } else {
+              requestFullscreen().then(updateFullscreenToggleUI);
+            }
+          },
+          () => updateGyroStatus("長押しで全画面表示を切り替えます")
+        );
+      }
+      document.addEventListener("fullscreenchange", updateFullscreenToggleUI);
+      document.addEventListener("webkitfullscreenchange", updateFullscreenToggleUI);
+    }
+
     // タッチ操作の途中でアプリがバックグラウンドに回った/タブが非表示になった
     // 場合、pointerup/pointercancel が届かないことがある(通知バナーやOSの
     // ジェスチャーに割り込まれる等)。その場合に方向入力が押しっぱなしのまま
@@ -4031,7 +4109,7 @@
       state.input.right = false;
       state.input.gyroX = 0;
       state.input.gyroY = 0;
-      [touchUp, touchLeft, touchRight, touchDown, touchFire, touchBomb, autoFireToggle, muteToggle, gyroToggleButton].forEach((btn) => {
+      [touchUp, touchLeft, touchRight, touchDown, touchFire, touchBomb, autoFireToggle, muteToggle, fullscreenToggle, gyroToggleButton].forEach((btn) => {
         if (!btn) return;
         btn.classList.remove("active");
         // 長押し中に割り込まれた場合、進捗と計測をここで確実に捨てる
