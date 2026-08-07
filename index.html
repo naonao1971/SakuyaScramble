@@ -2887,6 +2887,57 @@
         ctx.strokeStyle = style.edge;
         ctx.lineWidth = 1;
         ctx.strokeRect(base.x + 0.5, base.y + 0.5, base.w - 1, base.h - 1);
+
+        // 壁に接する側の装甲ライン。Bで通したパレットに乗せる
+        ctx.fillStyle = RETRO.gold;
+        if (base.side === "top") ctx.fillRect(base.x + 1, base.y, base.w - 2, 1);
+        else                     ctx.fillRect(base.x + 1, base.y + base.h - 1, base.w - 2, 1);
+
+        // ノグルズはトンネル側(露出している端)に寄せて、こちらを見ている顔にする
+        // 基地の最小幅は14pxで、比例させると潰れて眼鏡に見えない。
+        // Nounsのアートでもノグルズは頭の輪郭からはみ出すので、
+        // 小さいときは基地幅を超えて出してよい
+        const nogW = Math.max(base.w * 0.86, 17);
+        const nogH = nogW * 0.42;
+        const inset = 2;
+        const cy = base.side === "top"
+          ? base.y + base.h - nogH / 2 - inset
+          : base.y + nogH / 2 + inset;
+        drawNoggles(base.x + base.w / 2, cy, nogW, nogH, style.edge);
+      }
+    }
+
+    // Nouns のノグルズ。元が矩形だけで出来ているので、画像を貼らずに同じ形を
+    // 矩形で組める(基地の幅が14〜28pxで毎回変わるため、ドット絵を非整数倍で
+    // 縮小すると潰れる。比例して描けば常にくっきり出る)。
+    // フレーム色は baseStyles から引くので、赤青黄の3色が1本のコードで片付き、
+    // 後でパレットを触っても自動で追従する。
+    function drawNoggles(cx, cy, w, h, frame) {
+      const x = cx - w / 2;
+      const y = cy - h / 2;
+      const armW    = w * 0.16;
+      const lensW   = w * 0.38;
+      const bridgeW = w * 0.08;
+      const px = (v) => Math.max(1, Math.round(v)); // 極小でも1px下回らせない
+
+      ctx.fillStyle = frame;
+      // つる。左のレンズから伸びる短い棒
+      ctx.fillRect(x, y + h * 0.32, armW, px(h * 0.36));
+      // ブリッジ
+      ctx.fillRect(x + armW + lensW, y + h * 0.32, bridgeW, px(h * 0.36));
+
+      const lensX = [x + armW, x + armW + lensW + bridgeW];
+      const bw = px(h * 0.16);            // フレームの太さ
+      for (const lx of lensX) {
+        ctx.fillStyle = frame;
+        ctx.fillRect(lx, y, lensW, h);
+        // 白いレンズ面
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(lx + bw, y + bw, lensW - bw * 2, h - bw * 2);
+        // 黒い瞳。中央よりやや右に置くのがノグルズの顔
+        ctx.fillStyle = "#000000";
+        ctx.fillRect(lx + bw + (lensW - bw * 2) * 0.42, y + bw,
+                     px((lensW - bw * 2) * 0.38), h - bw * 2);
       }
     }
 
