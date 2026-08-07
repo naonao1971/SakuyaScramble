@@ -3553,12 +3553,12 @@
     window.addEventListener("orientationchange", updateOrientationOverlay);
     updateOrientationOverlay();
 
-    // ランキングパネルはタイトル画面とクリア画面の下段にのみ表示。
-    // クリア直後、TOP10入りしていれば一度だけ登録フォームを開く。
+    // ランキングパネルはタイトル画面・クリア画面・ゲームオーバー画面の下段に表示。
+    // クリア/ゲームオーバー直後、TOP10入りしていれば一度だけ登録フォームを開く。
     function updateLeaderboardVisibility() {
-      const shouldShow = !state.started || state.cleared;
+      const shouldShow = !state.started || state.cleared || state.gameOver;
       setLeaderboardVisible(shouldShow);
-      if (state.cleared && !scoreSubmitted) {
+      if ((state.cleared || state.gameOver) && !scoreSubmitted) {
         scoreSubmitted = true;
         if (qualifiesForTop10(state.score)) {
           showScoreRegisterForm();
