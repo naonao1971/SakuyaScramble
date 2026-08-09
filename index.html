@@ -1389,6 +1389,7 @@
       bombs: [],
       bases: [],
       explosions: [],
+      scorePops: [],
       scrollSpeed: 2.6,
       bonusText: "",
       bonusTimer: 0,
@@ -1614,12 +1615,14 @@
       state.bombs.length = 0;
       state.bases.length = 0;
       state.explosions.length = 0;
+      state.scorePops.length = 0;
       state.bonusText = "";
       state.bonusTimer = 0;
       state.effects.slowTimer = 0;
       state.effects.wideTimer = 0;
       state.ship.hp = 100;
       state.ship.contactFrames = 0;
+      state.ship.invincibleFrames = 0;
       // reset stage
       state.stage = 1;
       state.stageTimer = 0;
@@ -1847,10 +1850,11 @@
       }
     };
 
-    function grantBaseBonus(color) {
+    function grantBaseBonus(color, x, y) {
       if (color === "red") {
         state.score += 180;
         state.bonusText = "RED BONUS +180 SCORE";
+        spawnScorePop(x, y, "+180");
       } else if (color === "blue") {
         state.effects.slowTimer = 360;
         state.bonusText = "BLUE BONUS TUNNEL SLOW";
@@ -1858,9 +1862,37 @@
         state.score += 80;
         state.effects.wideTimer = 360;
         state.bonusText = "YELLOW BONUS WIDE GAP";
+        spawnScorePop(x, y, "+80");
       }
       state.bonusTimer = 140;
       SFX.bonus();
+    }
+
+    // 撃破位置にふわっと浮かんで消える得点テキスト。基地を倒した瞬間の
+    // 手応えを一目で伝えるための軽量な演出(ロジックには影響しない)
+    function spawnScorePop(x, y, text) {
+      state.scorePops.push({ x, y, text, life: 36, maxLife: 36 });
+    }
+
+    function updateScorePops() {
+      for (const p of state.scorePops) {
+        p.y -= 0.6;
+        p.life -= 1;
+      }
+      state.scorePops = state.scorePops.filter((p) => p.life > 0);
+    }
+
+    function drawScorePops() {
+      ctx.font = RETRO.font(10);
+      ctx.textAlign = "center";
+      for (const p of state.scorePops) {
+        const alpha = Math.max(0, p.life / p.maxLife);
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = RETRO.gold;
+        ctx.fillText(p.text, p.x, p.y);
+      }
+      ctx.globalAlpha = 1;
+      ctx.textAlign = "left";
     }
 
     function createExplosion(x, y, color) {
@@ -2009,6 +2041,8 @@
       state.ship.y += state.ship.vy;
       state.ship.x = Math.max(state.ship.radius + 8, Math.min(canvas.width - state.ship.radius - 8, state.ship.x));
       state.ship.y = Math.max(state.ship.radius, Math.min(canvas.height - state.ship.radius, state.ship.y));
+      // 被弾後の無敵時間をここで消化する(0になるまでダメージを無効化)
+      if (state.ship.invincibleFrames > 0) state.ship.invincibleFrames--;
     }
 
     // returns penetration amount in pixels (0 if no collision)
@@ -2051,7 +2085,7 @@
           if (circleRectHit(b.x, b.y, b.radius, base.x, base.y, base.w, base.h)) {
             hitBases.add(j);
             hitBullets.add(i);
-            grantBaseBonus(base.color);
+            grantBaseBonus(base.color, base.x + base.w * 0.5, base.y + base.h * 0.5);
             createExplosion(base.x + base.w * 0.5, base.y + base.h * 0.5, base.color);
             break;
           }
@@ -2489,6 +2523,12 @@
         if (fl > 0) {
           ctx.fillStyle = `rgba(255,255,255,${fl * 0.45})`;
           ctx.fillRect(x, y, s, s);
+
+          // 額の外側に広がるリングを重ねて、達成感をもう一段強める
+          const ringExpand = (1 - fl) * 10;
+          ctx.strokeStyle = `hsla(${ch.hue},90%,70%,${fl * 0.8})`;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(x - ringExpand, y - ringExpand, s + ringExpand * 2, s + ringExpand * 2);
         }
       }
 
@@ -2546,6 +2586,7 @@
       if (dist2 <= r * r) {
         // full heal
         state.ship.hp = 100;
+        state.ship.invincibleFrames = 0;
         state.bonusText = "HP FULL";
         SFX.bonus();
         state.bonusTimer = 140;
@@ -2638,10 +2679,11 @@
         if (dx * dx + dy * dy <= (b.radius + state.ship.radius) * (b.radius + state.ship.radius)) {
           toRemove.add(i);
           // allow one-time shield when laser is fully charged
-          if (!tryUseLaserShield()) {
+          if (!tryUseLaserShield() && !(state.ship.invincibleFrames > 0)) {
             // reset any in-progress laser charge when actually taking damage
             releaseLaserChargeOnHit();
             state.ship.hp = Math.max(0, state.ship.hp - 5);
+            state.ship.invincibleFrames = 18;
             state.portrait.hitTimer = 18;
             SFX.hit();
             createExplosion(b.x, b.y, "red");
@@ -2705,6 +2747,7 @@
       if (state.dying.active) {
         state.dying.timer++;
         updateExplosions();
+      updateScorePops();
         state.displayScore += (state.score - state.displayScore) * 0.18;
         if (state.dying.timer >= state.dying.duration) {
           state.dying.active = false;
@@ -2745,6 +2788,7 @@
           state.scrollSpeed = state.speed * 0.7 * eased;
           updateStars();
           updateExplosions();
+      updateScorePops();
           updateLaser();
           state.displayScore += (state.score - state.displayScore) * 0.18;
           if (p >= 1) {
@@ -2768,6 +2812,7 @@
           state.scrollSpeed = 0;
           updateStars();
           updateExplosions();
+      updateScorePops();
           state.displayScore += (state.score - state.displayScore) * 0.18;
           if (p >= 1) {
             state.fall.landing.active = false;
@@ -2794,6 +2839,7 @@
         updateBombs();
         updateRescues(true);
         updateExplosions();
+      updateScorePops();
         updateLaser();
         state.displayScore += (state.score - state.displayScore) * 0.18;
 
@@ -2803,9 +2849,10 @@
           state.ship.contactFrames++;
           if (state.ship.contactFrames >= CONTACT_FRAMES_THRESHOLD) {
             state.ship.contactFrames = 0;
-            if (!tryUseLaserShield()) {
+            if (!tryUseLaserShield() && !(state.ship.invincibleFrames > 0)) {
               releaseLaserChargeOnHit();
               state.ship.hp = Math.max(0, state.ship.hp - 5);
+              state.ship.invincibleFrames = 18;
             state.portrait.hitTimer = 18;
             SFX.hit();
               if (state.ship.hp <= 0) {
@@ -2897,6 +2944,7 @@
       updateBullets();
       updateBombs();
       updateExplosions();
+      updateScorePops();
       updateLaser();
       updateHpItems();
       updateRescues();
@@ -2911,10 +2959,11 @@
         state.ship.contactFrames++;
         if (state.ship.contactFrames >= CONTACT_FRAMES_THRESHOLD) {
           state.ship.contactFrames = 0;
-          if (!tryUseLaserShield()) {
+          if (!tryUseLaserShield() && !(state.ship.invincibleFrames > 0)) {
             // reset any in-progress laser charge when actually taking contact damage
             releaseLaserChargeOnHit();
             state.ship.hp = Math.max(0, state.ship.hp - 5);
+            state.ship.invincibleFrames = 18;
             state.portrait.hitTimer = 18;
             SFX.hit();
             if (state.ship.hp <= 0) {
@@ -3063,6 +3112,10 @@
       ctx.save();
       ctx.translate(x, y);
       ctx.rotate(state.ship.vy * 0.05 + (state.fall.shipAngle || 0));
+      // 被弾後の無敵時間は機体を明滅させて、今は当たらないことを分かりやすくする
+      if (state.ship.invincibleFrames > 0 && Math.floor(state.frame / 3) % 2 === 0) {
+        ctx.globalAlpha = 0.35;
+      }
 
       // 咲耶の機体は「漆黒の船体・金のライン・マゼンタの発光」(キービジュアル)。
       // マゼンタは徴であって地ではないので、全身を塗らずに輪郭光として使う。
@@ -3656,6 +3709,7 @@
       drawBullets();
       drawBombs();
       drawExplosions();
+      drawScorePops();
       drawShip();
       drawLaser();
       drawHud();
@@ -4270,7 +4324,7 @@
         updateGyroStatus("iPhoneは右下の十字キーで移動、右のXでバルカン発射できます");
       }
     } else {
-      updateGyroStatus("PCはキーボード、スマホは右下コントローラーで移動と発射ができます");
+      updateGyroStatus("PCはキーボード、スマホは右下コントローラーで移動と発射ができます（Pキーで一時停止）");
     }
 
     // reduced-motion なら明滅を止める（走査線は静止画なのでそのまま残す）
