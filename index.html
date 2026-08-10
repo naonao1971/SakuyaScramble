@@ -1572,7 +1572,12 @@
           timer: 0,
           duration: 90,
           progress: 0,
-          timeLimit: 240,       // 4秒(60fps)以内に着地しないとMISS
+          // approach: 操作を渡す前の演出フェーズ。洞窟が広い最終チャンバーへ開けていき、
+          // 敵弾は鳴りを潜める。ここで「ステージが変わった」感を出してから操作を渡す
+          approachActive: false,
+          approachTimer: 0,
+          approachDuration: 210, // 3.5秒(60fps)
+          timeLimit: 300,       // 5秒(60fps)以内に着地しないとMISS(演出分の余裕を含め少し延長)
           targetX: 0,
           resolved: false,
           settleTimer: 0,
@@ -2969,6 +2974,30 @@
           const L = state.fall.landing;
           const groundY = canvas.height - 70;
 
+          if (L.approachActive) {
+            // 演出フェーズ: まだ操作を渡さず、洞窟が広い最終チャンバーへ開けていく。
+            // スクロールはゆっくり続け、「奥へ進んでいる」感を切らさない
+            L.approachTimer++;
+            state.scrollSpeed = state.speed * 0.35;
+            updateFallRows();
+            const targetGap = 300; // ドッキング用の広い最終空間
+            fallTunnel.gap += (targetGap - fallTunnel.gap) * 0.045;
+            // 機体はまだ自動操縦。徐々にシャフト中央へ寄せて、着地チャレンジの開始位置を整える
+            state.ship.x += (fallTunnel.center - state.ship.x) * 0.03;
+            state.ship.vx = 0;
+            state.ship.vy = 0;
+
+            if (L.approachTimer >= L.approachDuration) {
+              L.approachActive = false;
+              const row = state.fall.rows[Math.floor(state.ship.y)] || state.fall.rows[state.fall.rows.length - 1];
+              const lo = row ? row.left + 40 : 70;
+              const hi = row ? row.right - 40 : canvas.width - 70;
+              L.targetX = Math.max(lo, Math.min(hi, fallTunnel.center));
+              showCaption("ドッキングポイントへ着陸せよ！", 90);
+            }
+            return;
+          }
+
           if (!L.resolved) {
             L.timer++;
 
@@ -3097,15 +3126,15 @@
         if (state.fall.timer >= state.fall.duration) {
           state.fall.landing.active = true;
           state.fall.landing.timer = 0;
+          state.fall.landing.approachActive = true;
+          state.fall.landing.approachTimer = 0;
           state.fall.landing.resolved = false;
           state.fall.landing.settleTimer = 0;
           state.fall.landing.rank = "";
           state.fall.landing.bonus = 0;
-          const row = state.fall.rows[Math.floor(state.ship.y)] || state.fall.rows[state.fall.rows.length - 1];
-          const lo = row ? row.left + 40 : 70;
-          const hi = row ? row.right - 40 : canvas.width - 70;
-          state.fall.landing.targetX = Math.max(lo, Math.min(hi, fallTunnel.center));
-          showCaption("着陸ポイントへ着陸せよ！", 90);
+          // 敵弾は鳴りを潜める。approach演出の間は新規スポーンも止まる(updateArenaBulletsを呼ばないため)
+          state.arena.bullets.length = 0;
+          showCaption("洞窟が開ける……最終着陸シーケンス", 120);
         }
         return;
       }
@@ -3987,7 +4016,7 @@
         drawTunnel();
       } else if (state.fall.active && state.fall.landing.active) {
         drawFallTunnel();
-        if (!state.fall.landing.resolved) {
+        if (!state.fall.landing.approachActive && !state.fall.landing.resolved) {
           drawLandingMarker(state.fall.landing.targetX, canvas.height - 70);
         }
         drawFallLanding(state.fall.landing.progress);
