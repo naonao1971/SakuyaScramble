@@ -1339,11 +1339,12 @@
           }
         },
         // 音付きで再生し、拒否されたら無音で映像だけ出して音はジングルで補う
-        // (iOSの低電力モード等で起こりうる)
+        // (iOSの低電力モード等で起こりうる)。
+        // 効果音オフの間は動画の音も鳴らさない
         play() {
           if (!el || failed || !el.src) { playing = false; fallbackSfx(); return; }
           try { el.currentTime = 0; } catch (e) { /* 未読み込みなら無視 */ }
-          el.muted = false;
+          el.muted = SFX.muted;
           playing = true;
           const p = el.play();
           if (p && p.catch) {
@@ -1367,17 +1368,34 @@
         // 1回きりの演出は、間に合っていないなら挟まず従来表示にしたいので使う
         canPlayThrough() { return !!el && !failed && el.readyState >= 3 && el.videoWidth > 0; },
         isPlaying() { return playing; },
+        // 再生の途中で効果音トグルが切り替わったときに追従させる
+        syncMuted() { if (el) el.muted = SFX.muted; },
       };
     }
 
+    // どちらも1回だけ流し、流し終えたら従来の表示(CLEARは静止画、
+    // GAME OVERは文字)に戻る
     const clearVideo = createCutsceneVideo(
-      document.getElementById("clearVideo"), "clear.mp4", true, () => SFX.clear());
+      document.getElementById("clearVideo"), "clear.mp4", false, () => SFX.clear());
     const gameOverVideo = createCutsceneVideo(
       document.getElementById("gameOverVideo"), "gameover.mp4", false, () => SFX.gameOver());
 
     function unlockCutsceneVideos() {
       clearVideo.unlock();
       gameOverVideo.unlock();
+    }
+
+    // 効果音オフの間は動画の音も鳴らさない。再生中に切り替えられた場合も追従させる
+    function syncCutsceneVideoMute() {
+      clearVideo.syncMuted();
+      gameOverVideo.syncMuted();
+    }
+
+    // CLEAR演出: 動画を1回だけ流し、流し終えたら元の静止画へ戻す。
+    // 読み込みが間に合っていなければ動画は挟まず、従来どおり静止画を出す
+    function beginClearCutscene() {
+      if (!clearVideo.canPlayThrough()) { SFX.clear(); return; }
+      clearVideo.play();
     }
 
     // ゲームオーバー演出: 動画を1回だけ流し、終わったら従来のGAME OVER表示に戻る。
@@ -3076,7 +3094,7 @@
             state.running = false;
             state.cleared = true;
             // 音は動画側を使う。再生できなかった場合だけ内部でSFX.clear()に切り替わる
-            clearVideo.play();
+            beginClearCutscene();
             // クリアボーナス：残りHP x10 ポイント加算
             state.score += Math.max(0, state.ship.hp) * 10;
           }
@@ -3637,7 +3655,8 @@
         // 動画が再生できていればそれを、無理なら従来の静止画を同じ枠で描く。
         // drawImage()はHTMLVideoElementも画像と同じ引数で受け取れ、render()は
         // 毎フレーム走るのでコマは自然に更新される
-        const useVideo = clearVideo.hasFrame();
+        // 再生中だけ動画を描く。1回流し終えるとisPlaying()がfalseになり静止画へ戻る
+        const useVideo = clearVideo.isPlaying() && clearVideo.hasFrame();
         const media = useVideo ? clearVideo.el
                     : ((clearImg.complete && clearImg.naturalWidth) ? clearImg : null);
         if (media) {
@@ -4549,6 +4568,7 @@
       () => {
         SFX.unlock(); // オンに戻した直後から鳴るように、ここでも起こしておく
         SFX.setMuted(!SFX.muted);
+        syncCutsceneVideoMute(); // 再生中の演出動画にも即座に反映する
         updateMuteToggleUI();
         updateGyroStatus(SFX.muted ? "効果音: オフ" : "効果音: オン");
         if (!SFX.muted) SFX.pickup(); // 音量の確認用に一発鳴らす
