@@ -1600,7 +1600,9 @@
           hoverActive: false,
           hoverTimer: 0,
           hoverDuration: 45, // 0.75秒(60fps)
-          timeLimit: 300,       // 5秒(60fps)以内に着地しないとMISS(演出分の余裕を含め少し延長)
+          // ブレーキ噴射で減速/浮上できる猶予。この時間を超えると噴射が
+          // 止まり、以降は重力のみの自由落下で強制的に決着させる
+          timeLimit: 1800, // 30秒(60fps)
           targetX: 0,
           resolved: false,
           settleTimer: 0,
@@ -3017,7 +3019,8 @@
               const row = state.fall.rows[Math.floor(state.ship.y)] || state.fall.rows[state.fall.rows.length - 1];
               const lo = row ? row.left + 40 : 70;
               const hi = row ? row.right - 40 : canvas.width - 70;
-              L.targetX = Math.max(lo, Math.min(hi, fallTunnel.center));
+              // 毎回シャフト中央固定だと狙いが読めてしまうので、着地目標は左右ランダムにする
+              L.targetX = lo + Math.random() * (hi - lo);
               // すぐには落とさず、いったん完全静止させて狙いを整える猶予を挟む
               L.hoverActive = true;
               L.hoverTimer = 0;
@@ -3068,13 +3071,19 @@
             // 縦方向: 静止フェーズを終えると重力で自然に落下が始まる(常に加速)。
             // Xキーでブレーキ噴射をかけて減速し、着地の瞬間に速度を殺せるかが腕の見せ所。
             // ブレーキ加速度(0.09)は重力(0.035)より強いので、当て続ければ逆に浮上もできる
-            // (下げすぎたときの立て直し用。抜けば重力がまた効いてくる)
+            // (下げすぎたときの立て直し用。抜けば重力がまた効いてくる)。
+            // ただし燃料は無限ではなく、timeLimit(30秒)を超えると噴射が止まり、
+            // 以降は純粋な自由落下のみで強制的に決着させる(詰み防止)
             const gravity = 0.035;
             const brakeAccel = 0.09;
             const maxFallSpeed = 2.2;
             const maxBrakeSpeed = -0.6;
+            const thrustAvailable = L.timer < L.timeLimit;
+            if (L.timer === L.timeLimit) {
+              showCaption("噴射停止！自由落下で着地せよ", 90);
+            }
             state.ship.vy = Math.min(maxFallSpeed, state.ship.vy + gravity);
-            if (state.laser.charging) {
+            if (state.laser.charging && thrustAvailable) {
               state.ship.vy = Math.max(maxBrakeSpeed, state.ship.vy - brakeAccel);
             }
             state.ship.y += state.ship.vy;
@@ -3082,42 +3091,28 @@
             // 静止フェーズの高度より上には行かせない(それでも十分に立て直せる余地がある)
             state.ship.y = Math.max(40, state.ship.y);
 
-            const timedOut = L.timer >= L.timeLimit;
             const touchedGround = state.ship.y >= groundY;
 
-            if (touchedGround || timedOut) {
+            if (touchedGround) {
               L.resolved = true;
               state.ship.vx = 0;
-
-              if (timedOut && !touchedGround) {
-                // MISS: 制限時間切れ。ボーナス無しでそのまま着地させる(詰み防止)
-                L.rank = "MISS";
-                L.bonus = 0;
-                state.ship.y = groundY;
+              state.ship.y = Math.min(state.ship.y, groundY);
+              const errorX = Math.abs(state.ship.x - L.targetX);
+              const impactSpeed = state.ship.vy;
+              if (errorX <= 5 && impactSpeed <= 0.8) {
+                L.rank = "PERFECT"; L.bonus = 500;
+              } else if (errorX <= 15 && impactSpeed <= 1.5) {
+                L.rank = "GREAT"; L.bonus = 300;
+              } else if (errorX <= 30) {
+                L.rank = "GOOD"; L.bonus = 150;
               } else {
-                state.ship.y = Math.min(state.ship.y, groundY);
-                const errorX = Math.abs(state.ship.x - L.targetX);
-                const impactSpeed = state.ship.vy;
-                if (errorX <= 5 && impactSpeed <= 0.8) {
-                  L.rank = "PERFECT"; L.bonus = 500;
-                } else if (errorX <= 15 && impactSpeed <= 1.5) {
-                  L.rank = "GREAT"; L.bonus = 300;
-                } else if (errorX <= 30) {
-                  L.rank = "GOOD"; L.bonus = 150;
-                } else {
-                  L.rank = "OK"; L.bonus = 50;
-                }
+                L.rank = "OK"; L.bonus = 50;
               }
 
               state.ship.vy = 0;
               state.score += L.bonus;
-              if (L.bonus > 0) {
-                spawnScorePop(state.ship.x, state.ship.y - 20, L.rank + " +" + L.bonus);
-                state.bonusText = L.rank + "! +" + L.bonus + " SCORE";
-              } else {
-                spawnScorePop(state.ship.x, state.ship.y - 20, L.rank);
-                state.bonusText = "MISS...着陸失敗";
-              }
+              spawnScorePop(state.ship.x, state.ship.y - 20, L.rank + " +" + L.bonus);
+              state.bonusText = L.rank + "! +" + L.bonus + " SCORE";
               state.bonusTimer = 140;
               SFX.bonus();
             }
