@@ -1565,8 +1565,21 @@
         introDuration: 90,
         introStartY: 0,
         shipAngle: 0,
-        // landing: auto-fly to the floor once the descent timer ends, then CLEAR
-        landing: { active: false, timer: 0, duration: 90, progress: 0 }
+        // landing: プレイヤー操作の着陸チャレンジ。バルカン停止・スクロール停止のうえで
+        // Xキー(ブースター)で降下速度を、左右で位置を合わせて着陸マーカーを狙う
+        landing: {
+          active: false,
+          timer: 0,
+          duration: 90,
+          progress: 0,
+          timeLimit: 240,       // 4秒(60fps)以内に着地しないとMISS
+          targetX: 0,
+          resolved: false,
+          settleTimer: 0,
+          settleDuration: 40,
+          rank: "",
+          bonus: 0
+        }
       },
       cleared: false,
       // pilot portrait: brief "被弾" flash timer shown right after taking damage
@@ -2297,17 +2310,48 @@
       state.hpItems.push(item);
     }
 
-    function updateHpItems() {
+    // パート3(落下)用のHP回復アイテム。spawnRescueFall()と同じく、
+    // 画面下から湧いてシャフト幅に収まるx位置を取り、上へ流れる
+    function spawnHpItemFall() {
+      const row = state.fall.rows[canvas.height - 1];
+      let baseX = canvas.width / 2;
+      if (row) {
+        const lo = row.left + 24;
+        const hi = row.right - 24;
+        baseX = hi > lo ? lo + Math.random() * (hi - lo) : (row.left + row.right) / 2;
+      }
+      const phase = Math.random() * Math.PI * 2;
+      state.hpItems.push({
+        mode: "v",
+        x: baseX,
+        baseX,
+        y: canvas.height + 24,
+        radius: 12,
+        vx: 0.6 + Math.random() * 0.8,
+        phase,
+        bobAmp: 6 + Math.random() * 6
+      });
+    }
+
+    function updateHpItems(fall) {
       // occasional spawn (不定期)
       const HP_SPAWN_CHANCE = 0.00064; // reduced to ~1/5 the previous rate
-      if (Math.random() < HP_SPAWN_CHANCE) spawnHpItem();
+      if (Math.random() < HP_SPAWN_CHANCE) {
+        if (fall) spawnHpItemFall(); else spawnHpItem();
+      }
 
       const collected = new Set();
       for (let i = 0; i < state.hpItems.length; i++) {
         const it = state.hpItems[i];
-        it.x -= state.scrollSpeed * 0.9 + it.vx;
-        // bobbing using global frame so movement is smooth
-        it.y = it.baseY + Math.sin(state.frame * 0.06 + it.phase) * it.bobAmp;
+        if (it.mode === "v") {
+          // 落下シャフト用: 下から上へ流れ、左右にゆらぐ
+          it.y -= state.scrollSpeed * 0.9 + it.vx;
+          it.x = it.baseX + Math.sin(state.frame * 0.06 + it.phase) * it.bobAmp;
+        } else {
+          it.x -= state.scrollSpeed * 0.9 + it.vx;
+          // bobbing using global frame so movement is smooth
+          it.y = it.baseY + Math.sin(state.frame * 0.06 + it.phase) * it.bobAmp;
+        }
 
         // collision with ship
         const dx = it.x - state.ship.x;
@@ -2842,6 +2886,7 @@
     // stopLaserCharge)とは別経路でfireVulcan()を呼ぶだけに留める
     function updateAutoFire() {
       if (!autoFireEnabled || !state.running || state.dying.active) return;
+      if (state.fall.active && state.fall.landing.active) return; // 着陸チャレンジ中はバルカン停止
       if (state.laser.charging || state.laser.beam) return;
       autoFireTimer++;
       if (autoFireTimer < AUTO_FIRE_INTERVAL) return;
@@ -2912,23 +2957,91 @@
           return;
         }
 
-        // landing: auto-fly to the floor and settle down, then show CLEAR
+        // landing: プレイヤー操作の着陸チャレンジ。バルカン停止・スクロール停止のうえで
+        // Xキー(ブースター)で降下、左右で位置合わせして着陸マーカーを狙う
         if (state.fall.landing.active) {
-          state.fall.landing.timer++;
-          const p = Math.min(1, state.fall.landing.timer / state.fall.landing.duration);
-          state.fall.landing.progress = p;
-          const targetX = canvas.width / 2;
-          const targetY = canvas.height - 70;
-          state.ship.x += (targetX - state.ship.x) * 0.07;
-          state.ship.y += (targetY - state.ship.y) * 0.07;
-          state.ship.vx = 0;
-          state.ship.vy = 0;
           state.scrollSpeed = 0;
           updateStars();
           updateExplosions();
       updateScorePops();
           state.displayScore += (state.score - state.displayScore) * 0.18;
-          if (p >= 1) {
+
+          const L = state.fall.landing;
+          const groundY = canvas.height - 70;
+
+          if (!L.resolved) {
+            L.timer++;
+
+            // 横方向: 通常飛行と同じ操作感で、左右キー(ジャイロ含む)のみ反映
+            const horizontalThrust = 0.28;
+            const drag = 0.985;
+            if (state.input.left) state.ship.vx -= horizontalThrust;
+            if (state.input.right) state.ship.vx += horizontalThrust;
+            state.ship.vx += horizontalThrust * gyro.sensitivity * state.input.gyroX;
+            state.ship.vx *= drag;
+            state.ship.x += state.ship.vx;
+            const row = state.fall.rows[Math.floor(state.ship.y)] || state.fall.rows[state.fall.rows.length - 1];
+            if (row) {
+              state.ship.x = Math.max(row.left + state.ship.radius + 4, Math.min(row.right - state.ship.radius - 4, state.ship.x));
+            }
+
+            // 縦方向: Xキーを押している間だけブースターが点灯してゆっくり降下。
+            // 離すとその高度でホバリング(自然落下はしない=じっくり狙いを定め直せる)
+            const descendAccel = 0.045;
+            const maxDescendSpeed = 1.6;
+            if (state.laser.charging) {
+              state.ship.vy = Math.min(maxDescendSpeed, state.ship.vy + descendAccel);
+            } else {
+              state.ship.vy *= 0.85;
+            }
+            state.ship.y += state.ship.vy;
+
+            const timedOut = L.timer >= L.timeLimit;
+            const touchedGround = state.ship.y >= groundY;
+
+            if (touchedGround || timedOut) {
+              L.resolved = true;
+              state.ship.vx = 0;
+
+              if (timedOut && !touchedGround) {
+                // MISS: 制限時間切れ。ボーナス無しでそのまま着地させる(詰み防止)
+                L.rank = "MISS";
+                L.bonus = 0;
+                state.ship.y = groundY;
+              } else {
+                state.ship.y = Math.min(state.ship.y, groundY);
+                const errorX = Math.abs(state.ship.x - L.targetX);
+                const impactSpeed = state.ship.vy;
+                if (errorX <= 5 && impactSpeed <= 0.8) {
+                  L.rank = "PERFECT"; L.bonus = 500;
+                } else if (errorX <= 15 && impactSpeed <= 1.5) {
+                  L.rank = "GREAT"; L.bonus = 300;
+                } else if (errorX <= 30) {
+                  L.rank = "GOOD"; L.bonus = 150;
+                } else {
+                  L.rank = "OK"; L.bonus = 50;
+                }
+              }
+
+              state.ship.vy = 0;
+              state.score += L.bonus;
+              if (L.bonus > 0) {
+                spawnScorePop(state.ship.x, state.ship.y - 20, L.rank + " +" + L.bonus);
+                state.bonusText = L.rank + "! +" + L.bonus + " SCORE";
+              } else {
+                spawnScorePop(state.ship.x, state.ship.y - 20, L.rank);
+                state.bonusText = "MISS...着陸失敗";
+              }
+              state.bonusTimer = 140;
+              SFX.bonus();
+            }
+            return;
+          }
+
+          // resolved: ランク表示を読ませるための小休止のあと、CLEARへ
+          state.fall.landing.progress = L.settleTimer / L.settleDuration;
+          L.settleTimer++;
+          if (L.settleTimer >= L.settleDuration) {
             state.fall.landing.active = false;
             state.fall.active = false;
             state.running = false;
@@ -2953,6 +3066,7 @@
         updateBullets();
         updateBombs();
         updateRescues(true);
+        updateHpItems(true);
         updateExplosions();
       updateScorePops();
         updateLaser();
@@ -2983,6 +3097,15 @@
         if (state.fall.timer >= state.fall.duration) {
           state.fall.landing.active = true;
           state.fall.landing.timer = 0;
+          state.fall.landing.resolved = false;
+          state.fall.landing.settleTimer = 0;
+          state.fall.landing.rank = "";
+          state.fall.landing.bonus = 0;
+          const row = state.fall.rows[Math.floor(state.ship.y)] || state.fall.rows[state.fall.rows.length - 1];
+          const lo = row ? row.left + 40 : 70;
+          const hi = row ? row.right - 40 : canvas.width - 70;
+          state.fall.landing.targetX = Math.max(lo, Math.min(hi, fallTunnel.center));
+          showCaption("着陸ポイントへ着陸せよ！", 90);
         }
         return;
       }
@@ -3219,11 +3342,37 @@
       ctx.fillRect(0, canvas.height - groundH - 2, canvas.width, 2);
     }
 
+    // 着陸チャレンジ中の的。GOOD/GREAT/PERFECTの3段リングを床に描き、
+    // 目標地点(fallTunnel.centerで決めたtargetX)を視覚化する
+    function drawLandingMarker(x, groundY) {
+      ctx.save();
+      const rings = [
+        { r: 34, color: "rgba(232,197,106,0.4)" },
+        { r: 20, color: "rgba(255,214,120,0.6)" },
+        { r: 9,  color: "rgba(255,255,255,0.9)" }
+      ];
+      for (const ring of rings) {
+        ctx.beginPath();
+        ctx.strokeStyle = ring.color;
+        ctx.lineWidth = 2;
+        ctx.ellipse(x, groundY - 3, ring.r, ring.r * 0.32, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      // 目印の縦ガイド線。奥行きのある的だと分かりやすくする
+      ctx.strokeStyle = "rgba(255,255,255,0.25)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, groundY - 60);
+      ctx.lineTo(x, groundY);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     function drawShip() {
       if (state.dying.active) return; // ship is gone — the explosion particles are the visual now
       const { x, y, radius } = state.ship;
       // holding X during the fall flares the under-ship thruster to brake the descent
-      const boosting = state.fall.active && !state.fall.introActive && !state.fall.landing.active && state.laser.charging;
+      const boosting = state.fall.active && !state.fall.introActive && state.laser.charging;
       ctx.save();
       ctx.translate(x, y);
       ctx.rotate(state.ship.vy * 0.05 + (state.fall.shipAngle || 0));
@@ -3838,6 +3987,9 @@
         drawTunnel();
       } else if (state.fall.active && state.fall.landing.active) {
         drawFallTunnel();
+        if (!state.fall.landing.resolved) {
+          drawLandingMarker(state.fall.landing.targetX, canvas.height - 70);
+        }
         drawFallLanding(state.fall.landing.progress);
       } else if (state.fall.active) {
         drawFallTunnel();
