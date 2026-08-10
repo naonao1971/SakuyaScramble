@@ -1595,6 +1595,11 @@
           approachActive: false,
           approachTimer: 0,
           approachDuration: 210, // 3.5秒(60fps)
+          // hover: 重力落下を始める前に、いったん完全静止して狙いを整える猶予。
+          // ここではタイムリミットを消費しない
+          hoverActive: false,
+          hoverTimer: 0,
+          hoverDuration: 45, // 0.75秒(60fps)
           timeLimit: 300,       // 5秒(60fps)以内に着地しないとMISS(演出分の余裕を含め少し延長)
           targetX: 0,
           resolved: false,
@@ -1807,6 +1812,8 @@
       state.fall.landing.active = false;
       state.fall.landing.timer = 0;
       state.fall.landing.progress = 0;
+      state.fall.landing.hoverActive = false;
+      state.fall.landing.hoverTimer = 0;
       state.cleared = false;
       state.portrait.hitTimer = 0;
       state.dying.active = false;
@@ -3011,7 +3018,33 @@
               const lo = row ? row.left + 40 : 70;
               const hi = row ? row.right - 40 : canvas.width - 70;
               L.targetX = Math.max(lo, Math.min(hi, fallTunnel.center));
+              // すぐには落とさず、いったん完全静止させて狙いを整える猶予を挟む
+              L.hoverActive = true;
+              L.hoverTimer = 0;
               showCaption("ドッキングポイントへ着陸せよ！", 90);
+            }
+            return;
+          }
+
+          if (L.hoverActive) {
+            // 静止フェーズ: 重力はまだかからず、位置合わせだけできる
+            L.hoverTimer++;
+            const horizontalThrust = 0.28;
+            const drag = 0.985;
+            if (state.input.left) state.ship.vx -= horizontalThrust;
+            if (state.input.right) state.ship.vx += horizontalThrust;
+            state.ship.vx += horizontalThrust * gyro.sensitivity * state.input.gyroX;
+            state.ship.vx *= drag;
+            state.ship.x += state.ship.vx;
+            const row = state.fall.rows[Math.floor(state.ship.y)] || state.fall.rows[state.fall.rows.length - 1];
+            if (row) {
+              state.ship.x = Math.max(row.left + state.ship.radius + 4, Math.min(row.right - state.ship.radius - 4, state.ship.x));
+            }
+            state.ship.vy = 0; // 完全静止
+
+            if (L.hoverTimer >= L.hoverDuration) {
+              L.hoverActive = false;
+              showCaption("自由落下開始！Xでブレーキ噴射", 90);
             }
             return;
           }
@@ -3032,16 +3065,22 @@
               state.ship.x = Math.max(row.left + state.ship.radius + 4, Math.min(row.right - state.ship.radius - 4, state.ship.x));
             }
 
-            // 縦方向: Xキーを押している間だけブースターが点灯してゆっくり降下。
-            // 離すとその高度でホバリング(自然落下はしない=じっくり狙いを定め直せる)
-            const descendAccel = 0.045;
-            const maxDescendSpeed = 1.6;
+            // 縦方向: 静止フェーズを終えると重力で自然に落下が始まる(常に加速)。
+            // Xキーでブレーキ噴射をかけて減速し、着地の瞬間に速度を殺せるかが腕の見せ所。
+            // ブレーキ加速度(0.09)は重力(0.035)より強いので、当て続ければ逆に浮上もできる
+            // (下げすぎたときの立て直し用。抜けば重力がまた効いてくる)
+            const gravity = 0.035;
+            const brakeAccel = 0.09;
+            const maxFallSpeed = 2.2;
+            const maxBrakeSpeed = -0.6;
+            state.ship.vy = Math.min(maxFallSpeed, state.ship.vy + gravity);
             if (state.laser.charging) {
-              state.ship.vy = Math.min(maxDescendSpeed, state.ship.vy + descendAccel);
-            } else {
-              state.ship.vy *= 0.85;
+              state.ship.vy = Math.max(maxBrakeSpeed, state.ship.vy - brakeAccel);
             }
             state.ship.y += state.ship.vy;
+            // ブレーキを噴かし続けると上昇し続けられてしまうので、画面外へ抜けないよう
+            // 静止フェーズの高度より上には行かせない(それでも十分に立て直せる余地がある)
+            state.ship.y = Math.max(40, state.ship.y);
 
             const timedOut = L.timer >= L.timeLimit;
             const touchedGround = state.ship.y >= groundY;
@@ -3146,6 +3185,8 @@
           state.fall.landing.timer = 0;
           state.fall.landing.approachActive = true;
           state.fall.landing.approachTimer = 0;
+          state.fall.landing.hoverActive = false;
+          state.fall.landing.hoverTimer = 0;
           state.fall.landing.resolved = false;
           state.fall.landing.settleTimer = 0;
           state.fall.landing.rank = "";
