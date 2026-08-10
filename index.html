@@ -442,6 +442,17 @@
     .pause-button.paused {
       opacity: 0.95;
     }
+    /* canvasへ描くための供給元。visibility:hidden や display:none だと
+       コマの更新が止まる環境があるので、1pxに畳んで不可視にする */
+    .clear-video {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+      left: 0;
+      top: 0;
+    }
     .controls-bottom {
       /* fire-pad と同じ position: fixed に統一し、画面サイズ/向きが変わっても
          2つのボタン群の相対位置がズレないようにする */
@@ -688,6 +699,11 @@
       <p>横向きにしてね ⌐◨-◨</p>
     </div>
     <button id="pauseButton" class="pause-button" type="button" aria-label="一時停止" style="display: none;">⏸</button>
+    <!-- クリア画面の映像。canvasへ drawImage() で描くだけなので画面には出さないが、
+         display:none にすると描画が止まる環境があるため視覚的に隠すに留める。
+         preload="none": クリアまで到達しないプレイヤーに通信を強いないため、
+         実際の読み込みはスタート押下時(unlockClearVideo)まで遅らせる -->
+    <video id="clearVideo" class="clear-video" playsinline preload="none" aria-hidden="true"></video>
     <div id="gyroStatus" class="status"></div>
     <div class="controls-bottom" aria-hidden="false">
       <div id="firePad" class="fire-pad" aria-label="発射ボタン">
@@ -1288,9 +1304,64 @@
       return { x: s.x, y: s.y + (s.h - h) / 2, w: s.w, h };
     });
 
-    // victory illustration shown on the CLEAR screen
+    // victory illustration shown on the CLEAR screen.
+    // 動画(clearVideo)が再生できたときはそちらを優先し、この静止画は
+    // 読み込み前・再生失敗時のフォールバックとして残す
     const clearImg = new Image();
     clearImg.src = "image02png.png";
+
+    // CLEAR画面の映像。音は動画側のものを使うため、再生できた場合は
+    // クリアのジングル(SFX.clear)を鳴らさない
+    const CLEAR_VIDEO_SRC = "clear.mp4";
+    const clearVideo = document.getElementById("clearVideo");
+    let clearVideoFailed = false;
+    if (clearVideo) {
+      clearVideo.loop = true;
+      clearVideo.addEventListener("error", () => { clearVideoFailed = true; });
+    }
+
+    // iOSは「ユーザー操作を起点にしたplay()」を経ていない動画の音声再生を拒む。
+    // SFX.unlock()と同じく、スタートボタンのタップが唯一の解錠点なので、
+    // そこで一度再生→即停止して要素を解錠しておく(同時に読み込みも始まる)
+    let clearVideoUnlocked = false;
+    function unlockClearVideo() {
+      if (!clearVideo || clearVideoUnlocked) return;
+      clearVideoUnlocked = true;
+      if (!clearVideo.src) clearVideo.src = CLEAR_VIDEO_SRC;
+      clearVideo.muted = true; // 解錠のための再生は無音で通す
+      const p = clearVideo.play();
+      if (p && p.then) {
+        p.then(() => { clearVideo.pause(); clearVideo.currentTime = 0; }).catch(() => {});
+      }
+    }
+
+    // CLEAR到達時に呼ぶ。音付きで再生し、拒否されたら無音で映像だけ出して
+    // 音はゲーム内のジングルで補う(iOSの低電力モード等で起こりうる)
+    function startClearVideo() {
+      if (!clearVideo || clearVideoFailed || !clearVideo.src) { SFX.clear(); return; }
+      try { clearVideo.currentTime = 0; } catch (e) { /* 未読み込みなら無視 */ }
+      clearVideo.muted = false;
+      const p = clearVideo.play();
+      if (p && p.catch) {
+        p.catch(() => {
+          clearVideo.muted = true;
+          const q = clearVideo.play();
+          if (q && q.catch) q.catch(() => { clearVideoFailed = true; });
+          SFX.clear();
+        });
+      }
+    }
+
+    function stopClearVideo() {
+      if (!clearVideo) return;
+      clearVideo.pause();
+      try { clearVideo.currentTime = 0; } catch (e) { /* 未読み込みなら無視 */ }
+    }
+
+    // 描画に使えるコマを持っているか(HAVE_CURRENT_DATA以上)
+    function clearVideoHasFrame() {
+      return !!clearVideo && !clearVideoFailed && clearVideo.readyState >= 2 && clearVideo.videoWidth > 0;
+    }
 
     // title illustration shown on the start screen, before the player presses スタート
     const titleImg = new Image();
@@ -1603,6 +1674,7 @@
       pauseButton.setAttribute("aria-label", "一時停止");
       state.score = 0;
       state.speed = 2.6;
+      stopClearVideo(); // 再スタート時にCLEAR映像を止めて先頭へ戻す
       autoFireTimer = 0;
       scoreSubmitted = false;
       hideScoreRegisterForm();
@@ -2819,7 +2891,8 @@
             state.fall.active = false;
             state.running = false;
             state.cleared = true;
-            SFX.clear();
+            // 音は動画側を使う。再生できなかった場合だけ内部でSFX.clear()に切り替わる
+            startClearVideo();
             // クリアボーナス：残りHP x10 ポイント加算
             state.score += Math.max(0, state.ship.hp) * 10;
           }
@@ -3322,15 +3395,23 @@
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         let textTop = canvas.height / 2 - 30;
-        if (clearImg.complete && clearImg.naturalWidth) {
+        // 動画が再生できていればそれを、無理なら従来の静止画を同じ枠で描く。
+        // drawImage()はHTMLVideoElementも画像と同じ引数で受け取れ、render()は
+        // 毎フレーム走るのでコマは自然に更新される
+        const useVideo = clearVideoHasFrame();
+        const media = useVideo ? clearVideo
+                    : ((clearImg.complete && clearImg.naturalWidth) ? clearImg : null);
+        if (media) {
+          const natW = useVideo ? clearVideo.videoWidth  : clearImg.naturalWidth;
+          const natH = useVideo ? clearVideo.videoHeight : clearImg.naturalHeight;
           const imgW = 560;
-          const imgH = imgW * (clearImg.naturalHeight / clearImg.naturalWidth);
+          const imgH = imgW * (natH / natW);
           const imgX = (canvas.width - imgW) / 2;
           const imgY = 20;
           ctx.save();
           ctx.shadowColor = "rgba(0,0,0,0.5)";
           ctx.shadowBlur = 20;
-          ctx.drawImage(clearImg, imgX, imgY, imgW, imgH);
+          ctx.drawImage(media, imgX, imgY, imgW, imgH);
           ctx.restore();
           ctx.strokeStyle = RETRO.gold;
           ctx.lineWidth = 2;
@@ -4054,6 +4135,9 @@
       // AudioContext はユーザー操作を経ないと鳴らない(特にiOS)。ジャイロ許可と
       // 同じく、ここが唯一の起こせる場所なので await より前に呼ぶ
       SFX.unlock();
+      // 動画も同じ理由(ユーザー操作が必要)でここが唯一の解錠点。
+      // preload="none" にしてあるので、読み込みが始まるのもここから
+      unlockClearVideo();
       // スマホでは自動で全画面化してアドレスバー分の画面を使い切る
       // (対応端末のみ。iOS Safariのようにページ全体の全画面化に非対応の
       // 端末では何も起きないので、失敗しても無視して進める)
