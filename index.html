@@ -1604,6 +1604,11 @@
           // 止まり、以降は重力のみの自由落下で強制的に決着させる
           timeLimit: 1800, // 30秒(60fps)
           targetX: 0,
+          // 着地目標は固定ではなく、この範囲内を正弦波で左右に往復し続ける。
+          // 狙いを定めている間もタイミングを読ませるための動き
+          targetMoveLo: 0,
+          targetMoveHi: 0,
+          targetMoveTimer: 0,
           resolved: false,
           settleTimer: 0,
           settleDuration: 40,
@@ -1816,6 +1821,7 @@
       state.fall.landing.progress = 0;
       state.fall.landing.hoverActive = false;
       state.fall.landing.hoverTimer = 0;
+      state.fall.landing.targetMoveTimer = 0;
       state.cleared = false;
       state.portrait.hitTimer = 0;
       state.dying.active = false;
@@ -3001,6 +3007,16 @@
           const L = state.fall.landing;
           const groundY = canvas.height - 70;
 
+          // 着地目標は狙いを定めている間もタイミングを読ませるため、演出中と
+          // 着地後を除いて常に左右へ往復させる(位置合わせ中の静止フェーズも含む)
+          if (!L.approachActive && !L.resolved && L.targetMoveHi > L.targetMoveLo) {
+            L.targetMoveTimer++;
+            const moveCenter = (L.targetMoveLo + L.targetMoveHi) / 2;
+            const moveAmp = (L.targetMoveHi - L.targetMoveLo) / 2;
+            const moveSpeed = (Math.PI * 2) / 240; // 4秒(60fps)で1往復
+            L.targetX = moveCenter + moveAmp * Math.sin(L.targetMoveTimer * moveSpeed);
+          }
+
           if (L.approachActive) {
             // 演出フェーズ: まだ操作を渡さず、洞窟が広い最終チャンバーへ開けていく。
             // スクロールはゆっくり続け、「奥へ進んでいる」感を切らさない
@@ -3019,12 +3035,15 @@
               const row = state.fall.rows[Math.floor(state.ship.y)] || state.fall.rows[state.fall.rows.length - 1];
               const lo = row ? row.left + 40 : 70;
               const hi = row ? row.right - 40 : canvas.width - 70;
-              // 毎回シャフト中央固定だと狙いが読めてしまうので、着地目標は左右ランダムにする
-              L.targetX = lo + Math.random() * (hi - lo);
+              // 固定位置ではなく、この範囲を往復し続ける可動目標にする。
+              // 開始位相はランダムにして、毎回同じ動きの読み合いにならないようにする
+              L.targetMoveLo = lo;
+              L.targetMoveHi = hi;
+              L.targetMoveTimer = Math.random() * 1000;
               // すぐには落とさず、いったん完全静止させて狙いを整える猶予を挟む
               L.hoverActive = true;
               L.hoverTimer = 0;
-              showCaption("ドッキングポイントへ着陸せよ！", 90);
+              showCaption("動く着地目標に合わせて降下せよ！", 90);
             }
             return;
           }
