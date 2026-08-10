@@ -704,6 +704,7 @@
          preload="none": クリアまで到達しないプレイヤーに通信を強いないため、
          実際の読み込みはスタート押下時(unlockClearVideo)まで遅らせる -->
     <video id="clearVideo" class="clear-video" playsinline preload="none" aria-hidden="true"></video>
+    <video id="gameOverVideo" class="clear-video" playsinline preload="none" aria-hidden="true"></video>
     <div id="gyroStatus" class="status"></div>
     <div class="controls-bottom" aria-hidden="false">
       <div id="firePad" class="fire-pad" aria-label="発射ボタン">
@@ -1310,57 +1311,94 @@
     const clearImg = new Image();
     clearImg.src = "image02png.png";
 
-    // CLEAR画面の映像。音は動画側のものを使うため、再生できた場合は
-    // クリアのジングル(SFX.clear)を鳴らさない
-    const CLEAR_VIDEO_SRC = "clear.mp4";
-    const clearVideo = document.getElementById("clearVideo");
-    let clearVideoFailed = false;
-    if (clearVideo) {
-      clearVideo.loop = true;
-      clearVideo.addEventListener("error", () => { clearVideoFailed = true; });
-    }
-
-    // iOSは「ユーザー操作を起点にしたplay()」を経ていない動画の音声再生を拒む。
-    // SFX.unlock()と同じく、スタートボタンのタップが唯一の解錠点なので、
-    // そこで一度再生→即停止して要素を解錠しておく(同時に読み込みも始まる)
-    let clearVideoUnlocked = false;
-    function unlockClearVideo() {
-      if (!clearVideo || clearVideoUnlocked) return;
-      clearVideoUnlocked = true;
-      if (!clearVideo.src) clearVideo.src = CLEAR_VIDEO_SRC;
-      clearVideo.muted = true; // 解錠のための再生は無音で通す
-      const p = clearVideo.play();
-      if (p && p.then) {
-        p.then(() => { clearVideo.pause(); clearVideo.currentTime = 0; }).catch(() => {});
+    // CLEAR / GAME OVER の演出動画。どちらも扱いは同じなので生成関数にまとめる。
+    //  - preload="none" にしてあり、読み込みはスタート押下(unlock)まで遅らせる
+    //  - iOSはユーザー操作を経ていない動画の音声再生を拒むので、スタートの
+    //    タップで一度再生→即停止して解錠しておく(SFX.unlock()と同じ理屈)
+    //  - 音は動画側のものを使い、再生できたときはゲーム内ジングルを鳴らさない
+    //  - 読み込めない/再生できない場合は従来の表示にフォールバックする
+    function createCutsceneVideo(el, src, loop, fallbackSfx) {
+      let failed = false;
+      let unlocked = false;
+      let playing = false;
+      if (el) {
+        el.loop = !!loop;
+        el.addEventListener("error", () => { failed = true; playing = false; });
+        el.addEventListener("ended", () => { playing = false; });
       }
+      return {
+        el,
+        unlock() {
+          if (!el || unlocked) return;
+          unlocked = true;
+          if (!el.src) el.src = src;
+          el.muted = true; // 解錠のための再生は無音で通す
+          const p = el.play();
+          if (p && p.then) {
+            p.then(() => { el.pause(); el.currentTime = 0; }).catch(() => {});
+          }
+        },
+        // 音付きで再生し、拒否されたら無音で映像だけ出して音はジングルで補う
+        // (iOSの低電力モード等で起こりうる)
+        play() {
+          if (!el || failed || !el.src) { playing = false; fallbackSfx(); return; }
+          try { el.currentTime = 0; } catch (e) { /* 未読み込みなら無視 */ }
+          el.muted = false;
+          playing = true;
+          const p = el.play();
+          if (p && p.catch) {
+            p.catch(() => {
+              el.muted = true;
+              const q = el.play();
+              if (q && q.catch) q.catch(() => { failed = true; playing = false; });
+              fallbackSfx();
+            });
+          }
+        },
+        stop() {
+          if (!el) return;
+          playing = false;
+          el.pause();
+          try { el.currentTime = 0; } catch (e) { /* 未読み込みなら無視 */ }
+        },
+        // 描画に使えるコマを持っているか(HAVE_CURRENT_DATA以上)
+        hasFrame() { return !!el && !failed && el.readyState >= 2 && el.videoWidth > 0; },
+        // 途切れずに流し切れる見込みがあるか(HAVE_FUTURE_DATA以上)。
+        // 1回きりの演出は、間に合っていないなら挟まず従来表示にしたいので使う
+        canPlayThrough() { return !!el && !failed && el.readyState >= 3 && el.videoWidth > 0; },
+        isPlaying() { return playing; },
+      };
     }
 
-    // CLEAR到達時に呼ぶ。音付きで再生し、拒否されたら無音で映像だけ出して
-    // 音はゲーム内のジングルで補う(iOSの低電力モード等で起こりうる)
-    function startClearVideo() {
-      if (!clearVideo || clearVideoFailed || !clearVideo.src) { SFX.clear(); return; }
-      try { clearVideo.currentTime = 0; } catch (e) { /* 未読み込みなら無視 */ }
-      clearVideo.muted = false;
-      const p = clearVideo.play();
-      if (p && p.catch) {
-        p.catch(() => {
-          clearVideo.muted = true;
-          const q = clearVideo.play();
-          if (q && q.catch) q.catch(() => { clearVideoFailed = true; });
-          SFX.clear();
-        });
-      }
+    const clearVideo = createCutsceneVideo(
+      document.getElementById("clearVideo"), "clear.mp4", true, () => SFX.clear());
+    const gameOverVideo = createCutsceneVideo(
+      document.getElementById("gameOverVideo"), "gameover.mp4", false, () => SFX.gameOver());
+
+    function unlockCutsceneVideos() {
+      clearVideo.unlock();
+      gameOverVideo.unlock();
     }
 
-    function stopClearVideo() {
-      if (!clearVideo) return;
-      clearVideo.pause();
-      try { clearVideo.currentTime = 0; } catch (e) { /* 未読み込みなら無視 */ }
+    // ゲームオーバー演出: 動画を1回だけ流し、終わったら従来のGAME OVER表示に戻る。
+    // 死ぬたびに6秒待たされるのは苦痛なので、タップ/キー操作でいつでも飛ばせる。
+    // 読み込みが間に合っていなければ演出を挟まず、従来どおり即GAME OVERを出す
+    let gameOverCutsceneActive = false;
+    function beginGameOverCutscene() {
+      if (!gameOverVideo.canPlayThrough()) { SFX.gameOver(); return; }
+      gameOverCutsceneActive = true;
+      gameOverVideo.play();
     }
-
-    // 描画に使えるコマを持っているか(HAVE_CURRENT_DATA以上)
-    function clearVideoHasFrame() {
-      return !!clearVideo && !clearVideoFailed && clearVideo.readyState >= 2 && clearVideo.videoWidth > 0;
+    function endGameOverCutscene() {
+      if (!gameOverCutsceneActive) return;
+      gameOverCutsceneActive = false;
+      gameOverVideo.stop();
+    }
+    function isGameOverCutscenePlaying() {
+      return gameOverCutsceneActive && gameOverVideo.isPlaying() && gameOverVideo.hasFrame();
+    }
+    if (gameOverVideo.el) {
+      gameOverVideo.el.addEventListener("ended", endGameOverCutscene);
     }
 
     // title illustration shown on the start screen, before the player presses スタート
@@ -1674,7 +1712,10 @@
       pauseButton.setAttribute("aria-label", "一時停止");
       state.score = 0;
       state.speed = 2.6;
-      stopClearVideo(); // 再スタート時にCLEAR映像を止めて先頭へ戻す
+      // 再スタート時に演出動画を止めて先頭へ戻す
+      clearVideo.stop();
+      endGameOverCutscene();
+      gameOverVideo.stop();
       autoFireTimer = 0;
       scoreSubmitted = false;
       hideScoreRegisterForm();
@@ -2824,7 +2865,8 @@
         if (state.dying.timer >= state.dying.duration) {
           state.dying.active = false;
           state.gameOver = true;
-          SFX.gameOver();
+          // 音は動画側を使う。間に合わない/再生できない場合だけSFXに切り替わる
+          beginGameOverCutscene();
         }
         return;
       }
@@ -2892,7 +2934,7 @@
             state.running = false;
             state.cleared = true;
             // 音は動画側を使う。再生できなかった場合だけ内部でSFX.clear()に切り替わる
-            startClearVideo();
+            clearVideo.play();
             // クリアボーナス：残りHP x10 ポイント加算
             state.score += Math.max(0, state.ship.hp) * 10;
           }
@@ -3377,6 +3419,25 @@
       if (state.gameOver) {
         ctx.fillStyle = "rgba(0, 0, 0, 0.72)";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
+        if (isGameOverCutscenePlaying()) {
+          // 演出中は動画だけを見せ、GAME OVERの文字は流し終えてから出す。
+          // 枠の扱いはCLEAR画面と揃える(縦横比は動画の実寸から決める)
+          const v = gameOverVideo.el;
+          const vidW = 560;
+          const vidH = vidW * (v.videoHeight / v.videoWidth);
+          const vidX = (canvas.width - vidW) / 2;
+          const vidY = (canvas.height - vidH) / 2;
+          ctx.save();
+          ctx.shadowColor = "rgba(0,0,0,0.5)";
+          ctx.shadowBlur = 20;
+          ctx.drawImage(v, vidX, vidY, vidW, vidH);
+          ctx.restore();
+          ctx.strokeStyle = RETRO.gold;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(vidX + 1, vidY + 1, vidW - 2, vidH - 2);
+          ctx.textAlign = "left";
+          return;
+        }
         ctx.textAlign = "center";
         ctx.fillStyle = RETRO.danger;
         ctx.font = RETRO.font(34);
@@ -3398,12 +3459,12 @@
         // 動画が再生できていればそれを、無理なら従来の静止画を同じ枠で描く。
         // drawImage()はHTMLVideoElementも画像と同じ引数で受け取れ、render()は
         // 毎フレーム走るのでコマは自然に更新される
-        const useVideo = clearVideoHasFrame();
-        const media = useVideo ? clearVideo
+        const useVideo = clearVideo.hasFrame();
+        const media = useVideo ? clearVideo.el
                     : ((clearImg.complete && clearImg.naturalWidth) ? clearImg : null);
         if (media) {
-          const natW = useVideo ? clearVideo.videoWidth  : clearImg.naturalWidth;
-          const natH = useVideo ? clearVideo.videoHeight : clearImg.naturalHeight;
+          const natW = useVideo ? clearVideo.el.videoWidth  : clearImg.naturalWidth;
+          const natH = useVideo ? clearVideo.el.videoHeight : clearImg.naturalHeight;
           const imgW = 560;
           const imgH = imgW * (natH / natW);
           const imgX = (canvas.width - imgW) / 2;
@@ -3551,8 +3612,9 @@
 
     function drawPilotPortrait() {
       // クリア画面は image02png.png(メイン画像)が主役。コックピット窓が
-      // 隣に残っていると視線が割れるので、クリア中は描かない
-      if (state.cleared) return;
+      // 隣に残っていると視線が割れるので、クリア中は描かない。
+      // ゲームオーバーの演出動画も同じ理由で主役なので、その間は描かない
+      if (state.cleared || isGameOverCutscenePlaying()) return;
       if (!pilotImg.complete || !pilotImg.naturalWidth) return;
       const w = 156; // 120 * 1.3
       const h = 117; // 90 * 1.3
@@ -3637,7 +3699,8 @@
     // or after GAME OVER / CLEAR (where it doubles as the restart trigger)
     let _startButtonWasShown = false;
     function updateStartButtonVisibility() {
-      const shouldShow = !state.started || state.gameOver || state.cleared;
+      // ゲームオーバー演出の再生中は出さない。流し終えてから従来どおり見せる
+      const shouldShow = (!state.started || state.gameOver || state.cleared) && !isGameOverCutscenePlaying();
       startButton.style.display = shouldShow ? "" : "none";
       // getBoundingClientRect() forces a layout reflow — only pay that cost on the
       // rising edge (button just appeared), not every single frame it stays visible.
@@ -3741,9 +3804,12 @@
     // ランキングパネルはタイトル画面・クリア画面・ゲームオーバー画面の下段に表示。
     // クリア/ゲームオーバー直後、TOP10入りしていれば一度だけ登録フォームを開く。
     function updateLeaderboardVisibility() {
-      const shouldShow = !state.started || state.cleared || state.gameOver;
+      // 演出中に出すと、登録フォームの2秒後の自動スクロールが動画に割り込む。
+      // 流し終えてから(あるいは飛ばされてから)出す
+      const cutscene = isGameOverCutscenePlaying();
+      const shouldShow = (!state.started || state.cleared || state.gameOver) && !cutscene;
       setLeaderboardVisible(shouldShow);
-      if ((state.cleared || state.gameOver) && !scoreSubmitted) {
+      if ((state.cleared || state.gameOver) && !cutscene && !scoreSubmitted) {
         scoreSubmitted = true;
         if (qualifiesForTop10(state.score)) {
           showScoreRegisterForm();
@@ -4084,7 +4150,12 @@
       return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
     }
 
+    // ゲームオーバー演出は死ぬたびに流れるので、いつでも飛ばせるようにする。
+    // 飛ばした場合も流し終えた場合と同じく、従来のGAME OVER画面へ進む
+    canvas.addEventListener("pointerdown", () => { endGameOverCutscene(); });
+
     window.addEventListener("keydown", (e) => {
+      if (isGameOverCutscenePlaying()) { endGameOverCutscene(); return; }
       if (isTypingInFormField(e)) return;
       if (e.code === "ArrowUp" || e.code === "KeyW") {
         state.input.up = true;
@@ -4137,7 +4208,7 @@
       SFX.unlock();
       // 動画も同じ理由(ユーザー操作が必要)でここが唯一の解錠点。
       // preload="none" にしてあるので、読み込みが始まるのもここから
-      unlockClearVideo();
+      unlockCutsceneVideos();
       // スマホでは自動で全画面化してアドレスバー分の画面を使い切る
       // (対応端末のみ。iOS Safariのようにページ全体の全画面化に非対応の
       // 端末では何も起きないので、失敗しても無視して進める)
