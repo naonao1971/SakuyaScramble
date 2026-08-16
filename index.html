@@ -651,6 +651,38 @@
       color: var(--dim);
       min-height: 1.2em;
     }
+    /* CLEAR時のみ表示。スコア登録フォームとランキング表の間に置く */
+    .share-x-block {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+    .share-x-block.visible {
+      display: flex;
+    }
+    .share-x-btn {
+      padding: 12px 24px;
+      border-radius: var(--radius);
+      border: 2px solid var(--gold);
+      background: var(--panel);
+      color: var(--gold);
+      font-family: var(--font-display);
+      font-size: 12px;
+      box-shadow: var(--bevel-up);
+    }
+    .share-x-btn:active {
+      box-shadow: var(--bevel-down);
+      transform: translateY(2px);
+    }
+    .share-x-status {
+      margin: 0;
+      font-size: 12px;
+      color: var(--dim);
+      min-height: 1.2em;
+      text-align: center;
+    }
     .xid-preview {
       width: min(280px, 90%);
       min-height: 1.4em;
@@ -732,6 +764,10 @@
       <button id="rankSubmitBtn" type="button">登録する</button>
       <p id="rankSubmitStatus" class="rank-submit-status"></p>
     </div>
+    <div id="shareXBlock" class="share-x-block">
+      <button id="shareXButton" class="share-x-btn" type="button">𝕏でシェア</button>
+      <p id="shareXStatus" class="share-x-status"></p>
+    </div>
     <h2 class="leaderboard-title">🏆 TOP10 ランキング</h2>
     <ol id="leaderboardList" class="leaderboard-list"></ol>
   </section>
@@ -763,6 +799,9 @@
     const rankSubmitBtn = document.getElementById("rankSubmitBtn");
     const rankSubmitStatus = document.getElementById("rankSubmitStatus");
     const rankXidPreview = document.getElementById("rankXidPreview");
+    const shareXBlock = document.getElementById("shareXBlock");
+    const shareXButton = document.getElementById("shareXButton");
+    const shareXStatus = document.getElementById("shareXStatus");
     // タッチ操作対応端末をモバイルとみなし、ランキング登録時に記録する
     const isMobileDevice = "ontouchstart" in window || navigator.maxTouchPoints > 0;
     let leaderboardCache = [];
@@ -1025,6 +1064,49 @@
           });
       });
     }
+
+    if (shareXButton) {
+      shareXButton.addEventListener("click", async () => {
+        shareXButton.disabled = true;
+        shareXStatus.textContent = "";
+        const text = buildShareText();
+        try {
+          const card = buildShareCardCanvas();
+          const blob = await new Promise((resolve) => card.toBlob(resolve, "image/png"));
+          const file = blob ? new File([blob], "sakuya-scramble-clear.png", { type: "image/png" }) : null;
+          if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+            // 対応端末はOS標準の共有シートへ画像とテキストをそのまま渡す。
+            // Xを選べばそのまま画像付きで投稿できる
+            await navigator.share({ text, files: [file] });
+          } else if (file) {
+            // Xの投稿画面はURL経由での画像自動添付に対応していない(X側の仕様)。
+            // 画像をダウンロードしつつ投稿画面を開き、手動で添付してもらう
+            const url = URL.createObjectURL(file);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "sakuya-scramble-clear.png";
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 30000);
+            openXIntent(text);
+            shareXStatus.textContent = "画像を保存しました。投稿画面に添付してください";
+          } else {
+            openXIntent(text);
+          }
+        } catch (e) {
+          // ユーザーが共有シートをキャンセルした場合もAbortErrorでrejectされるので、
+          // それはエラー扱いにしない
+          if (e && e.name !== "AbortError") {
+            shareXStatus.textContent = "画像の作成に失敗しました。テキストのみ投稿します";
+            openXIntent(text);
+          }
+        } finally {
+          shareXButton.disabled = false;
+        }
+      });
+    }
+
     const touchPad = document.getElementById("touchPad");
     const firePad = document.getElementById("firePad");
     const pauseButton = document.getElementById("pauseButton");
@@ -1795,6 +1877,7 @@
       autoFireTimer = 0;
       scoreSubmitted = false;
       hideScoreRegisterForm();
+      if (shareXStatus) shareXStatus.textContent = "";
       state.frame = 0;
       state.ship.x = 130;
       state.ship.y = canvas.height / 2;
@@ -2772,34 +2855,38 @@
     // CLEAR画面用の1枠。見た目の分岐(救出済みは絵、未救出はシルエット)は
     // drawRescueRoster()と揃えるが、こちらは常に全光量で表示する
     // (クリア画面はこのプレイの結果一覧が主目的で、「今回どれを取ったか」の
-    // 経時的な強調は不要なため)
-    function drawClearRosterSlot(ch, x, y, s) {
+    // 経時的な強調は不要なため)。
+    // gctxを引数に取るのは、Xシェア用カード(buildShareCardCanvas)を描く
+    // オフスクリーンcanvasからも同じ見た目を再利用するため
+    function drawClearRosterSlot(gctx, ch, x, y, s) {
       const got = state.rescuedChars[ch.index];
 
-      ctx.fillStyle = got ? "rgba(6,10,20,0.92)" : "rgba(4,6,12,0.82)";
-      ctx.fillRect(x, y, s, s);
+      gctx.fillStyle = got ? "rgba(6,10,20,0.92)" : "rgba(4,6,12,0.82)";
+      gctx.fillRect(x, y, s, s);
 
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(x, y, s, s);
-      ctx.clip();
-      ctx.translate(x + s / 2, y + s / 2 + s * 0.04);
+      gctx.save();
+      gctx.beginPath();
+      gctx.rect(x, y, s, s);
+      gctx.clip();
+      gctx.translate(x + s / 2, y + s / 2 + s * 0.04);
       const d = s * 0.88;
       if (got && ch.ready) {
-        ctx.drawImage(ch.img, -d / 2, -d / 2, d, d);
+        gctx.drawImage(ch.img, -d / 2, -d / 2, d, d);
       } else {
         const sil = cnpSilhouette(ch);
         if (sil) {
-          ctx.drawImage(sil, -d / 2, -d / 2, d, d);
-        } else {
+          gctx.drawImage(sil, -d / 2, -d / 2, d, d);
+        } else if (gctx === ctx) {
+          // プレースホルダはメインcanvasのグローバル ctx 前提で書かれているため、
+          // 共有カード側(画像が全て読み込み済みのはずの場面)では出さない
           drawCnpPlaceholder(ch, s * 0.8, !got);
         }
       }
-      ctx.restore();
+      gctx.restore();
 
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = got ? `hsla(${ch.hue},90%,66%,0.9)` : "rgba(232, 197, 106, 0.26)";
-      ctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
+      gctx.lineWidth = 2;
+      gctx.strokeStyle = got ? `hsla(${ch.hue},90%,66%,0.9)` : "rgba(232, 197, 106, 0.26)";
+      gctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
     }
 
     // メイン画像を挟む2列に11体を振り分けて並べる。今回の救出結果が
@@ -2820,13 +2907,105 @@
         const totalH = count * s + (count - 1) * gap;
         let y = midY - totalH / 2;
         for (let i = start; i < start + count; i++) {
-          drawClearRosterSlot(cnpChars[i], cx - s / 2, y, s);
+          drawClearRosterSlot(ctx, cnpChars[i], cx - s / 2, y, s);
           y += s + gap;
         }
       };
 
       drawColumn(0, leftCount, leftX);
       drawColumn(leftCount, n - leftCount, rightX);
+    }
+
+    // Xシェア用のリザルトカードを、ゲーム中とは別のオフスクリーンcanvasに描く。
+    // 常にゲーム内HUD(走査線・SCORE/SPD/TIME等)を含めず、スコア・救出結果
+    // だけをすっきり読める専用レイアウトにする。動画中の見た目に依存しないよう
+    // メイン画像は常に静止画(clearImg)を使う
+    function buildShareCardCanvas() {
+      const W = 1200, H = 675;
+      const card = document.createElement("canvas");
+      card.width = W;
+      card.height = H;
+      const g = card.getContext("2d");
+
+      g.fillStyle = "#06070C";
+      g.fillRect(0, 0, W, H);
+      const grad = g.createRadialGradient(W / 2, H * 0.35, 60, W / 2, H * 0.35, W * 0.7);
+      grad.addColorStop(0, "rgba(69,32,102,0.35)");
+      grad.addColorStop(1, "rgba(6,7,12,0)");
+      g.fillStyle = grad;
+      g.fillRect(0, 0, W, H);
+
+      g.strokeStyle = RETRO.gold;
+      g.lineWidth = 4;
+      g.strokeRect(10, 10, W - 20, H - 20);
+
+      g.textAlign = "center";
+      g.fillStyle = RETRO.gold;
+      g.font = RETRO.font(16);
+      g.fillText("SAKUYA SCRAMBLE", W / 2, 52);
+      g.fillStyle = RETRO.ink;
+      g.font = RETRO.font(40);
+      g.fillText("CLEAR!", W / 2, 108);
+
+      if (clearImg.complete && clearImg.naturalWidth) {
+        const imgW = 460;
+        const imgH = imgW * (clearImg.naturalHeight / clearImg.naturalWidth);
+        const imgX = 60;
+        const imgY = 150;
+        g.save();
+        g.shadowColor = "rgba(0,0,0,0.5)";
+        g.shadowBlur = 20;
+        g.drawImage(clearImg, imgX, imgY, imgW, imgH);
+        g.restore();
+        g.strokeStyle = RETRO.gold;
+        g.lineWidth = 2;
+        g.strokeRect(imgX + 1, imgY + 1, imgW - 2, imgH - 2);
+      }
+
+      const rescuedCount = state.rescuedChars.reduce((a, b) => a + (b ? 1 : 0), 0);
+      g.textAlign = "left";
+      g.fillStyle = RETRO.dim;
+      g.font = RETRO.font(14);
+      g.fillText("SCORE", 560, 210);
+      g.fillStyle = RETRO.gold;
+      g.font = RETRO.font(44);
+      g.fillText(String(Math.floor(state.score)).padStart(7, "0"), 560, 260);
+
+      g.fillStyle = RETRO.dim;
+      g.font = RETRO.font(14);
+      g.fillText("RESCUE", 560, 320);
+      g.fillStyle = rescuedCount === cnpChars.length ? RETRO.gold : RETRO.ink;
+      g.font = RETRO.font(34);
+      g.fillText(`${rescuedCount} / ${cnpChars.length}`, 560, 358);
+
+      const n = cnpChars.length;
+      const s = 66, gap = 10;
+      const totalW = n * s + (n - 1) * gap;
+      const x0 = (W - totalW) / 2;
+      for (let i = 0; i < n; i++) {
+        drawClearRosterSlot(g, cnpChars[i], x0 + i * (s + gap), 440, s);
+      }
+
+      g.textAlign = "center";
+      g.fillStyle = RETRO.gold;
+      g.font = RETRO.font(16);
+      g.fillText("#咲耶スクランブル", W / 2, 570);
+      g.fillStyle = RETRO.dim;
+      g.font = RETRO.font(11);
+      g.fillText("sakuya.naoblock.jp", W / 2, 598);
+
+      return card;
+    }
+
+    function buildShareText() {
+      const rescuedCount = state.rescuedChars.reduce((a, b) => a + (b ? 1 : 0), 0);
+      const score = Math.floor(state.score);
+      return `咲耶スクランブルをクリア！\nスコア ${score.toLocaleString()}\n救出 ${rescuedCount}/${cnpChars.length}\n#咲耶スクランブル`;
+    }
+
+    function openXIntent(text) {
+      const params = new URLSearchParams({ text, url: "https://sakuya.naoblock.jp/" });
+      window.open(`https://twitter.com/intent/tweet?${params.toString()}`, "_blank", "noopener");
     }
 
     // --- Mega HP (stage-once, full heal) ---
@@ -4176,11 +4355,20 @@
       }
     }
 
+    // Xシェアボタンは11体コンプリートの有無に関わらずCLEAR画面でのみ出す。
+    // GAME OVERは「救出したキャラクターの画像」の主役が無いため対象外
+    function updateShareXVisibility() {
+      if (!shareXBlock) return;
+      const cutscene = isGameOverCutscenePlaying();
+      shareXBlock.classList.toggle("visible", state.cleared && !cutscene);
+    }
+
     function render() {
       updateStartButtonVisibility();
       updateGameControlsVisibility();
       updatePauseButtonVisibility();
       updateLeaderboardVisibility();
+      updateShareXVisibility();
       if (!state.started) {
         drawTitleScreen(); // 走査線は関数内で星空にだけ敷く
         return;
