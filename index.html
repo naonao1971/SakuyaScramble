@@ -1503,6 +1503,18 @@
       return cnpChars[0];
     }
 
+    // 重複無しでcount体を無作為に選ぶ(落下ステージの保証出現キャラ抽選用)
+    function pickRandomDistinct(arr, count) {
+      const pool = arr.slice();
+      const picked = [];
+      while (picked.length < count && pool.length > 0) {
+        const idx = Math.floor(Math.random() * pool.length);
+        picked.push(pool[idx]);
+        pool.splice(idx, 1);
+      }
+      return picked;
+    }
+
     const state = {
       running: true,
       // becomes true once the player presses スタート; gates update() so nothing moves before that
@@ -1577,6 +1589,9 @@
         timer: 0,
         duration: 30 * 60,
         rows: [],
+        // 未救出のうち最大3体を、この落下ステージ中に必ず出現させる予約リスト。
+        // beginFall()で組み、フレームが来るごとにupdate()側で消化する
+        guaranteedRescues: [],
         // intro: bullets stop, ship rotates 90° while easing downward into the shaft
         introActive: false,
         introTimer: 0,
@@ -1749,6 +1764,19 @@
       state.hpItems.length = 0;
       state.rescues.length = 0;
       state.megaHp = null;
+
+      // 11体コンプリートを運任せにしないため、まだ救出していないキャラのうち
+      // 最大3体を、この落下ステージの30秒間に必ず出現させる予約を組む
+      const missing = cnpChars.filter((ch) => !state.rescuedChars[ch.index]);
+      const guaranteed = pickRandomDistinct(missing, Math.min(3, missing.length));
+      state.fall.guaranteedRescues = guaranteed.map((ch, i) => {
+        // durationの中で偏りなく分散させる(1体なら20%地点、2体なら20%/50%地点…)。
+        // 前後にランダムな幅を持たせ、毎回同じタイミングにならないようにする
+        const baseFrame = Math.round(state.fall.duration * (0.2 + 0.3 * i));
+        const jitter = Math.round((Math.random() - 0.5) * 80);
+        return { frame: Math.max(60, baseFrame + jitter), ch };
+      });
+
       showCaption("床が開いた……地底へ落下！", 150);
     }
 
@@ -1812,6 +1840,7 @@
       state.fall.active = false;
       state.fall.timer = 0;
       state.fall.rows.length = 0;
+      state.fall.guaranteedRescues.length = 0;
       state.fall.introActive = false;
       state.fall.introTimer = 0;
       state.fall.introStartY = 0;
@@ -2455,8 +2484,10 @@
     }
 
     // パート3(落下)用。縦スクロールなので画面下から湧いて上へ流れる。
-    // 横穴と違い左右の壁が近いため、シャフトの幅に収まる範囲にx位置を取る
-    function spawnRescueFall() {
+    // 横穴と違い左右の壁が近いため、シャフトの幅に収まる範囲にx位置を取る。
+    // forceChを渡すと、通常の重み付き抽選の代わりにそのキャラを出す
+    // (落下ステージの保証出現で使う)
+    function spawnRescueFall(forceCh) {
       const row = state.fall.rows[canvas.height - 1];
       let baseX = canvas.width / 2;
       if (row) {
@@ -2465,7 +2496,7 @@
         baseX = hi > lo ? lo + Math.random() * (hi - lo) : (row.left + row.right) / 2;
       }
       state.rescues.push({
-        ch: pickCnpChar(),
+        ch: forceCh || pickCnpChar(),
         mode: "v",
         x: baseX,
         baseX,
@@ -2736,6 +2767,66 @@
       ctx.textAlign = "center";
       ctx.fillText(complete ? "COMPLETE!" : `${done} / ${n}`, canvas.width / 2, y + s + 11);
       ctx.textAlign = "left";
+    }
+
+    // CLEAR画面用の1枠。見た目の分岐(救出済みは絵、未救出はシルエット)は
+    // drawRescueRoster()と揃えるが、こちらは常に全光量で表示する
+    // (クリア画面はこのプレイの結果一覧が主目的で、「今回どれを取ったか」の
+    // 経時的な強調は不要なため)
+    function drawClearRosterSlot(ch, x, y, s) {
+      const got = state.rescuedChars[ch.index];
+
+      ctx.fillStyle = got ? "rgba(6,10,20,0.92)" : "rgba(4,6,12,0.82)";
+      ctx.fillRect(x, y, s, s);
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, y, s, s);
+      ctx.clip();
+      ctx.translate(x + s / 2, y + s / 2 + s * 0.04);
+      const d = s * 0.88;
+      if (got && ch.ready) {
+        ctx.drawImage(ch.img, -d / 2, -d / 2, d, d);
+      } else {
+        const sil = cnpSilhouette(ch);
+        if (sil) {
+          ctx.drawImage(sil, -d / 2, -d / 2, d, d);
+        } else {
+          drawCnpPlaceholder(ch, s * 0.8, !got);
+        }
+      }
+      ctx.restore();
+
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = got ? `hsla(${ch.hue},90%,66%,0.9)` : "rgba(232, 197, 106, 0.26)";
+      ctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
+    }
+
+    // メイン画像を挟む2列に11体を振り分けて並べる。今回の救出結果が
+    // 画像を額縁のように取り囲む見せ方にする(画面上部の額縁ロスターとは別に表示)
+    function drawClearRoster(imgX, imgW) {
+      const n = cnpChars.length;
+      const s = 52;
+      const gap = 10;
+      const leftCount = Math.ceil(n / 2);
+      // 上はSCORE/額縁ロスター、右上はHPバーと被らない下限に揃える
+      const colTop = 92;
+      const colBottom = canvas.height - 20;
+      const midY = (colTop + colBottom) / 2;
+      const leftX = imgX / 2;
+      const rightX = imgX + imgW + (canvas.width - (imgX + imgW)) / 2;
+
+      const drawColumn = (start, count, cx) => {
+        const totalH = count * s + (count - 1) * gap;
+        let y = midY - totalH / 2;
+        for (let i = start; i < start + count; i++) {
+          drawClearRosterSlot(cnpChars[i], cx - s / 2, y, s);
+          y += s + gap;
+        }
+      };
+
+      drawColumn(0, leftCount, leftX);
+      drawColumn(leftCount, n - leftCount, rightX);
     }
 
     // --- Mega HP (stage-once, full heal) ---
@@ -3165,6 +3256,14 @@
         updateShip();
         updateBullets();
         updateBombs();
+        // 通常のランダム出現(updateRescues)とは別に、予約した保証出現を消化する
+        for (let gi = state.fall.guaranteedRescues.length - 1; gi >= 0; gi--) {
+          const g = state.fall.guaranteedRescues[gi];
+          if (state.fall.timer >= g.frame) {
+            spawnRescueFall(g.ch);
+            state.fall.guaranteedRescues.splice(gi, 1);
+          }
+        }
         updateRescues(true);
         updateHpItems(true);
         updateExplosions();
@@ -3730,6 +3829,9 @@
           ctx.lineWidth = 2;
           ctx.strokeRect(imgX + 1, imgY + 1, imgW - 2, imgH - 2);
           textTop = imgY + imgH + 42;
+
+          // メイン画像の左右の余白に、今回救出した11体を額縁のように並べる
+          drawClearRoster(imgX, imgW);
         }
 
         ctx.textAlign = "center";
