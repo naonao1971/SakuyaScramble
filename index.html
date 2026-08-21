@@ -828,7 +828,11 @@
           const on = got.has(ch.index + 1);
           // 画像が未配置でも救出済みかどうかが読めるよう、枠の地色もキャラ色にする。
           // 画像が404のときは onerror で img だけ消え、色の付いた額が残る
-          const img = on ? `<img src="assets/cnp/${ch.id}.png" alt="" loading="lazy" onerror="this.remove()">` : "";
+          // 元画像を256x256へ縮小済み(以前は2048x2048のまま16pxのアイコンに
+          // 使っていたため、モバイル回線で読み込み/デコードが重く、間に合わず
+          // シルエットの地色だけが残って見える不具合があった)。
+          // 十分小さくなったのでloading="lazy"も外し、確実に読み込ませる
+          const img = on ? `<img src="assets/cnp/${ch.id}.png" alt="" onerror="this.remove()">` : "";
           return `<span class="lb-slot${on ? " got" : ""}" style="--h:${ch.hue}" title="${escapeHTML(ch.label)}">${img}</span>`;
         })
         .join("");
