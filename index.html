@@ -1521,6 +1521,34 @@
       spawnChance: 0.0011
     };
 
+    // 最終着陸チャレンジの採点。的の中心に近いほど、着地速度が遅いほど加点する
+    // 「10点刻みの的」。的の外(半径50px超)へ落ちるとMISSでマイナス点になる
+    const LANDING_RING_STEP = 5;    // 1段あたりの半径(px)
+    const LANDING_RING_COUNT = 10;  // 段数。最大半径 = 5 * 10 = 50px
+    const LANDING_RING_MAX_POINTS = 100; // 中心(段1)の得点。1段ごとに10点ずつ下がる
+    const LANDING_MISS_PENALTY = -30;
+    // 着地速度が遅いほど乗る追加ボーナス。的の得点とは別枠で加算する
+    const LANDING_SPEED_BONUS_TIERS = [
+      { max: 0.3, bonus: 50 },
+      { max: 0.6, bonus: 40 },
+      { max: 0.9, bonus: 30 },
+      { max: 1.2, bonus: 20 },
+      { max: 1.5, bonus: 10 }
+    ];
+    function landingSpeedBonus(impactSpeed) {
+      for (const tier of LANDING_SPEED_BONUS_TIERS) {
+        if (impactSpeed <= tier.max) return tier.bonus;
+      }
+      return 0;
+    }
+    // 的の中心からの距離(px)を採点する。的の外ならhit:falseを返す
+    function scoreLandingAccuracy(errorX) {
+      const maxRadius = LANDING_RING_STEP * LANDING_RING_COUNT;
+      if (errorX > maxRadius) return { hit: false, idx: LANDING_RING_COUNT + 1, points: 0 };
+      const idx = Math.max(1, Math.ceil(errorX / LANDING_RING_STEP)); // 1(中心)〜10(外周)
+      return { hit: true, idx, points: LANDING_RING_MAX_POINTS - (idx - 1) * 10 };
+    }
+
     // 画面上段に並べる額縁ロスター。左のSCORE(〜x230)、右のHPバー(x753〜)、
     // 下のキャプション枠(y60〜)のいずれにも触れない寸法にしてある
     const CNP_ROSTER = {
@@ -3295,8 +3323,13 @@
             updateFallRows();
             const targetGap = 300; // ドッキング用の広い最終空間
             fallTunnel.gap += (targetGap - fallTunnel.gap) * 0.045;
-            // 機体はまだ自動操縦。徐々にシャフト中央へ寄せて、着地チャレンジの開始位置を整える
+            // 機体はまだ自動操縦。徐々にシャフト中央・一定の高さへ寄せて、
+            // 着地チャレンジの開始位置を整える。
+            // yを合わせずにいると、直前の縦シャフトで既に低い位置にいた場合、
+            // 自由落下フェーズに入った瞬間に着地判定が出て何もできず終わってしまうため、
+            // 必ず同じ高さ(70)から始まるようにする
             state.ship.x += (fallTunnel.center - state.ship.x) * 0.03;
+            state.ship.y += (70 - state.ship.y) * 0.05;
             state.ship.vx = 0;
             state.ship.vy = 0;
 
@@ -3388,20 +3421,25 @@
               state.ship.y = Math.min(state.ship.y, groundY);
               const errorX = Math.abs(state.ship.x - L.targetX);
               const impactSpeed = state.ship.vy;
-              if (errorX <= 5 && impactSpeed <= 0.8) {
-                L.rank = "PERFECT"; L.bonus = 500;
-              } else if (errorX <= 15 && impactSpeed <= 1.5) {
-                L.rank = "GREAT"; L.bonus = 300;
-              } else if (errorX <= 30) {
-                L.rank = "GOOD"; L.bonus = 150;
+              const acc = scoreLandingAccuracy(errorX);
+
+              if (acc.hit) {
+                // 的の中心からの近さ(10点刻み)と、着地速度の遅さの2つを別枠で加点する
+                const speedBonus = landingSpeedBonus(impactSpeed);
+                L.bonus = acc.points + speedBonus;
+                L.rank = acc.idx === 1 ? "PERFECT" : acc.idx <= 3 ? "GREAT" : acc.idx <= 6 ? "GOOD" : "OK";
               } else {
-                L.rank = "OK"; L.bonus = 50;
+                // 的を外すとマイナス点。速度ボーナスは対象外(位置がそもそも的の外のため)
+                L.bonus = LANDING_MISS_PENALTY;
+                L.rank = "MISS";
               }
 
               state.ship.vy = 0;
-              state.score += L.bonus;
-              spawnScorePop(state.ship.x, state.ship.y - 20, L.rank + " +" + L.bonus);
-              state.bonusText = L.rank + "! +" + L.bonus + " SCORE";
+              // 総スコアが的ハズレのマイナスでマイナス表示になるのは見た目上おかしいので0で床を作る
+              state.score = Math.max(0, state.score + L.bonus);
+              const bonusLabel = (L.bonus >= 0 ? "+" : "") + L.bonus;
+              spawnScorePop(state.ship.x, state.ship.y - 20, L.rank + " " + bonusLabel);
+              state.bonusText = (acc.hit ? L.rank + "! " : "的ハズレ... ") + bonusLabel + " SCORE";
               state.bonusTimer = 140;
               SFX.bonus();
             }
@@ -3724,20 +3762,37 @@
 
     // 着陸チャレンジ中の的。GOOD/GREAT/PERFECTの3段リングを床に描き、
     // 目標地点(fallTunnel.centerで決めたtargetX)を視覚化する
+    // 10点刻みの的。中心ほど明るく塗り重ね、半径50px(LANDING_RING_STEP×COUNT)の
+    // 外周を「ここを外すとMISS」の警告色点線で示す
     function drawLandingMarker(x, groundY) {
       ctx.save();
-      const rings = [
-        { r: 34, color: "rgba(232,197,106,0.4)" },
-        { r: 20, color: "rgba(255,214,120,0.6)" },
-        { r: 9,  color: "rgba(255,255,255,0.9)" }
+      const maxR = LANDING_RING_STEP * LANDING_RING_COUNT;
+      const bands = [
+        { r: maxR,       fill: "rgba(232,197,106,0.10)" },
+        { r: maxR * 0.8, fill: "rgba(232,197,106,0.16)" },
+        { r: maxR * 0.6, fill: "rgba(255,214,120,0.24)" },
+        { r: maxR * 0.4, fill: "rgba(255,214,120,0.36)" },
+        { r: maxR * 0.2, fill: "rgba(255,255,255,0.55)" }
       ];
-      for (const ring of rings) {
+      for (const b of bands) {
         ctx.beginPath();
-        ctx.strokeStyle = ring.color;
-        ctx.lineWidth = 2;
-        ctx.ellipse(x, groundY - 3, ring.r, ring.r * 0.32, 0, 0, Math.PI * 2);
-        ctx.stroke();
+        ctx.ellipse(x, groundY - 3, b.r, b.r * 0.32, 0, 0, Math.PI * 2);
+        ctx.fillStyle = b.fill;
+        ctx.fill();
       }
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = "rgba(255,120,90,0.75)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(x, groundY - 3, maxR, maxR * 0.32, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.beginPath();
+      ctx.ellipse(x, groundY - 3, 3, 1.5, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255,255,255,0.95)";
+      ctx.fill();
+
       // 目印の縦ガイド線。奥行きのある的だと分かりやすくする
       ctx.strokeStyle = "rgba(255,255,255,0.25)";
       ctx.lineWidth = 1;
