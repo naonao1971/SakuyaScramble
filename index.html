@@ -4829,6 +4829,13 @@
       // first start: try to enable gyro automatically. after that, respect the toggle button's choice.
       if (!gyro.userChoiceMade) {
         await enableGyroIfAvailable();
+        // iOSのジャイロ許可ダイアログはネイティブのシステムシートとして
+        // 覆いかぶさるため、表示中はページが一時的に非表示扱いになり、
+        // 直前に起こしたはずのAudioContextが裏で再びsuspendedへ戻ることがある。
+        // (このダイアログは初回のスタート時にしか出ないため、「初回だけ
+        // 音が鳴らず、2回目以降は鳴る」という症状に一致する。)
+        // ダイアログを閉じた直後にもう一度確実に起こしておく
+        await SFX.unlock();
       } else if (gyro.active) {
         recalibrateGyro();
       }
