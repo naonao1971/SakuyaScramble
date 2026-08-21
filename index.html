@@ -2011,17 +2011,24 @@
       _noiseBuf: null,
 
       // AudioContext はユーザー操作を経ないと鳴らせない(特にiOS)。
-      // スタートボタンのタップから呼んで起こす
+      // スタートボタンのタップから呼んで起こす。
+      // resume()は非同期なので、Promiseを返して呼び出し側でawaitさせる。
+      // 呼びっぱなしで直後にstartGame()を実行すると、初回だけ再開が間に合わず
+      // ステージ開始のジングルが無音のまま終わる(2回目以降は既にrunning状態
+      // なのでこの分岐を通らず、問題なく鳴る)
       unlock() {
         if (!SFX.ctx) {
           const AC = window.AudioContext || window.webkitAudioContext;
-          if (!AC) return;
+          if (!AC) return Promise.resolve();
           SFX.ctx = new AC();
           SFX.master = SFX.ctx.createGain();
           SFX.master.gain.value = SFX.muted ? 0 : 0.5;
           SFX.master.connect(SFX.ctx.destination);
         }
-        if (SFX.ctx.state === "suspended") SFX.ctx.resume().catch(() => {});
+        if (SFX.ctx.state === "suspended") {
+          return SFX.ctx.resume().catch(() => {});
+        }
+        return Promise.resolve();
       },
 
       setMuted(m) {
@@ -4808,8 +4815,10 @@
 
     startButton.addEventListener("click", async () => {
       // AudioContext はユーザー操作を経ないと鳴らない(特にiOS)。ジャイロ許可と
-      // 同じく、ここが唯一の起こせる場所なので await より前に呼ぶ
-      SFX.unlock();
+      // 同じく、ここが唯一の起こせる場所なので await より前に呼ぶ。
+      // resume()の完了をawaitしてから先へ進むことで、初回のステージ開始
+      // ジングルが再開の完了前に鳴ってしまい無音になるのを防ぐ
+      await SFX.unlock();
       // 動画も同じ理由(ユーザー操作が必要)でここが唯一の解錠点。
       // preload="none" にしてあるので、読み込みが始まるのもここから
       unlockCutsceneVideos();
@@ -4969,8 +4978,8 @@
     }
     bindHoldToggle(
       muteToggle,
-      () => {
-        SFX.unlock(); // オンに戻した直後から鳴るように、ここでも起こしておく
+      async () => {
+        await SFX.unlock(); // オンに戻した直後から鳴るように、ここでも起こしておく(再開を待ってから確認音を鳴らす)
         SFX.setMuted(!SFX.muted);
         syncCutsceneVideoMute(); // 再生中の演出動画にも即座に反映する
         updateMuteToggleUI();
