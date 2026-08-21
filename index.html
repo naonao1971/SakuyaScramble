@@ -4814,11 +4814,13 @@
     // restart button removed for mobile UI; use in-game controls to restart
 
     startButton.addEventListener("click", async () => {
-      // AudioContext はユーザー操作を経ないと鳴らない(特にiOS)。ジャイロ許可と
-      // 同じく、ここが唯一の起こせる場所なので await より前に呼ぶ。
-      // resume()の完了をawaitしてから先へ進むことで、初回のステージ開始
-      // ジングルが再開の完了前に鳴ってしまい無音になるのを防ぐ
-      await SFX.unlock();
+      // AudioContextの再開(resume)もジャイロの許可ダイアログ(iOS)も、どちらも
+      // 「ユーザー操作の延長」として扱われないと機能しない。resume()の完了を
+      // 先にawaitしてしまうと、その待ち時間の間にユーザー操作由来の許可が
+      // 切れてしまい、後続のDeviceOrientationEvent.requestPermission()が
+      // ダイアログを一切出さずに失敗することがある(ジャイロ確認が出ない不具合)。
+      // そのため呼び出し自体はここで同期的に発行し、完了待ち(await)は後回しにする。
+      const audioUnlockPromise = SFX.unlock();
       // 動画も同じ理由(ユーザー操作が必要)でここが唯一の解錠点。
       // preload="none" にしてあるので、読み込みが始まるのもここから
       unlockCutsceneVideos();
@@ -4839,6 +4841,8 @@
       } else if (gyro.active) {
         recalibrateGyro();
       }
+      // 最初に発行しておいたresume()の完了をここで待つ
+      await audioUnlockPromise;
       startGame();
     });
 
