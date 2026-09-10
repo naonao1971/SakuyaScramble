@@ -43,7 +43,7 @@
     <canvas id="c" width="512" height="384"></canvas>
     <div id="ov">
       <h2 id="ovt">NOUN RALLY</h2>
-      <p id="ovp">CNP11体をぜんぶ回収せよ。<br>車は止まらない ― 曲がる方向だけ決める。<br>行き止まりに入ると跳ね返って逆走する。<br>赤い車に触れるとアウト。<br>SMOKE で敵はスピンするが、燃料を多く食う。<br>燃料が尽きたら終わり。<br><br>PC: 矢印/WASD で曲がる ・ Space で煙</p>
+      <p id="ovp">CNP11体をぜんぶ回収せよ。<br>車は止まらない ― 曲がる方向だけ決める。<br>壁に当たると自動で右へ曲がる ― 行き止まりだけ跳ね返る。<br>赤い車に触れるとアウト。<br>SMOKE で敵はスピンするが、燃料を多く食う。<br>燃料が尽きたら終わり。<br><br>PC: 矢印/WASD で曲がる ・ Space で煙</p>
       <button id="btn">START</button>
     </div>
   </div>
@@ -147,6 +147,10 @@
   const cellOf=c=> [Math.floor(c.x/TILE), Math.floor(c.y/TILE)];
   const canGo=(c,d)=>{ const [cx,cy]=cellOf(c); return !isWall(cx+d.x,cy+d.y); };
   function snap(c){ c.x=(Math.floor(c.x/TILE)+.5)*TILE; c.y=(Math.floor(c.y/TILE)+.5)*TILE; }
+  // 進行方向から見た右折/左折。yが下向きの座標系なので、右折は (x,y)→(-y,x)
+  // （右へ走っていて右折すると下、下へ走っていて右折すると左）
+  const rightOf=d=>({x:-d.y,y:d.x});
+  const leftOf =d=>({x:d.y,y:-d.x});
   // 中心付近か＝この1フレームで中心をまたぐ距離まで近い
   const atCenter=c=>{
     const ox=c.x-(Math.floor(c.x/TILE)+.5)*TILE, oy=c.y-(Math.floor(c.y/TILE)+.5)*TILE;
@@ -160,10 +164,15 @@
       if((c.want.x!==c.dir.x||c.want.y!==c.dir.y) && canGo(c,c.want)){
         snap(c); c.dir={...c.want};
       }
-      // 進行方向が壁：行き止まりなので跳ね返って逆走する（車は止まらない）
+      // 進行方向が壁：曲がれるなら曲がる（右折優先）。両側とも壁の
+      // 行き止まりのときだけ跳ね返って逆走する。どちらにせよ止まらない。
+      //
+      // 単純に反転させると、通り抜けられる曲がり角でも引き返してしまい、
+      // 同じ通路を往復するばかりで先へ進めない
       if(!canGo(c,c.dir)){
+        const r=rightOf(c.dir), l=leftOf(c.dir);
         snap(c);
-        c.dir={x:-c.dir.x,y:-c.dir.y};
+        c.dir = canGo(c,r)? r : canGo(c,l)? l : {x:-c.dir.x,y:-c.dir.y};
         // 予約も今の向きに戻す。壁を向いたままの予約が残っていると、隣のマスで
         // 即座に曲がり直してしまい、行き止まりの前で往復し続ける
         c.want={...c.dir};
@@ -361,7 +370,7 @@
     if(score>best){ best=score; localStorage.setItem('nounrally_best',best); }
     beep(150,.28,'sawtooth',.06);
     ovt.textContent=title;
-    ovp.innerHTML=sub+'<br><br>車は止まらない。曲がる方向だけ決める。<br>行き止まりは跳ね返って逆走。<br>SMOKE は燃料を多く食う ― 使いどころ注意。';
+    ovp.innerHTML=sub+'<br><br>車は止まらない。曲がる方向だけ決める。<br>壁に当たると自動で右へ曲がる。行き止まりは跳ね返る。<br>SMOKE は燃料を多く食う ― 使いどころ注意。';
     btn.textContent='RETRY'; ov.classList.remove('hidden');
   }
 
