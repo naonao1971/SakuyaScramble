@@ -43,7 +43,7 @@
     <canvas id="c" width="512" height="384"></canvas>
     <div id="ov">
       <h2 id="ovt">NOUN RALLY</h2>
-      <p id="ovp">CNP11体をぜんぶ回収せよ。<br>車は止まらない ― 曲がる方向だけ決める。<br>赤い車に触れるとアウト。<br>SMOKE で敵はスピンするが、燃料を多く食う。<br>燃料が尽きたら終わり。<br><br>PC: 矢印/WASD で曲がる ・ Space で煙</p>
+      <p id="ovp">CNP11体をぜんぶ回収せよ。<br>車は止まらない ― 曲がる方向だけ決める。<br>行き止まりに入ると跳ね返って逆走する。<br>赤い車に触れるとアウト。<br>SMOKE で敵はスピンするが、燃料を多く食う。<br>燃料が尽きたら終わり。<br><br>PC: 矢印/WASD で曲がる ・ Space で煙</p>
       <button id="btn">START</button>
     </div>
   </div>
@@ -160,8 +160,14 @@
       if((c.want.x!==c.dir.x||c.want.y!==c.dir.y) && canGo(c,c.want)){
         snap(c); c.dir={...c.want};
       }
-      // 進行方向が壁：中心で停止（＝止まるのは壁のときだけ）
-      if(!canGo(c,c.dir)){ snap(c); c.ang=Math.atan2(c.dir.y,c.dir.x); return; }
+      // 進行方向が壁：行き止まりなので跳ね返って逆走する（車は止まらない）
+      if(!canGo(c,c.dir)){
+        snap(c);
+        c.dir={x:-c.dir.x,y:-c.dir.y};
+        // 予約も今の向きに戻す。壁を向いたままの予約が残っていると、隣のマスで
+        // 即座に曲がり直してしまい、行き止まりの前で往復し続ける
+        c.want={...c.dir};
+      }
     }
     c.x += c.dir.x*c.speed;
     c.y += c.dir.y*c.speed;
@@ -355,7 +361,7 @@
     if(score>best){ best=score; localStorage.setItem('nounrally_best',best); }
     beep(150,.28,'sawtooth',.06);
     ovt.textContent=title;
-    ovp.innerHTML=sub+'<br><br>車は止まらない。曲がる方向だけ決める。<br>SMOKE は燃料を多く食う ― 使いどころ注意。';
+    ovp.innerHTML=sub+'<br><br>車は止まらない。曲がる方向だけ決める。<br>行き止まりは跳ね返って逆走。<br>SMOKE は燃料を多く食う ― 使いどころ注意。';
     btn.textContent='RETRY'; ov.classList.remove('hidden');
   }
 
