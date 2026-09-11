@@ -152,15 +152,21 @@
   // （右へ走っていて右折すると下、下へ走っていて右折すると左）
   const rightOf=d=>({x:-d.y,y:d.x});
   const leftOf =d=>({x:d.y,y:-d.x});
-  // 中心付近か＝この1フレームで中心をまたぐ距離まで近い
-  const atCenter=c=>{
+  // 中心付近か＝この1フレームで中心をまたぐ距離まで近い。
+  // しきい値は実際に進む距離(step)と必ず同じにすること。ここがズレると、
+  // 重いフレームで中心を飛び越えたのに気づけず、曲がり損ねて壁をすり抜ける
+  const atCenter=(c,step)=>{
     const ox=c.x-(Math.floor(c.x/TILE)+.5)*TILE, oy=c.y-(Math.floor(c.y/TILE)+.5)*TILE;
-    return Math.abs(ox)<c.speed && Math.abs(oy)<c.speed;
+    return Math.abs(ox)<step && Math.abs(oy)<step;
   };
 
-  function stepCar(c){
-    if(c.spin>0){ c.spin-=1/60; c.ang+=0.35; return; }
-    if(atCenter(c)){
+  // k は 60fps を 1 とするフレーム倍率(= dt*60)。速度をこれで割り増しすることで、
+  // 120Hz でも 60Hz でも実時間あたりの速さが揃う。元は毎フレーム固定量だけ
+  // 進めていたため、120Hz の端末では2倍速で走っていた
+  function stepCar(c,k){
+    if(c.spin>0){ c.spin-=k/60; c.ang+=0.35*k; return; }
+    const step=c.speed*k;
+    if(atCenter(c,step)){
       // 予約された曲がりを適用（曲がるときだけ中心へスナップ）。
       // ただし後退（今の向きの真逆）は、押されたばかりの予約でないと通さない。
       // 自動で曲がったあとに残った古い予約が真逆を向いていると、来た道は必ず
@@ -192,13 +198,13 @@
         }
       }
     }
-    c.x += c.dir.x*c.speed;
-    c.y += c.dir.y*c.speed;
+    c.x += c.dir.x*step;
+    c.y += c.dir.y*step;
     c.ang = Math.atan2(c.dir.y,c.dir.x);
   }
 
-  function aiThink(e){
-    if(e.spin>0 || !atCenter(e)) return;
+  function aiThink(e,k){
+    if(e.spin>0 || !atCenter(e,e.speed*k)) return;
     const opts=[{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}].filter(d=>{
       if(d.x===-e.dir.x&&d.y===-e.dir.y) return false;
       return canGo(e,d);
@@ -216,8 +222,11 @@
   let last;
   function update(dt){
     t+=dt;
-    stepCar(player);
-    for(const e of enemies){ aiThink(e); stepCar(e); }
+    // dt は loop() で 0.05 秒に制限済みなので k は最大 3。1フレームの移動量は
+    // 最大でも 6.3px で、TILE=24 を飛び越すことはない
+    const k = dt*60;
+    stepCar(player,k);
+    for(const e of enemies){ aiThink(e,k); stepCar(e,k); }
 
     // fuel: base drain + extra while laying smoke (本家: 煙は燃料を食う)
     const laying = emitting && fuel>0;
