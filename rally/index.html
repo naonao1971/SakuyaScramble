@@ -123,9 +123,19 @@
     const l=[]; for(let y=1;y<ROWS-1;y++)for(let x=1;x<COLS-1;x++) if(grid[y][x]===0) l.push([x,y]); return l;
   }
 
+  // キーを離してから予約が消えるまでの猶予(秒)。押している間は消えない。
+  // 曲がり角の手前で早めに押した入力を拾うためのもので、長くしすぎると
+  // 「ずっと前に押した向き」に勝手に曲がる
+  const WANT_GRACE = 0.25;
+  let heldDir=null, heldCode=null;   // いま押されている方向キー
+
   function mkCar(x,y,color,ai){
     // wantFresh: 予約が押されたばかりかどうか。後退の可否判定だけに使う
-    return { x,y,color,ai, dir:{x:1,y:0}, want:{x:1,y:0}, wantFresh:false, speed:(ai?1.75:2.1), spin:0, ang:0 };
+    // wantTimer: 予約の残り寿命(秒)。自機だけが使う
+    // want が null なら「予約なし」。dir と同じ値を入れる方式だと、その後に
+    // 車が自動で曲がった瞬間 want と dir がズレて予約として復活してしまう
+    return { x,y,color,ai, dir:{x:1,y:0}, want:null, wantFresh:false, wantTimer:0,
+             speed:(ai?1.75:2.1), spin:0, ang:0 };
   }
 
   function newGame(){
@@ -141,7 +151,7 @@
     smoke=[]; cam={x:0,y:0}; score=0; got=0; fuel=100; emitting=false; t=0;
     // スポーン地点で開いている方向へ走り出す（前が壁だと動けないため）
     const pdir=[{x:1,y:0},{x:0,y:1},{x:-1,y:0},{x:0,y:-1}].find(d=>!isWall(1+d.x,1+d.y)) || {x:1,y:0};
-    player.dir={...pdir}; player.want={...pdir};
+    player.dir={...pdir}; player.want=null;
     state='play'; ov.classList.add('hidden'); last=performance.now(); requestAnimationFrame(loop);
   }
 
@@ -171,8 +181,8 @@
       // ただし後退（今の向きの真逆）は、押されたばかりの予約でないと通さない。
       // 自動で曲がったあとに残った古い予約が真逆を向いていると、来た道は必ず
       // 開いているので無条件に通ってしまい、勝手にUターンする
-      const wantsReverse = (c.want.x===-c.dir.x && c.want.y===-c.dir.y);
-      if((c.want.x!==c.dir.x||c.want.y!==c.dir.y) && canGo(c,c.want)
+      const wantsReverse = !!c.want && (c.want.x===-c.dir.x && c.want.y===-c.dir.y);
+      if(c.want && (c.want.x!==c.dir.x||c.want.y!==c.dir.y) && canGo(c,c.want)
          && (!wantsReverse || c.wantFresh)){
         snap(c); c.dir={...c.want}; c.wantFresh=false;
       }
@@ -194,7 +204,7 @@
           // 隣のマスで即座に曲がり直して袋小路の前で往復し続ける。
           // 曲がれた場合に予約を消さないのは、プレイヤーが押した向きを
           // 次のマスまで持ち越して「操作した方へ行く」を成立させるため
-          c.want={...c.dir};
+          c.want=null;
         }
       }
     }
@@ -225,6 +235,15 @@
     // dt は loop() で 0.05 秒に制限済みなので k は最大 3。1フレームの移動量は
     // 最大でも 6.3px で、TILE=24 を飛び越すことはない
     const k = dt*60;
+    // 予約の寿命。押している間は補充し続け、離すと WANT_GRACE 秒で消える。
+    // 消えた状態(want===dir)では下の自動規則だけで走るので、何も押していない
+    // ときの動きは「直進 → 壁で右折 → 左折 → 袋小路ならUターン」に固定される。
+    // 以前は予約が永久に残り、一度押した向きへ延々と曲がり続けていた
+    if(heldDir){ player.want={...heldDir}; player.wantTimer=WANT_GRACE; }
+    else if(player.wantTimer>0){
+      player.wantTimer-=dt;
+      if(player.wantTimer<=0){ player.want=null; player.wantFresh=false; }
+    }
     stepCar(player,k);
     for(const e of enemies){ aiThink(e,k); stepCar(e,k); }
 
@@ -402,12 +421,36 @@
                 ArrowLeft:{x:-1,y:0},KeyA:{x:-1,y:0},ArrowRight:{x:1,y:0},KeyD:{x:1,y:0}};
   addEventListener('keydown',e=>{
     if(e.code==='Space'){ e.preventDefault(); emitting=true; return; }
-    const d=KEYDIR[e.code]; if(d){ e.preventDefault(); if(state==='play'){ player.want={...d}; player.wantFresh=true; } }
+    const d=KEYDIR[e.code];
+    if(d){ e.preventDefault();
+      if(state==='play'){
+        heldDir={...d}; heldCode=e.code;
+        player.want={...d}; player.wantTimer=WANT_GRACE;
+        // オートリピート(押しっぱなし)は「押したばかり」に数えない。ここを立て
+        // 続けると、自動で2回曲がって向きが真逆になったとき、来た道はかならず
+        // 開いているのでUターンの条件が通り、勝手に引き返してしまう
+        if(!e.repeat) player.wantFresh=true;
+      }
+    }
   });
-  addEventListener('keyup',e=>{ if(e.code==='Space') emitting=false; });
+  // キーを押したままタブやウィンドウを切り替えると keyup が飛んでこない。
+  // 放置すると「押しっぱなし」のまま固まり、戻ってきたときに勝手に曲がり続ける
+  addEventListener('blur',()=>{ heldCode=null; heldDir=null; emitting=false; });
+  addEventListener('keyup',e=>{
+    if(e.code==='Space') emitting=false;
+    // 離したのが「いま保持している向き」のときだけ解除する。別の向きを
+    // 押し足した後で古い方を離しても、新しい向きは保持したままにする
+    if(e.code===heldCode){ heldCode=null; heldDir=null; }
+  });
   document.querySelectorAll('#pad [data-d]').forEach(b=>{
     const m={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}};
-    b.addEventListener('pointerdown',e=>{e.preventDefault(); if(state==='play'){ player.want={...m[b.dataset.d]}; player.wantFresh=true; }});
+    const release=()=>{ if(heldCode==='pad:'+b.dataset.d){ heldCode=null; heldDir=null; } };
+    b.addEventListener('pointerdown',e=>{e.preventDefault();
+      if(state==='play'){ heldDir={...m[b.dataset.d]}; heldCode='pad:'+b.dataset.d;
+        player.want={...heldDir}; player.wantTimer=WANT_GRACE; player.wantFresh=true; }});
+    b.addEventListener('pointerup',release);
+    b.addEventListener('pointerleave',release);
+    b.addEventListener('pointercancel',release);
   });
   const smk=document.getElementById('smk');
   smk.addEventListener('pointerdown',e=>{e.preventDefault();emitting=true;});
@@ -420,6 +463,7 @@
     if(Math.abs(dx)<12&&Math.abs(dy)<12 || state!=='play') return;
     player.want = Math.abs(dx)>Math.abs(dy)? {x:Math.sign(dx),y:0} : {x:0,y:Math.sign(dy)};
     player.wantFresh = true;
+    player.wantTimer = WANT_GRACE;
   });
   btn.addEventListener('click',e=>{ e.stopPropagation(); newGame(); });
 
