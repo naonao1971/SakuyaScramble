@@ -124,7 +124,8 @@
   }
 
   function mkCar(x,y,color,ai){
-    return { x,y,color,ai, dir:{x:1,y:0}, want:{x:1,y:0}, speed:(ai?1.75:2.1), spin:0, ang:0 };
+    // wantFresh: 予約が押されたばかりかどうか。後退の可否判定だけに使う
+    return { x,y,color,ai, dir:{x:1,y:0}, want:{x:1,y:0}, wantFresh:false, speed:(ai?1.75:2.1), spin:0, ang:0 };
   }
 
   function newGame(){
@@ -160,9 +161,14 @@
   function stepCar(c){
     if(c.spin>0){ c.spin-=1/60; c.ang+=0.35; return; }
     if(atCenter(c)){
-      // 予約された曲がりを適用（曲がるときだけ中心へスナップ）
-      if((c.want.x!==c.dir.x||c.want.y!==c.dir.y) && canGo(c,c.want)){
-        snap(c); c.dir={...c.want};
+      // 予約された曲がりを適用（曲がるときだけ中心へスナップ）。
+      // ただし後退（今の向きの真逆）は、押されたばかりの予約でないと通さない。
+      // 自動で曲がったあとに残った古い予約が真逆を向いていると、来た道は必ず
+      // 開いているので無条件に通ってしまい、勝手にUターンする
+      const wantsReverse = (c.want.x===-c.dir.x && c.want.y===-c.dir.y);
+      if((c.want.x!==c.dir.x||c.want.y!==c.dir.y) && canGo(c,c.want)
+         && (!wantsReverse || c.wantFresh)){
+        snap(c); c.dir={...c.want}; c.wantFresh=false;
       }
       // 進行方向が壁のときの行き先。地形ごとに分かれる:
       //   L字路  … 開いている一方へ曲がって先へ進む
@@ -173,6 +179,7 @@
       if(!canGo(c,c.dir)){
         const r=rightOf(c.dir), l=leftOf(c.dir);
         snap(c);
+        c.wantFresh=false;
         if(canGo(c,r))      c.dir=r;
         else if(canGo(c,l)) c.dir=l;
         else {
@@ -203,6 +210,7 @@
       return da-db;
     });
     e.want = (Math.random()<0.72? ch[0] : ch[(Math.random()*ch.length)|0]) || e.dir;
+    e.wantFresh = true;
   }
 
   let last;
@@ -385,12 +393,12 @@
                 ArrowLeft:{x:-1,y:0},KeyA:{x:-1,y:0},ArrowRight:{x:1,y:0},KeyD:{x:1,y:0}};
   addEventListener('keydown',e=>{
     if(e.code==='Space'){ e.preventDefault(); emitting=true; return; }
-    const d=KEYDIR[e.code]; if(d){ e.preventDefault(); if(state==='play') player.want={...d}; }
+    const d=KEYDIR[e.code]; if(d){ e.preventDefault(); if(state==='play'){ player.want={...d}; player.wantFresh=true; } }
   });
   addEventListener('keyup',e=>{ if(e.code==='Space') emitting=false; });
   document.querySelectorAll('#pad [data-d]').forEach(b=>{
     const m={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}};
-    b.addEventListener('pointerdown',e=>{e.preventDefault(); if(state==='play') player.want={...m[b.dataset.d]};});
+    b.addEventListener('pointerdown',e=>{e.preventDefault(); if(state==='play'){ player.want={...m[b.dataset.d]}; player.wantFresh=true; }});
   });
   const smk=document.getElementById('smk');
   smk.addEventListener('pointerdown',e=>{e.preventDefault();emitting=true;});
@@ -402,6 +410,7 @@
     if(!ts) return; const dx=e.clientX-ts.x, dy=e.clientY-ts.y; ts=null;
     if(Math.abs(dx)<12&&Math.abs(dy)<12 || state!=='play') return;
     player.want = Math.abs(dx)>Math.abs(dy)? {x:Math.sign(dx),y:0} : {x:0,y:Math.sign(dy)};
+    player.wantFresh = true;
   });
   btn.addEventListener('click',e=>{ e.stopPropagation(); newGame(); });
 
