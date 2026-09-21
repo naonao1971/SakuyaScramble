@@ -728,13 +728,17 @@
       font-weight: 700;
       letter-spacing: 0.04em;
       padding: 10px 18px;
-      margin-top: 14px;
       border-radius: var(--radius);
       cursor: pointer;
       border: 2px solid var(--gold);
       background: var(--panel);
       color: var(--gold);
       box-shadow: var(--bevel-up);
+    }
+    /* orientationOverlay内はgap:10pxで間隔が付くため、ここでの上マージンは
+       .wrap直下に置くタイトル画面側(#fsPlayButton)にだけ足す */
+    #fsPlayButton {
+      margin-top: 14px;
     }
     .fsbtn:active {
       box-shadow: var(--bevel-down);
@@ -4599,13 +4603,19 @@
     });
 
     // same left/top-at-canvas-origin mapping as positionStartButton, sized to
-    // the canvas's current rendered box so the overlay covers it exactly
+    // the canvas's current rendered box so the overlay covers it exactly.
+    // heightではなくmin-heightにしているのは、実機のSafariはアドレスバー分
+    // ビューポートが縮み、canvasの高さ(=max-height:72vhで頭打ち)が中身
+    // (タイトル・案内文・全画面ボタン等)より低くなることがあるため。
+    // heightで固定すると中身が枠の外へはみ出して縁と重なって見える不具合が
+    // あった。min-heightなら中身に合わせて枠自体が伸びるので重ならない
     function positionOrientationOverlay() {
       const rect = canvas.getBoundingClientRect();
       orientationOverlay.style.left = "0px";
       orientationOverlay.style.top = "0px";
       orientationOverlay.style.width = `${rect.width}px`;
-      orientationOverlay.style.height = `${rect.height}px`;
+      orientationOverlay.style.height = "auto";
+      orientationOverlay.style.minHeight = `${rect.height}px`;
     }
 
     // PC (isMobileDevice === false) は縦長ウィンドウでも絶対に出さない。
