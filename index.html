@@ -8,12 +8,16 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="咲耶スクランブル" />
   <title>SAKUYA SCRAMBLE ─ RESCUE 11 CNP</title>
   <!-- アイコンを明示しないとブラウザが /favicon.ico を自動で取りに行き、
        置いていないので404になる。宣言すればその要求自体が起きない。
        apple-touch-iconは「ホーム画面に追加」でiOSが使う -->
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <!-- 「ホーム画面に追加」時の既定表示(standalone/横向き)をここで決める。
+       manifestが無いと、追加してもブラウザ表示のまま(全画面にならない)ことがある -->
+  <link rel="manifest" href="manifest.json" />
   <!-- OGP / Twitter Card -->
   <meta property="og:type" content="website" />
   <meta property="og:title" content="SAKUYA SCRAMBLE ─ RESCUE 11 CNP" />
@@ -713,6 +717,150 @@
     .xid-preview a {
       color: var(--dim);
     }
+
+    /* ===== 全画面で遊ぶボタン（ホーム画面への追加を案内。F19相当）=====
+       見た目・挙動は姉妹作「咲耶Nounラリー」と揃えてある。ラリー側の色は
+       このゲームのトークン(--gold/--magenta/--panel/--dim)へ置き換えている */
+    .fsbtn {
+      font: inherit;
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      padding: 10px 18px;
+      margin-top: 14px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      border: 2px solid var(--gold);
+      background: var(--panel);
+      color: var(--gold);
+      box-shadow: var(--bevel-up);
+    }
+    .fsbtn:active {
+      box-shadow: var(--bevel-down);
+      transform: translateY(2px);
+    }
+    .fsbtn[hidden] {
+      display: none;
+    }
+
+    /* ホーム画面への追加を案内する幕。iOSの共有シートは撮れないので図で描く。
+       実機のスクショはiOSの版が上がるたびに古くなるが、図なら古くならない */
+    #fsHomeModal {
+      position: fixed;
+      inset: 0;
+      z-index: 120;
+      display: none;
+      background: rgba(6, 7, 12, 0.86);
+      -webkit-backdrop-filter: blur(3px);
+      backdrop-filter: blur(3px);
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 20px 14px;
+      box-sizing: border-box;
+    }
+    #fsHomeModal.show {
+      display: block;
+    }
+    #fsHomeBox {
+      max-width: 420px;
+      margin: 0 auto;
+      background: var(--panel);
+      color: var(--ink);
+      border: 2px solid var(--gold);
+      border-radius: var(--radius);
+      box-shadow: var(--bevel-up);
+      padding: 18px 16px 16px;
+      box-sizing: border-box;
+      text-align: center;
+      font-family: var(--font-body);
+    }
+    #fsHomeBox h3 {
+      margin: 0 0 10px;
+      font-family: var(--font-display);
+      font-size: 14px;
+      letter-spacing: 0.04em;
+      color: var(--gold);
+    }
+    .fs-home-lead {
+      margin: 0 0 16px;
+      font-size: 12.5px;
+      line-height: 1.8;
+      color: var(--dim);
+    }
+    .fs-home-lead b {
+      color: var(--magenta);
+    }
+    .fs-home-step {
+      display: flex;
+      gap: 11px;
+      align-items: flex-start;
+      text-align: left;
+      padding: 12px 0;
+      border-top: 1px solid var(--edge-hi);
+    }
+    .fs-home-step-n {
+      flex: 0 0 22px;
+      height: 22px;
+      border-radius: var(--radius);
+      background: var(--gold);
+      color: var(--bg);
+      font: 800 11px/22px ui-monospace, monospace;
+      text-align: center;
+    }
+    .fs-home-step-t {
+      flex: 1 1 auto;
+      font-size: 12.5px;
+      line-height: 1.7;
+    }
+    .fs-home-step-t em {
+      font-style: normal;
+      color: var(--gold);
+      font-weight: 800;
+    }
+    .fs-home-step-t svg {
+      display: block;
+      margin: 8px 0 0;
+      width: 100%;
+      max-width: 210px;
+      height: auto;
+    }
+    .fs-home-close {
+      margin-top: 14px;
+      font: inherit;
+      font-family: var(--font-body);
+      font-size: 13px;
+      font-weight: 800;
+      width: 100%;
+      padding: 11px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      border: 2px solid var(--gold);
+      background: var(--panel);
+      color: var(--gold);
+      box-shadow: var(--bevel-up);
+      box-sizing: border-box;
+    }
+    .fs-home-close:active {
+      box-shadow: var(--bevel-down);
+      transform: translateY(2px);
+    }
+    .fs-home-foot {
+      margin: 12px 0 0;
+      font-size: 11.5px;
+      line-height: 1.7;
+      color: var(--dim);
+    }
+    .fs-home-note {
+      margin: 10px 0 0;
+      font-size: 11.5px;
+      line-height: 1.7;
+      color: var(--danger);
+    }
+    .fs-home-note[hidden] {
+      display: none;
+    }
+
     /* 走査線と明滅は「動き」なので、reduced-motion指定時は止める */
     @media (prefers-reduced-motion: reduce) {
       .hud-start {
@@ -729,6 +877,7 @@
       <p class="orientation-overlay-sub">- RESCUE 11 CNP -</p>
       <div class="orientation-overlay-icon">📱⤾</div>
       <p>横向きにしてね ⌐◨-◨</p>
+      <button class="fsbtn" type="button" hidden>🎮 全画面で遊ぶ</button>
     </div>
     <button id="pauseButton" class="pause-button" type="button" aria-label="一時停止" style="display: none;">⏸</button>
     <!-- クリア画面の映像。canvasへ drawImage() で描くだけなので画面には出さないが、
@@ -777,6 +926,81 @@
   <footer class="site-footer">
     本作は CryptoNinja / CryptoNinja Partners の非公式ファンアートです
   </footer>
+
+  <div id="fsHomeModal" role="dialog" aria-modal="true" aria-labelledby="fsHomeTitle" hidden>
+    <div id="fsHomeBox">
+      <h3 id="fsHomeTitle">&#x1F3AE; 全画面で遊ぶ</h3>
+      <p class="fs-home-lead">iPhone では、<b>ホーム画面に追加</b>すると<br>
+        Safari のアドレスバーなしで遊べます。</p>
+
+      <div class="fs-home-step">
+        <div class="fs-home-step-n">1</div>
+        <div class="fs-home-step-t">画面の下にある <em>共有</em> ボタンをタップ
+          <svg viewBox="0 0 210 78" role="img" aria-label="画面下のツールバーにある共有ボタン">
+            <rect x="1" y="1" width="208" height="76" rx="9" fill="#120c18"
+                  stroke="rgba(242,233,239,.18)"/>
+            <rect x="12" y="14" width="186" height="30" rx="6" fill="#241b2d"/>
+            <text x="105" y="34" text-anchor="middle" font-size="11"
+                  font-family="ui-monospace,monospace" fill="rgba(242,233,239,.45)">
+              sakuya.naoblock.jp</text>
+            <rect x="12" y="52" width="186" height="16" rx="5" fill="#241b2d"/>
+            <circle cx="105" cy="60" r="13" fill="none" stroke="#ff2d9b" stroke-width="2"/>
+            <path d="M105 54 v9 M101 57 l4-4 4 4" stroke="#ff2d9b" stroke-width="1.8"
+                  fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect x="99" y="62" width="12" height="2" fill="#ff2d9b"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="fs-home-step">
+        <div class="fs-home-step-n">2</div>
+        <div class="fs-home-step-t">出てきた一覧から <em>ホーム画面に追加</em> をタップ
+          <svg viewBox="0 0 210 78" role="img" aria-label="共有シートのホーム画面に追加の項目">
+            <rect x="1" y="1" width="208" height="76" rx="9" fill="#120c18"
+                  stroke="rgba(242,233,239,.18)"/>
+            <rect x="12" y="10" width="186" height="17" rx="5" fill="#241b2d"/>
+            <rect x="22" y="16" width="72" height="5" rx="2.5" fill="rgba(242,233,239,.22)"/>
+            <rect x="12" y="31" width="186" height="20" rx="5" fill="#2e2338"
+                  stroke="#ff2d9b" stroke-width="1.6"/>
+            <rect x="21" y="36" width="10" height="10" rx="2" fill="none"
+                  stroke="#ff2d9b" stroke-width="1.5"/>
+            <path d="M26 39 v4 M24 41 h4" stroke="#ff2d9b" stroke-width="1.4"
+                  stroke-linecap="round"/>
+            <text x="39" y="45" font-size="9.5" font-family="sans-serif" fill="#f2e9ef">
+              ホーム画面に追加</text>
+            <rect x="12" y="55" width="186" height="17" rx="5" fill="#241b2d"/>
+            <rect x="22" y="61" width="58" height="5" rx="2.5" fill="rgba(242,233,239,.22)"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="fs-home-step">
+        <div class="fs-home-step-n">3</div>
+        <div class="fs-home-step-t"><em>Webアプリとして開く</em> をオンにして <em>追加</em>
+          <svg viewBox="0 0 210 78" role="img" aria-label="Webアプリとして開くをオンにして追加">
+            <rect x="1" y="1" width="208" height="76" rx="9" fill="#120c18"
+                  stroke="rgba(242,233,239,.18)"/>
+            <rect x="12" y="10" width="120" height="16" rx="5" fill="#241b2d"/>
+            <rect x="21" y="15" width="46" height="6" rx="3" fill="rgba(242,233,239,.28)"/>
+            <rect x="146" y="9" width="52" height="18" rx="9" fill="#ff2d9b"/>
+            <text x="172" y="22" text-anchor="middle" font-size="10"
+                  font-family="sans-serif" font-weight="700" fill="#150f1a">追加</text>
+            <rect x="12" y="38" width="186" height="28" rx="6" fill="#2e2338"
+                  stroke="#ff2d9b" stroke-width="1.6"/>
+            <text x="22" y="56" font-size="9.5" font-family="sans-serif" fill="#f2e9ef">
+              Webアプリとして開く</text>
+            <rect x="158" y="45" width="30" height="16" rx="8" fill="#49e0d8"/>
+            <circle cx="180" cy="53" r="6" fill="#ffffff"/>
+          </svg>
+        </div>
+      </div>
+
+      <p class="fs-home-note" id="fsHomeNote" hidden></p>
+      <p class="fs-home-foot">追加したら、<b>ホーム画面のアイコンからゲームを起動</b>してください。<br>
+        Safari から開いたままでは全画面になりません。</p>
+      <button class="fs-home-close" type="button" id="fsHomeClose">閉じる</button>
+    </div>
+  </div>
 
   <script>
     const canvas = document.getElementById("game");
@@ -1356,6 +1580,16 @@
     startButton.className = "start hud-start";
     startButton.textContent = "スタート";
     document.querySelector(".wrap").appendChild(startButton);
+
+    // 全画面で遊ぶボタン(F19相当。姉妹作「咲耶Nounラリー」と見た目・挙動を揃える)。
+    // startButtonと違いcanvas上の座標には追従させず、キャンバスの下に通常のフローで置く
+    const fsPlayButton = document.createElement("button");
+    fsPlayButton.id = "fsPlayButton";
+    fsPlayButton.type = "button";
+    fsPlayButton.className = "fsbtn";
+    fsPlayButton.textContent = "🎮 全画面で遊ぶ";
+    fsPlayButton.hidden = true;
+    document.querySelector(".wrap").appendChild(fsPlayButton);
 
     // switches between gyro tilt control and key/touch control, without re-prompting for permission.
     // sits in the empty center cell of the d-pad grid, icon-only so it doesn't crowd the controller.
@@ -4297,10 +4531,14 @@
     // start button only shows while waiting to start: before the first スタート press,
     // or after GAME OVER / CLEAR (where it doubles as the restart trigger)
     let _startButtonWasShown = false;
+    // ホーム画面アプリとして起動中はfsPlayButton自体を出さない(setupFsButtons()がfalseにする)
+    let fsPlayButtonAvailable = true;
     function updateStartButtonVisibility() {
       // ゲームオーバー演出の再生中は出さない。流し終えてから従来どおり見せる
       const shouldShow = (!state.started || state.gameOver || state.cleared) && !isGameOverCutscenePlaying();
       startButton.style.display = shouldShow ? "" : "none";
+      // 縦持ち中はorientationOverlay側に同じボタンが出ているため、二重に見えないよう隠す
+      fsPlayButton.hidden = !(shouldShow && fsPlayButtonAvailable) || orientationBlocked;
       // getBoundingClientRect() forces a layout reflow — only pay that cost on the
       // rising edge (button just appeared), not every single frame it stays visible.
       // window resize/orientationchange (below) keep it correctly positioned otherwise.
@@ -5063,6 +5301,84 @@
       }
       document.addEventListener("fullscreenchange", updateFullscreenToggleUI);
       document.addEventListener("webkitfullscreenchange", updateFullscreenToggleUI);
+    }
+
+    // ===== 全画面で遊ぶボタン（ホーム画面への追加を案内。F19相当）=====
+    // 姉妹作「咲耶Nounラリー」と見た目・挙動を揃えるための機能。
+    // iPhoneにはFullscreen APIが無い(supportsFullscreenがfalseになる)ため、
+    // 「ホーム画面に追加」しか全画面にする道がない。iPad/Android/PCでは
+    // supportsFullscreenが実際のAPI有無で決まるので、機種のUA文字列に
+    // 頼らずそのまま本物の全画面を試せる(iPadOSがUAをMac名乗りする問題が起きない)。
+    //
+    // 効かないボタンを出さないこと。すでにホーム画面アプリで動いているなら
+    // 用が済んでいるので出さない。全画面APIが断られたときも黙って終わらせず、
+    // ホーム画面への案内幕に切り替える
+    const fsHomeModal = document.getElementById("fsHomeModal");
+    const fsHomeNote = document.getElementById("fsHomeNote");
+    const fsHomeCloseButton = document.getElementById("fsHomeClose");
+    // iOSのChrome/Firefox/Edge/Operaは中身がSafariと同じWebKitだが、
+    // 共有シートからの追加に失敗することがあるためSafariで開くよう案内を添える
+    const IOS_OTHER_BROWSER =
+      /iP(hone|od)/.test(navigator.userAgent) && /CriOS|FxiOS|EdgiOS|OPiOS/.test(navigator.userAgent);
+    function isStandaloneApp() {
+      try {
+        return !!(
+          navigator.standalone ||
+          (window.matchMedia && matchMedia("(display-mode: standalone)").matches)
+        );
+      } catch (e) {
+        return false;
+      }
+    }
+    function openFsHomeModal() {
+      if (IOS_OTHER_BROWSER) {
+        fsHomeNote.textContent =
+          "このブラウザでは追加できないことがあります。うまくいかないときは Safari で開いてください。";
+        fsHomeNote.hidden = false;
+      }
+      fsHomeModal.hidden = false;
+      fsHomeModal.classList.add("show");
+      fsHomeModal.scrollTop = 0;
+    }
+    function closeFsHomeModal() {
+      fsHomeModal.classList.remove("show");
+      fsHomeModal.hidden = true;
+    }
+    function setupFsButtons() {
+      // すでにホーム画面アプリとして起動中なら、案内する用が無いので出さない
+      if (isStandaloneApp()) {
+        fsPlayButtonAvailable = false;
+        fsPlayButton.hidden = true;
+        return;
+      }
+      const orientationFsButton = orientationOverlay.querySelector(".fsbtn");
+      if (orientationFsButton) orientationFsButton.hidden = false;
+      for (const b of document.querySelectorAll(".fsbtn")) {
+        b.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (supportsFullscreen) {
+            // 本物の全画面(iPad/Android/PC)。断られたときも黙って終わらせず幕へ切り替える
+            requestFullscreen().then(() => {
+              updateFullscreenToggleUI();
+              if (!isFullscreenActive()) openFsHomeModal();
+            });
+            return;
+          }
+          openFsHomeModal();
+        });
+      }
+    }
+    setupFsButtons();
+    if (fsHomeCloseButton) {
+      fsHomeCloseButton.addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeFsHomeModal();
+      });
+    }
+    if (fsHomeModal) {
+      fsHomeModal.addEventListener("click", (e) => {
+        if (e.target === fsHomeModal) closeFsHomeModal();
+      });
     }
 
     // タッチ操作の途中でアプリがバックグラウンドに回った/タブが非表示になった
