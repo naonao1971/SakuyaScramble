@@ -91,7 +91,7 @@
       touch-action: none;
     }
     .sys button { width: 34px; height: 34px; font-size: 14px; }
-    .sys button:active, .pad button.on { box-shadow: var(--bevel-down); background: rgba(255, 45, 155, 0.35); }
+    .sys button:active, .sys button.on, .pad button.on { box-shadow: var(--bevel-down); background: rgba(255, 45, 155, 0.35); }
 
     /* タッチ操作。タッチ端末でだけ出す(body.touch)。
        左手=◀▶、右手=ショット/ジャンプ。本家と同じく半透明で下の地形を透かす */
@@ -189,6 +189,7 @@
   <div class="wrap" id="wrap">
     <canvas id="game" width="960" height="540" aria-label="咲耶ジャンプバグ ゲーム画面"></canvas>
     <div class="sys">
+      <button id="btnPad" type="button" aria-label="タッチ操作ボタンの表示切り替え">🎮</button>
       <button id="btnPause" type="button" aria-label="一時停止">II</button>
       <button id="btnMute" type="button" aria-label="音のオン/オフ">♪</button>
     </div>
@@ -218,8 +219,20 @@
     const ctx = canvas.getContext("2d");
     const W = canvas.width;
     const H = canvas.height;
-    const isTouch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
-    if (isTouch) document.body.classList.add("touch");
+    // タッチ端末の判定。埋め込み表示(iframe)やブラウザによっては maxTouchPoints が
+    // 0 のまま返ることがあるので、メディアクエリと「実際に触れたか」でも拾う。
+    // それでも出ないときのために、右上の🎮で手動でも出し入れできる
+    const mq = (q) => window.matchMedia && window.matchMedia(q).matches;
+    let isTouch = "ontouchstart" in window || navigator.maxTouchPoints > 0 || mq("(pointer: coarse)") || mq("(hover: none)");
+    function setTouchMode(on) {
+      isTouch = on;
+      document.body.classList.toggle("touch", on);
+      const b = document.getElementById("btnPad");
+      if (b) b.classList.toggle("on", on);
+    }
+    setTouchMode(isTouch);
+    window.addEventListener("touchstart", () => { if (!isTouch) setTouchMode(true); }, { passive: true, capture: true });
+    window.addEventListener("pointerdown", (e) => { if (e.pointerType === "touch" && !isTouch) setTouchMode(true); }, { capture: true });
     const portraitMQ = window.matchMedia("(orientation: portrait)");
 
     // ------------------------------------------------------------------
@@ -1965,6 +1978,7 @@
       muteBtn.setAttribute("aria-label", SFX.muted ? "音をオン" : "音をオフ");
     }
     muteBtn.addEventListener("click", (e) => { e.stopPropagation(); toggleMute(); });
+    document.getElementById("btnPad").addEventListener("click", (e) => { e.stopPropagation(); setTouchMode(!isTouch); });
     pauseBtn.addEventListener("click", (e) => { e.stopPropagation(); setPaused(!state.paused); });
 
     shareBtn.addEventListener("click", (e) => {
