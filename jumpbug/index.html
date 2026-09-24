@@ -2383,18 +2383,167 @@
     document.getElementById("btnPad").addEventListener("click", (e) => { e.stopPropagation(); setTouchMode(!isTouch); });
     pauseBtn.addEventListener("click", (e) => { e.stopPropagation(); setPaused(!state.paused); });
 
-    shareBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
+    // ------------------------------------------------------------------
+    // Xシェア(咲耶スクランブルと同じ作り)
+    //  - 結果を描いた画像カードを作り、対応端末ではOSの共有シートへ画像と文章を渡す
+    //    (Xを選べば画像付きで投稿できる)
+    //  - 共有シートが無い環境では画像を保存してから投稿画面を開き、手動で添付してもらう
+    //    (Xの投稿画面はURL経由での画像添付に対応していない)
+    // ------------------------------------------------------------------
+    const SHARE_URL = "https://sakuya.naoblock.jp/jumpbug/";
+    function buildShareText() {
       const got = state.rescued.filter(Boolean).length;
-      const head = state.phase === "clear" ? "ゴール!" : "GAME OVER…";
-      const text = `咲耶ジャンプバグで${head} SCORE ${state.score} / CNP ${got}/11 救出 ⌐◨-◨\n#咲耶ジャンプバグ #CNP`;
-      const url = "https://sakuya.naoblock.jp/jumpbug/";
-      window.open("https://twitter.com/intent/tweet?text=" + encodeURIComponent(text) + "&url=" + encodeURIComponent(url), "_blank", "noopener");
+      const score = state.score.toLocaleString();
+      const head = state.phase === "clear"
+        ? "咲耶ジャンプバグでゴール！"
+        : `咲耶ジャンプバグ ${ZONES[state.zone].jp}でGAME OVER…`;
+      return `${head}\nスコア ${score}\nCNP ${got}/${CNP.length} 救出 ⌐◨-◨\n#咲耶ジャンプバグ`;
+    }
+    function openXIntent(text) {
+      const params = new URLSearchParams({ text, url: SHARE_URL });
+      window.open(`https://twitter.com/intent/tweet?${params.toString()}`, "_blank", "noopener");
+    }
+
+    // シェア用のリザルトカード。ゲーム画面(HUD・走査線)は含めず、結果だけを読める専用レイアウト
+    function buildShareCardCanvas() {
+      const CW = 1200, CH = 675;
+      const card = document.createElement("canvas");
+      card.width = CW;
+      card.height = CH;
+      const g = card.getContext("2d");
+      const cleared = state.phase === "clear";
+      const got = state.rescued.filter(Boolean).length;
+
+      g.fillStyle = "#06070C";
+      g.fillRect(0, 0, CW, CH);
+      const grad = g.createRadialGradient(CW / 2, CH * 0.35, 60, CW / 2, CH * 0.35, CW * 0.7);
+      grad.addColorStop(0, "rgba(69,32,102,0.35)");
+      grad.addColorStop(1, "rgba(6,7,12,0)");
+      g.fillStyle = grad;
+      g.fillRect(0, 0, CW, CH);
+      g.strokeStyle = C.gold;
+      g.lineWidth = 4;
+      g.strokeRect(10, 10, CW - 20, CH - 20);
+
+      g.textAlign = "center";
+      g.fillStyle = C.gold;
+      g.font = C.font(16);
+      g.fillText("SAKUYA JUMP BUG", CW / 2, 52);
+      g.fillStyle = cleared ? C.ink : C.danger;
+      g.font = C.font(40);
+      g.fillText(cleared ? "GOAL!" : "GAME OVER", CW / 2, 108);
+
+      // 左: ⌐◨-◨カーのドット絵を大きく。下に道路、ゴールしたときは鳥居を添える
+      const px = 10;
+      const spr = carSprite(0);
+      const carW = spr.width * px, carH = spr.height * px;
+      const carX = 90, groundY = 400;
+      g.fillStyle = "#1C1428";
+      g.fillRect(60, groundY, 460, 18);
+      g.fillStyle = C.gold;
+      g.fillRect(60, groundY, 460, 3);
+      if (cleared) {
+        g.fillStyle = C.vermilion;
+        g.fillRect(420, groundY - 190, 14, 190);
+        g.fillRect(486, groundY - 190, 14, 190);
+        g.fillRect(404, groundY - 206, 112, 12);
+        g.fillRect(412, groundY - 170, 96, 8);
+      }
+      g.imageSmoothingEnabled = false;
+      g.drawImage(spr, carX, groundY - carH, carW, carH);
+      // 鉢巻
+      g.fillStyle = C.magenta;
+      for (let i = 1; i <= 7; i++) g.fillRect(carX + 4 * px - i * px, groundY - carH + px + Math.round(i * 0.35) * px, px, px * (i < 5 ? 2 : 1));
+
+      // 右: スコアと救出数、どこまで進んだか
+      g.textAlign = "left";
+      const tx = 590;
+      g.fillStyle = C.dim;
+      g.font = C.font(14);
+      g.fillText("SCORE", tx, 200);
+      g.fillStyle = C.gold;
+      g.font = C.font(44);
+      g.fillText(String(state.score).padStart(7, "0"), tx, 250);
+      g.fillStyle = C.dim;
+      g.font = C.font(14);
+      g.fillText("CNP", tx, 300);
+      g.fillStyle = got === CNP.length ? C.magenta : C.ink;
+      g.font = C.font(34);
+      g.fillText(`${got} / ${CNP.length}`, tx, 340);
+      g.fillStyle = C.dim;
+      g.font = C.font(14);
+      g.fillText(cleared ? "CLEAR" : "REACHED", tx, 390);
+      g.fillStyle = C.ink;
+      g.font = C.jfont(30);
+      g.fillText(cleared ? "鳥居をくぐってゴール" : `${ZONES[state.zone].label} ${ZONES[state.zone].jp}`, tx, 426);
+
+      // 下: 11体のロスター
+      const n = CNP.length, s = 66, gap = 10;
+      const x0 = (CW - (n * s + (n - 1) * gap)) / 2, y = 470;
+      CNP.forEach((ch, i) => {
+        const x = x0 + i * (s + gap);
+        const has = state.rescued[i];
+        g.fillStyle = has ? "rgba(6,10,20,0.92)" : "rgba(4,6,12,0.82)";
+        g.fillRect(x, y, s, s);
+        const d = s * 0.88;
+        if (has && ch.ready) g.drawImage(ch.img, x + (s - d) / 2, y + (s - d) / 2, d, d);
+        else if (ch.sil) g.drawImage(ch.sil, x + (s - d) / 2, y + (s - d) / 2, d, d);
+        g.lineWidth = 2;
+        g.strokeStyle = has ? `hsla(${ch.hue},90%,66%,0.9)` : "rgba(232,197,106,0.26)";
+        g.strokeRect(x + 1, y + 1, s - 2, s - 2);
+      });
+
+      g.textAlign = "center";
+      g.fillStyle = C.gold;
+      g.font = C.font(16);
+      g.fillText("#咲耶ジャンプバグ", CW / 2, 600);
+      g.fillStyle = C.dim;
+      g.font = C.font(11);
+      g.fillText("sakuya.naoblock.jp/jumpbug", CW / 2, 628);
+      return card;
+    }
+
+    shareBtn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (shareBtn.disabled) return;
+      shareBtn.disabled = true;
+      const text = buildShareText();
+      try {
+        const card = buildShareCardCanvas();
+        const blob = await new Promise((resolve) => card.toBlob(resolve, "image/png"));
+        const file = blob ? new File([blob], "sakuya-jumpbug.png", { type: "image/png" }) : null;
+        if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({ text: text + "\n" + SHARE_URL, files: [file] });
+        } else if (file) {
+          const url = URL.createObjectURL(file);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "sakuya-jumpbug.png";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 30000);
+          openXIntent(text);
+          showToast("画像を保存しました。投稿画面に添付してください");
+        } else {
+          openXIntent(text);
+        }
+      } catch (err) {
+        // 共有シートをキャンセルしたときも AbortError で来るので、それはエラーにしない
+        if (err && err.name !== "AbortError") {
+          showToast("画像を作れなかったので、文章だけで投稿します");
+          openXIntent(text);
+        }
+      } finally {
+        shareBtn.disabled = false;
+      }
     });
 
     // デバッグ/検証用のフック(本番の遊びには影響しない)
     window.__jumpbug = { state, level, input };
     window.__tick = tick; // 自動テスト用: 1フレーム進める
+    window.__card = buildShareCardCanvas;
+    window.__shareText = buildShareText;
   </script>
 </body>
 </html>
