@@ -118,7 +118,11 @@
     .pad button.fire { color: var(--gold); }
 
     /* スマホ横持ちでは余白を捨てて画面いっぱいに使う */
-    body.touch { padding: 0; gap: 0; justify-content: center; }
+    body.touch {
+      padding: 0 env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px);
+      gap: 0;
+      justify-content: center;
+    }
     body.touch .wrap { width: min(100vw, calc(100dvh * 16 / 9)); border: 0; }
     body.touch .info, body.touch footer { display: none; }
 
@@ -246,7 +250,7 @@
   <div class="info">
     <b>咲耶ジャンプバグ（プロトタイプ）</b> ─ むかし懐かしの「ジャンプバグ」風。⌐◨-◨カーは地面や屋根に触れるたび勝手に跳ねる。
     <kbd>←</kbd><kbd>→</kbd> 加速/減速　<kbd>SPACE</kbd>/<kbd>↑</kbd>/<kbd>Z</kbd> ジャンプ（押している間は高く跳ぶ）　<kbd>X</kbd> ショット　<kbd>P</kbd> 一時停止　<kbd>M</kbd> 音<br>
-    敵は撃つか上から踏むと倒せる。溶岩に落ちる・トゲや敵に当たる・燃料切れでミス。途中の提灯がチェックポイント。
+    画面は一定の速さで勝手に進む（強制スクロール）。壁と画面の左端にはさまれてもミス。敵は撃つか上から踏むと倒せる。溶岩に落ちる・トゲや敵に当たる・燃料切れでミス。途中の提灯がチェックポイント。
   </div>
   <footer>
     本作は CryptoNinja / CryptoNinja Partners / Nouns の非公式ファンアートです ─ <a href="../">咲耶スクランブルへ</a>
@@ -268,6 +272,7 @@
       document.body.classList.toggle("touch", on);
       const b = document.getElementById("btnPad");
       if (b) b.classList.toggle("on", on);
+      if (window.__fitWrap) window.__fitWrap();
     }
     setTouchMode(isTouch);
     window.addEventListener("touchstart", () => { if (!isTouch) setTouchMode(true); }, { passive: true, capture: true });
@@ -304,14 +309,15 @@
       bounceHigh: 10.5,
       maxFall: 11,
       maxSpeed: 5.4,
-      maxBack: 3.4,
-      accel: 0.22,
-      friction: 0.06
+      accel: 0.22
     };
     const GROUND_Y = 480;           // 地面の上端
     const CAR_W = 50, CAR_H = 30;   // 当たり判定。見た目の尾翼(⌐)は判定外にはみ出させて易しくする
     const FUEL_DRAIN = 0.028;       // 満タン(100)で約60秒
     const START_LIVES = 3;
+    // 強制スクロールの速さ(px/フレーム)。ゾーンごとに少しずつ速くする。
+    // 車は何も押さなければこの速さで画面について走り、→で前へ、←で後ろへずれる
+    const SCROLL = [2.3, 2.5, 2.7, 2.4];
 
     const ZONES = [
       { x: 0,     key: "city",   label: "ZONE 1", jp: "城下町",     en: "CASTLE TOWN",   shift: 0,  wave: "square" },
@@ -775,7 +781,7 @@
 
     function respawn() {
       const cp = level.checkpoints[state.checkpoint];
-      state.camX = Math.max(0, cp.x - 160);
+      state.camX = Math.max(0, cp.x - 200);
       state.car = makeCar(cp.x + 30, cp.y - CAR_H - 140);
       state.car.inv = 120;
       state.fuel = 100;
@@ -844,9 +850,9 @@
       const I = effectiveInput();
       const dir = (I.right ? 1 : 0) - (I.left ? 1 : 0);
       if (dir !== 0) car.facing = dir;
-      const target = dir > 0 ? PHYS.maxSpeed : dir < 0 ? -PHYS.maxBack : 0;
-      if (dir !== 0) car.vx += Math.sign(target - car.vx) * Math.min(PHYS.accel, Math.abs(target - car.vx));
-      else car.vx -= Math.sign(car.vx) * Math.min(PHYS.friction, Math.abs(car.vx));
+      const scroll = SCROLL[state.zone];
+      const target = dir > 0 ? PHYS.maxSpeed : dir < 0 ? scroll * 0.2 : scroll;
+      car.vx += Math.sign(target - car.vx) * Math.min(PHYS.accel, Math.abs(target - car.vx));
 
       const g = I.jump && car.vy < 0 ? PHYS.gravityHeld : PHYS.gravity;
       car.vy = Math.min(PHYS.maxFall, car.vy + g);
@@ -861,7 +867,17 @@
         car.vx = 0;
       }
       // 画面は前にしか進まない(本家ジャンプバグと同じ)。左端より後ろへは戻れない
-      if (car.x < state.camX + 4) { car.x = state.camX + 4; if (car.vx < 0) car.vx = 0; }
+      // 画面の左端に押される。押された先が壁の中なら「はさまれ」てミス
+      if (car.x < state.camX + 4) {
+        car.x = state.camX + 4;
+        if (car.vx < 0) car.vx = 0;
+        for (const s of near) {
+          if (s.kind !== "plat" && overlap(car.x, car.y, CAR_W, CAR_H, s.x, s.y, s.w, s.h)) { killCar("はさまれた!"); return; }
+        }
+      }
+      // 右端より先へは出られない
+      const maxX = state.camX + W - CAR_W - 16;
+      if (car.x > maxX) { car.x = maxX; if (car.vx > 0) car.vx = SCROLL[state.zone]; }
 
       const prevBottom = car.y + CAR_H;
       car.y += car.vy;
@@ -920,11 +936,9 @@
       if (state.fuel <= 0) { state.fuel = 0; killCar("ガス欠!"); }
     }
 
+    // 本家ジャンプバグと同じ強制スクロール。車の位置に関係なく一定の速さで進む
     function updateCamera() {
-      const car = state.car;
-      const target = car.x - W * 0.34;
-      if (target > state.camX) state.camX += (target - state.camX) * 0.12;
-      state.camX = Math.max(0, Math.min(state.camX, level.end - W));
+      state.camX = Math.min(state.camX + SCROLL[state.zone], level.end - W);
     }
 
     function updateBullets() {
@@ -1115,11 +1129,10 @@
       state.frame++;
       if (state.phase === "title") return;
       if (state.phase === "play") {
+        // 先に画面を進めてから車を動かす。左端の押し出しが同じフレームで効く
+        updateCamera();
         updateCar();
-        if (state.phase === "play") {
-          updateCamera();
-          updateItems();
-        }
+        if (state.phase === "play") updateItems();
         updateBullets();
         updateEnemies();
       } else if (state.phase === "dying") {
@@ -1954,6 +1967,44 @@
       requestAnimationFrame(loop);
     }
     requestAnimationFrame(loop);
+
+    // ------------------------------------------------------------------
+    // 画面へのはめ込み。CSSの 100dvh だけで決めると、ページ側の余白
+    // (ノッチ/ホームバーの safe-area や、埋め込み表示で :root に付く余白)の
+    // ぶんだけ下がはみ出して見切れていた。実際に使える幅と高さを測って決める
+    // ------------------------------------------------------------------
+    const wrapEl = document.getElementById("wrap");
+    const insetProbe = document.createElement("div");
+    insetProbe.style.cssText = "position:fixed;left:0;top:0;visibility:hidden;pointer-events:none;" +
+      "padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)";
+    document.body.appendChild(insetProbe);
+    function fitWrap() {
+      const px = (v) => parseFloat(v) || 0;
+      const ins = getComputedStyle(insetProbe);
+      const root = getComputedStyle(document.documentElement);
+      const top = Math.max(px(ins.paddingTop), px(root.paddingTop));
+      const bottom = Math.max(px(ins.paddingBottom), px(root.paddingBottom));
+      const left = px(ins.paddingLeft), right = px(ins.paddingRight);
+      const vw = document.documentElement.clientWidth || window.innerWidth;
+      const vh = window.innerHeight;
+      let availW, availH;
+      if (isTouch) {
+        availW = vw - left - right;
+        availH = vh - top - bottom;
+        document.body.style.minHeight = Math.max(0, availH) + "px";
+      } else {
+        availW = Math.min(960, vw - 32 - 4);        // body の左右余白16px×2 と枠2px×2
+        availH = vh - top - bottom - 32 - 4;
+        document.body.style.minHeight = "";
+      }
+      const w = Math.floor(Math.max(160, Math.min(availW, availH * 16 / 9)));
+      wrapEl.style.width = w + "px";
+    }
+    fitWrap();
+    window.__fitWrap = fitWrap;
+    window.addEventListener("resize", fitWrap);
+    window.addEventListener("orientationchange", () => setTimeout(fitWrap, 250));
+    if (window.visualViewport) window.visualViewport.addEventListener("resize", fitWrap);
 
     // ------------------------------------------------------------------
     // 入力
