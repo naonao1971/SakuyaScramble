@@ -263,12 +263,15 @@
       0%, 60% { opacity: 1; }
       61%, 100% { opacity: 0.62; }
     }
-    /* sits in the empty center cell of the 3x3 touch d-pad grid */
-    .gyro-toggle {
-      grid-column: 2;
-      grid-row: 2;
-      font-size: 18px;
+    /* 右下のボタン群の内側の端に置く。他の常設トグルと同じ44pxに揃えるが、
+       アイコン(🕹️/📱)自体が今のモードを表すので .auto-fire-toggle の減光は付けない。
+       .touch-btn(56px)が後ろに書かれているため、詳細度を上げないと寸法が負ける */
+    .touch-btn.gyro-toggle {
+      width: 44px;
+      height: 44px;
+      font-size: 17px;
       padding: 0;
+      align-self: center;
     }
     .status {
       min-height: 1.4em;
@@ -276,51 +279,104 @@
       font-size: 12px;
       line-height: 1.6;
     }
-    .touch-pad {
-      /* scales down on narrow screens instead of staying a fixed 56px */
-      --dpad-size: clamp(34px, 9vw, 56px);
-      --dpad-gap: clamp(4px, 1.2vw, 8px);
-      position: relative;
-      z-index: 1;
-      display: none;
-      grid-template-columns: repeat(3, var(--dpad-size));
-      grid-template-rows: repeat(3, var(--dpad-size));
-      gap: var(--dpad-gap);
-      pointer-events: auto;
-    }
-    .touch-pad .touch-btn {
-      width: var(--dpad-size);
-      height: var(--dpad-size);
-      font-size: clamp(14px, 4vw, 22px);
-      border-radius: var(--radius);
-    }
-    .touch-up {
-      grid-column: 2;
-      grid-row: 1;
-    }
-    .touch-left {
-      grid-column: 1;
-      grid-row: 2;
-    }
-    .touch-right {
-      grid-column: 3;
-      grid-row: 2;
-    }
-    .touch-down {
-      grid-column: 2;
-      grid-row: 3;
-    }
+    /* 移動は画面の左半分を押したまま倒すバーチャルスティック(姉妹作
+       「咲耶Nounラリー」と同じ見た目)。発射などのボタン群は右下に置く */
     .fire-pad {
-      /* pin fire/bomb buttons to the left-bottom of the viewport, clear of
-         the iPhone home-indicator / notch via safe-area-inset */
+      /* pin fire/bomb buttons to the right-bottom of the viewport, clear of
+         the iPhone home-indicator / notch via safe-area-inset.
+         row-reverse: 右端(親指の付け根側)から X → 💣 → 各トグル の順に並べる */
       position: fixed;
-      left: calc(18px + env(safe-area-inset-left));
+      right: calc(18px + env(safe-area-inset-right));
       bottom: calc(18px + env(safe-area-inset-bottom));
       z-index: 6;
       display: none;
       pointer-events: auto;
-      flex-direction: column;
-      gap: 8px;
+      flex-direction: row-reverse;
+      align-items: flex-end;
+      gap: 10px;
+    }
+
+    /* バーチャルスティック。見た目は咲耶Nounラリーと同じ(丸い輪＋つまみ)。
+       色だけこのゲームのトークン(--ink/--panel/--magenta)に置き換えている */
+    #joyring {
+      position: fixed;
+      z-index: 30;
+      pointer-events: none;
+      display: none;
+      width: 64px;
+      height: 64px;
+      /* 枠線2pxぶん外寸は68pxになる。-32pxだと中心が指から2pxずれるので-34px */
+      margin: -34px 0 0 -34px;
+      border-radius: 50%;
+      border: 2px solid rgba(232, 236, 245, 0.3);
+      background: rgba(18, 14, 31, 0.3);
+    }
+    #joyknob {
+      position: fixed;
+      z-index: 31;
+      pointer-events: none;
+      display: none;
+      width: 30px;
+      height: 30px;
+      margin: -15px 0 0 -15px;
+      border-radius: 50%;
+      background: var(--magenta);
+      opacity: 0.85;
+      box-shadow: 0 0 0 2px rgba(232, 236, 245, 0.35);
+    }
+    #joyring.on,
+    #joyknob.on {
+      display: block;
+    }
+    /* 指の置き場所を教える影。何も無い画面では押していいことが伝わらないため、
+       最初にスティックを倒すまでの間だけ出す(分かった人の視界からは消す)。
+       点線と拍動で「飾りではなく押すもの」に見せる */
+    #joyhint {
+      position: fixed;
+      z-index: 29;
+      pointer-events: none;
+      display: none;
+      width: 64px;
+      height: 64px;
+      margin: -34px 0 0 -34px;
+      border-radius: 50%;
+      border: 2px dashed rgba(232, 236, 245, 0.28);
+      background: rgba(18, 14, 31, 0.28);
+      animation: joypulse 1.8s ease-in-out infinite;
+    }
+    #joyhint::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 28px;
+      height: 28px;
+      margin: -14px 0 0 -14px;
+      border-radius: 50%;
+      background: rgba(232, 236, 245, 0.2);
+    }
+    /* 影だけ置くと「その丸を押すもの」と誤解されるので、文字で本当の決まりを言う */
+    #joyhintcap {
+      position: fixed;
+      z-index: 29;
+      pointer-events: none;
+      display: none;
+      transform: translate(-50%, -50%);
+      white-space: nowrap;
+      font-family: var(--font-body);
+      font-size: 11px;
+      line-height: 1.3;
+      letter-spacing: 0.04em;
+      color: rgba(232, 236, 245, 0.62);
+      text-shadow: 0 1px 3px #000, 0 0 6px #000;
+    }
+    body.joyhint #joyhint,
+    body.joyhint #joyhintcap {
+      display: block;
+    }
+    @keyframes joypulse {
+      0%, 100% { opacity: 0.55; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.1); }
     }
     .touch-fire {
       /* 発射ボタンだけ徴の琥珀で縁取り、押すべき場所を1つに絞る。
@@ -367,7 +423,7 @@
       box-shadow: var(--bevel-down);
       transform: translateY(2px);
     }
-    /* 長押しトグル: 十字の中央や発射ボタンの隣にあり、指がかすめただけで
+    /* 長押しトグル: 発射ボタンの隣に並んでいて、指がかすめただけで
        作動すると誤爆になる。押している間だけ琥珀が下から満ちていき、
        満ちてから指を離したときに初めて切り替わる */
     .hold-toggle {
@@ -870,6 +926,10 @@
       .hud-start {
         animation: none;
       }
+      #joyhint {
+        animation: none;
+        opacity: 0.8;
+      }
     }
   </style>
 </head>
@@ -899,14 +959,14 @@
         <button id="muteToggle" class="touch-btn auto-fire-toggle hold-toggle on" type="button" aria-label="効果音:オン(長押しでオフ)">🔊</button>
         <button id="fullscreenToggle" class="touch-btn auto-fire-toggle hold-toggle" type="button" aria-label="全画面表示:オフ(長押しでオン)" style="display: none;">⛶</button>
       </div>
-      <div id="touchPad" class="touch-pad" aria-label="タッチコントローラー">
-        <button id="touchUp" class="touch-btn touch-up" type="button" aria-label="上昇">▲</button>
-        <button id="touchLeft" class="touch-btn touch-left" type="button" aria-label="左移動">◀</button>
-        <button id="touchRight" class="touch-btn touch-right" type="button" aria-label="右移動">▶</button>
-        <button id="touchDown" class="touch-btn touch-down" type="button" aria-label="下降">▼</button>
-      </div>
     </div>
   </div>
+
+  <!-- 移動用バーチャルスティック。画面の左半分を押すと指の下に出る -->
+  <div id="joyhint" aria-hidden="true"></div>
+  <div id="joyhintcap" aria-hidden="true">左側を押したまま倒す</div>
+  <div id="joyring" aria-hidden="true"></div>
+  <div id="joyknob" aria-hidden="true"></div>
 
   <section id="leaderboard" class="leaderboard" aria-label="ランキング TOP10">
     <div id="scoreRegisterForm" class="score-register">
@@ -1339,22 +1399,17 @@
       });
     }
 
-    const touchPad = document.getElementById("touchPad");
     const firePad = document.getElementById("firePad");
     const pauseButton = document.getElementById("pauseButton");
     const controlsBottom = document.querySelector(".controls-bottom");
-    const touchUp = document.getElementById("touchUp");
-    const touchLeft = document.getElementById("touchLeft");
     const touchFire = document.getElementById("touchFire");
     const touchBomb = document.getElementById("touchBomb");
-    const touchRight = document.getElementById("touchRight");
-    const touchDown = document.getElementById("touchDown");
     const autoFireToggle = document.getElementById("autoFireToggle");
     const muteToggle = document.getElementById("muteToggle");
     const fullscreenToggle = document.getElementById("fullscreenToggle");
 
-    // 十字4ボタンでは親指1本で斜め移動しながらXも押せないため、タッチデバイス
-    // では既定でバルカンを自動連射し、Xボタンはレーザーのチャージ専用として
+    // タッチでは左の親指がスティック、右の親指がXで埋まり、バルカンを連打する
+    // 余裕がない。タッチデバイスでは既定でバルカンを自動連射し、Xボタンはレーザーのチャージ専用として
     // 空ける。チャージ中/ビーム発射中は自動連射を止め、競合しないようにする
     let autoFireEnabled = isMobileDevice;
     let autoFireTimer = 0;
@@ -1446,21 +1501,19 @@
       state.input.gyroY = normalizeTiltAxis(shortestAngleDelta(y, gyro.baseline.y));
     }
 
-    // hides only the four direction buttons (not the whole grid), so the gyro
-    // toggle icon in the center cell stays visible/reachable either way
-    function setTouchPadVisible(visible) {
-      const isTouchDevice = "ontouchstart" in window || navigator.maxTouchPoints > 0;
-      const display = visible && isTouchDevice ? "" : "none";
-      [touchUp, touchLeft, touchRight, touchDown].forEach((btn) => {
-        if (btn) btn.style.display = display;
-      });
+    // 傾き操作が実際に効いている間は、移動用スティックを受け付けない
+    // (両方の入力が足し合わさると、左側に触れただけで自機が流れるため)
+    let stickEnabled = true;
+    function setStickEnabled(enabled) {
+      stickEnabled = enabled;
+      if (!enabled) releaseStick();
     }
 
-    // Hiding the d-pad must wait for a *real* deviceorientation event — granting
+    // Disabling the stick must wait for a *real* deviceorientation event — granting
     // permission does not mean the device actually reports tilt data (many Android
     // devices without a gyroscope, or desktop "mobile mode", grant permission
-    // instantly but never fire the event). Hiding on activation alone left players
-    // with neither the d-pad nor working tilt controls.
+    // instantly but never fire the event). Disabling on activation alone left players
+    // with neither the stick nor working tilt controls.
     let _gyroFallbackTimer = null;
 
     function activateGyroControls() {
@@ -1471,16 +1524,16 @@
       updateGyroToggleLabel();
       if (gyro.supported) {
         // we've already confirmed real tilt data arrives (e.g. re-enabled via the toggle)
-        setTouchPadVisible(false);
+        setStickEnabled(false);
         updateGyroStatus("ジャイロ操作中：端末を傾けて移動します（現在の向きが基準）");
       } else {
         // keep the d-pad visible until the first real event confirms tilt actually works
-        setTouchPadVisible(true);
-        updateGyroStatus("ジャイロを確認中...端末を傾けてみてください（反応がなければ十字ボタンをご利用ください）");
+        setStickEnabled(true);
+        updateGyroStatus("ジャイロを確認中...端末を傾けてみてください（反応がなければ画面の左側を押したまま倒して移動してください）");
         clearTimeout(_gyroFallbackTimer);
         _gyroFallbackTimer = setTimeout(() => {
           if (gyro.active && !gyro.supported) {
-            updateGyroStatus("ジャイロが検出できませんでした。十字ボタンで操作してください");
+            updateGyroStatus("ジャイロが検出できませんでした。画面の左側を押したまま倒して移動してください");
             deactivateGyroControls();
           }
         }, 1500);
@@ -1492,7 +1545,7 @@
       gyro.active = false;
       state.input.gyroX = 0;
       state.input.gyroY = 0;
-      setTouchPadVisible(true);
+      setStickEnabled(true);
       updateGyroStatus("キー/タッチ操作に切り替えました");
       updateGyroToggleLabel();
     }
@@ -1505,7 +1558,7 @@
       if (justConfirmed) {
         // first real tilt data while active: now it's safe to hide the d-pad
         clearTimeout(_gyroFallbackTimer);
-        setTouchPadVisible(false);
+        setStickEnabled(false);
         updateGyroStatus("ジャイロ操作中：端末を傾けて移動します（現在の向きが基準）");
       }
       const tilt = computeScreenTilt(e.beta, e.gamma);
@@ -1596,7 +1649,7 @@
     document.querySelector(".wrap").appendChild(fsPlayButton);
 
     // switches between gyro tilt control and key/touch control, without re-prompting for permission.
-    // sits in the empty center cell of the d-pad grid, icon-only so it doesn't crowd the controller.
+    // sits at the inner end of the right-bottom button group, icon-only so it doesn't crowd it.
     const gyroToggleButton = document.createElement("button");
     gyroToggleButton.id = "gyroToggleButton";
     gyroToggleButton.type = "button";
@@ -1604,7 +1657,7 @@
     gyroToggleButton.textContent = "🕹️"; // ジャイロが既定モードのため。実際の表示は updateGyroToggleLabel() が上書きする
     gyroToggleButton.setAttribute("aria-label", "傾き操作とキー/タッチ操作を切り替え");
     gyroToggleButton.style.display = "none"; // only shown once we know the device might support it
-    touchPad.appendChild(gyroToggleButton);
+    firePad.appendChild(gyroToggleButton);
 
     // pilot portrait sprite sheet: 5 expressions (①通常 ②被弾 ③怒り ④苦痛 ⑤決意), drawn onto the game canvas
     const pilotImg = new Image();
@@ -1911,7 +1964,7 @@
       // 戻す(1プレイ完結の仕様)。保存もしていないのでページを離れても残らない
       collected: new Array(cnpChars.length).fill(false),
       // up/down/left/right: digital (keyboard/touch). gyroX/gyroY: analog -1..1 (device tilt)
-      input: { up: false, down: false, left: false, right: false, gyroX: 0, gyroY: 0 },
+      input: { up: false, down: false, left: false, right: false, gyroX: 0, gyroY: 0, stickX: 0, stickY: 0 },
       effects: {
         slowTimer: 0,
         wideTimer: 0
@@ -2210,6 +2263,8 @@
       state.dying.timer = 0;
       state.input.gyroX = 0;
       state.input.gyroY = 0;
+      releaseStick();
+      joyTaught = false; // 新しいプレイでは、倒すまで指の置き場所の影を出し直す
       // ここが抜けていると、パート2(バルカン回避)中に力尽きた直後の再スタートが
       // ステージ1のトンネルへ戻らず、古い goalHold 状態のまま再開してしまう
       state.goalHold.active = false;
@@ -2224,7 +2279,7 @@
     function startGame() {
       resetGame();
       state.started = true;
-      updateGyroStatus("開始しました。右下コントローラーで操作できます");
+      updateGyroStatus("開始しました。画面の左側を押したまま倒すと移動できます");
       // begin stage with wide intro
       beginStage();
     }
@@ -2588,6 +2643,9 @@
       // gyro tilt: proportional (analog) thrust instead of full digital thrust, for finer control
       state.ship.vx += horizontalThrust * gyro.sensitivity * state.input.gyroX;
       state.ship.vy += verticalThrust * gyro.sensitivity * state.input.gyroY;
+      // バーチャルスティック: 倒した量に比例。いっぱいに倒すとキー入力と同じ推力
+      state.ship.vx += horizontalThrust * state.input.stickX;
+      state.ship.vy += verticalThrust * state.input.stickY;
       state.ship.vx *= drag;
       state.ship.vy *= drag;
       state.ship.x += state.ship.vx;
@@ -3608,6 +3666,7 @@
             if (state.input.left) state.ship.vx -= horizontalThrust;
             if (state.input.right) state.ship.vx += horizontalThrust;
             state.ship.vx += horizontalThrust * gyro.sensitivity * state.input.gyroX;
+            state.ship.vx += horizontalThrust * state.input.stickX;
             state.ship.vx *= drag;
             state.ship.x += state.ship.vx;
             const row = state.fall.rows[Math.floor(state.ship.y)] || state.fall.rows[state.fall.rows.length - 1];
@@ -3632,6 +3691,7 @@
             if (state.input.left) state.ship.vx -= horizontalThrust;
             if (state.input.right) state.ship.vx += horizontalThrust;
             state.ship.vx += horizontalThrust * gyro.sensitivity * state.input.gyroX;
+            state.ship.vx += horizontalThrust * state.input.stickX;
             state.ship.vx *= drag;
             state.ship.x += state.ship.vx;
             const row = state.fall.rows[Math.floor(state.ship.y)] || state.fall.rows[state.fall.rows.length - 1];
@@ -4550,7 +4610,7 @@
       _startButtonWasShown = shouldShow;
     }
 
-    // 操作ボタン(十字/ジャイロトグル/X/💣)はプレイ中だけ出す。スタートボタンが
+    // 操作ボタン(ジャイロトグル/X/💣等)とスティックはプレイ中だけ出す。スタートボタンが
     // 出ている間(タイトル・ゲームオーバー・クリア)は、押しても update() が動かず
     // 反応しないうえ、タイトルイラストやクリア時のランキング登録フォームに
     // position: fixed のまま重なってしまうため隠す。
@@ -4561,8 +4621,10 @@
       if (!touchControlsEnabled) return;
       const shouldShow = state.started && !state.gameOver && !state.cleared;
       if (shouldShow === _gameControlsWereShown) return;
-      firePad.style.display = shouldShow ? "block" : "none";
+      firePad.style.display = shouldShow ? "flex" : "none";
       controlsBottom.style.display = shouldShow ? "flex" : "none";
+      // 押したままゲームオーバー/クリアになったら、スティックの輪を残さない
+      if (!shouldShow) releaseStick();
       _gameControlsWereShown = shouldShow;
     }
 
@@ -4575,7 +4637,7 @@
       pauseButton.style.top = `${rect.height / 2}px`;
     }
 
-    // ポーズボタンはPC/スマホ問わずプレイ中だけ出す(十字キー等と違いPCでも使う)
+    // ポーズボタンはPC/スマホ問わずプレイ中だけ出す(操作ボタン等と違いPCでも使う)
     let _pauseButtonWasShown = null;
     function updatePauseButtonVisibility() {
       const shouldShow = state.started && !state.gameOver && !state.cleared;
@@ -4680,6 +4742,7 @@
     function render() {
       updateStartButtonVisibility();
       updateGameControlsVisibility();
+      updateJoyHint();
       updatePauseButtonVisibility();
       updateLeaderboardVisibility();
       updateShareXVisibility();
@@ -5094,8 +5157,8 @@
       startGame();
     });
 
-    // 十字の中央(🕹️)と発射ボタンの隣(🔫)にあるトグルは、方向ボタン間を
-    // 親指が移動するたびに通過するため、タップ即作動だと誤爆する。
+    // 発射ボタンの隣に並ぶトグル(🔫🔊⛶🕹️)は、X/💣を押そうとする親指が
+    // かすめやすいため、タップ即作動だと誤爆する。
     // 長押ししてから指を離したときだけ切り替える。
     //
     // 閾値に到達した瞬間ではなく pointerup で実行するのは、iOSのジャイロ
@@ -5141,45 +5204,144 @@
       () => updateGyroStatus("長押しで傾き操作とキー/タッチを切り替えます")
     );
 
-    function setTouchControl(button, actionKey, enabled) {
-      state.input[actionKey] = enabled;
-      button.classList.toggle("active", enabled);
-    }
-
     // Pointer Events だけで統一して管理する。setPointerCapture() したポインタは
     // 指が要素の外に滑り出ても pointerup/pointercancel が必ずこの要素に届くため、
     // 従来 pointerleave に頼っていた「指がボタン外に出たら離したとみなす」判定
     // (ブラウザによっては touch 由来のポインタで信頼できない) が不要になる。
     // Pointer Events はマウス/タッチ/ペンを一本化しているので touchstart や
     // mousedown の別系統リスナーは重複となり削除。各ボタン・各指(pointerId)は
-    // 独立して捕捉されるため、複数ボタン同時押し(斜め移動など)もそのまま効く
+    // 独立して捕捉されるため、スティックとXの同時押しもそのまま効く
     function capture(button, e) {
       if (button.setPointerCapture) {
         try { button.setPointerCapture(e.pointerId); } catch (err) { /* すでに解放済み等は無視 */ }
       }
     }
 
-    function bindTouchControl(button, actionKey) {
-      const start = (e) => {
-        e.preventDefault();
-        capture(button, e);
-        setTouchControl(button, actionKey, true);
-      };
-      const end = (e) => {
-        e.preventDefault();
-        setTouchControl(button, actionKey, false);
-      };
+    // ===== 移動用バーチャルスティック =====
+    // 見た目と「触れた場所に出る浮動式」は姉妹作「咲耶Nounラリー」と同じ。
+    // 右下に発射ボタンがあるため、出せるのは画面の左半分に限る。
+    //
+    // ラリーは迷路なので4方向に丸めているが、こちらは斜め移動が要るので丸めない。
+    // 倒した量に応じたアナログ入力(stickX/stickY, -1〜1)にして、ジャイロと同じく
+    // 細かい操作を効かせる。いっぱいに倒したときの推力は旧十字キーと同じにする
+    const JOY_DEAD = 6; // 中心からこれ未満は無入力(置いただけで動き出さない)
+    const JOY_R = 24; // 原点が指を追う半径。ここまで倒すと最大入力
+    const joyRing = document.getElementById("joyring");
+    const joyKnob = document.getElementById("joyknob");
+    const joyHint = document.getElementById("joyhint");
+    const joyHintCap = document.getElementById("joyhintcap");
+    let joy = null; // { id, ox, oy }
+    // 一度でも倒したら、その回のプレイではもう影を出さない(分かった人の視界から消す)
+    let joyTaught = false;
 
-      button.addEventListener("pointerdown", start, { passive: false });
-      button.addEventListener("pointerup", end, { passive: false });
-      button.addEventListener("pointercancel", end, { passive: false });
-      button.addEventListener("lostpointercapture", end, { passive: false });
+    function isStickPlayable() {
+      return (
+        touchControlsEnabled &&
+        stickEnabled &&
+        state.started &&
+        !state.gameOver &&
+        !state.cleared &&
+        !state.paused &&
+        !orientationBlocked
+      );
     }
 
-    bindTouchControl(touchUp, "up");
-    bindTouchControl(touchLeft, "left");
-    bindTouchControl(touchRight, "right");
-    bindTouchControl(touchDown, "down");
+    function joyShow(ox, oy, kx, ky) {
+      joyRing.style.left = `${ox}px`;
+      joyRing.style.top = `${oy}px`;
+      joyKnob.style.left = `${kx}px`;
+      joyKnob.style.top = `${ky}px`;
+      joyRing.classList.add("on");
+      joyKnob.classList.add("on");
+    }
+
+    function releaseStick() {
+      joy = null;
+      state.input.stickX = 0;
+      state.input.stickY = 0;
+      joyRing.classList.remove("on");
+      joyKnob.classList.remove("on");
+    }
+
+    // 影は左下(親指が自然に来る位置)に出すが、文字では「左側のどこでも」と言う。
+    // 影だけ置くと「その丸を押すもの」と誤解され、どこを押しても指の下に
+    // スティックが出るという、この操作のいちばん良いところが伝わらない
+    let _joyHintShown = false;
+    function positionJoyHint() {
+      const x = 90;
+      const y = window.innerHeight - 90;
+      joyHint.style.left = `${x}px`;
+      joyHint.style.top = `${y}px`;
+      // 文字は中央揃えなので、そのまま x に置くと画面の左端からはみ出す
+      const cw = joyHintCap.offsetWidth || 130;
+      joyHintCap.style.left = `${Math.max(x, cw / 2 + 8)}px`;
+      joyHintCap.style.top = `${y - 52}px`;
+    }
+    // 毎フレーム render() から呼ばれるので、DOMに触るのは表示が切り替わる時だけ
+    function updateJoyHint() {
+      const show = isStickPlayable() && !joyTaught && !joy;
+      if (show === _joyHintShown) return;
+      document.body.classList.toggle("joyhint", show);
+      if (show) positionJoyHint();
+      _joyHintShown = show;
+    }
+    window.addEventListener("resize", () => {
+      if (_joyHintShown) positionJoyHint();
+    });
+
+    document.addEventListener(
+      "pointerdown",
+      (e) => {
+        if (joy || !isStickPlayable()) return;
+        if (e.clientX >= window.innerWidth / 2) return;
+        // ボタン(ポーズ等)の上では出さない。ボタン自身の操作を優先する
+        if (e.target && e.target.closest && e.target.closest("button")) return;
+        e.preventDefault();
+        joy = { id: e.pointerId, ox: e.clientX, oy: e.clientY };
+        joyShow(joy.ox, joy.oy, joy.ox, joy.oy);
+        updateJoyHint();
+      },
+      { passive: false }
+    );
+    window.addEventListener("pointermove", (e) => {
+      if (!joy || e.pointerId !== joy.id) return;
+      let dx = e.clientX - joy.ox;
+      let dy = e.clientY - joy.oy;
+      // 原点を指から半径 JOY_R 以内へ引きずる。固定にすると倒した方向のズレが
+      // 残り続け、逆方向へ切り返すのに指を大きく戻す必要がある(ラリーで実測済み)
+      let len = Math.hypot(dx, dy);
+      if (len > JOY_R) {
+        joy.ox = e.clientX - (dx / len) * JOY_R;
+        joy.oy = e.clientY - (dy / len) * JOY_R;
+        dx = (dx / len) * JOY_R;
+        dy = (dy / len) * JOY_R;
+        len = JOY_R;
+      }
+      joyShow(joy.ox, joy.oy, joy.ox + dx, joy.oy + dy);
+      if (len < JOY_DEAD) {
+        state.input.stickX = 0;
+        state.input.stickY = 0;
+        return;
+      }
+      const mag = (len - JOY_DEAD) / (JOY_R - JOY_DEAD);
+      // 円の中で斜めいっぱいに倒すと各軸は0.71にしかならず、旧十字キーの斜め
+      // (両軸とも全開)より遅くなる。√2倍して各軸1で頭打ちにし、斜めも揃える
+      const ux = dx / len;
+      const uy = dy / len;
+      state.input.stickX = Math.max(-1, Math.min(1, ux * mag * Math.SQRT2));
+      state.input.stickY = Math.max(-1, Math.min(1, uy * mag * Math.SQRT2));
+      if (!joyTaught) {
+        joyTaught = true;
+        updateJoyHint();
+      }
+    });
+    const joyEnd = (e) => {
+      if (!joy || e.pointerId !== joy.id) return;
+      releaseStick();
+      updateJoyHint();
+    };
+    window.addEventListener("pointerup", joyEnd);
+    window.addEventListener("pointercancel", joyEnd);
 
     // Fire and Bomb buttons: single tap only, no repeat
     function makeTapButton(button, action) {
@@ -5402,7 +5564,8 @@
       state.input.right = false;
       state.input.gyroX = 0;
       state.input.gyroY = 0;
-      [touchUp, touchLeft, touchRight, touchDown, touchFire, touchBomb, autoFireToggle, muteToggle, fullscreenToggle, gyroToggleButton].forEach((btn) => {
+      releaseStick();
+      [touchFire, touchBomb, autoFireToggle, muteToggle, fullscreenToggle, gyroToggleButton].forEach((btn) => {
         if (!btn) return;
         btn.classList.remove("active");
         // 長押し中に割り込まれた場合、進捗と計測をここで確実に捨てる
@@ -5417,20 +5580,18 @@
     });
 
     if ("ontouchstart" in window || navigator.maxTouchPoints > 0) {
-      // shown by default; hidden automatically once real tilt events start arriving
-      touchPad.style.display = "grid";
-      firePad.style.display = "block";
+      firePad.style.display = "flex";
       // ここから先は updateGameControlsVisibility() がプレイ中だけ出すよう制御する
       touchControlsEnabled = true;
       if (window.DeviceOrientationEvent) {
         gyroToggleButton.style.display = "inline-block";
         updateGyroToggleLabel();
-        updateGyroStatus("スタートを押すと、対応端末では傾き操作に切り替わります（右のXでバルカン発射）");
+        updateGyroStatus("スタートを押すと、対応端末では傾き操作に切り替わります（右下のXでバルカン発射）");
       } else {
-        updateGyroStatus("iPhoneは右下の十字キーで移動、右のXでバルカン発射できます");
+        updateGyroStatus("画面の左側を押したまま倒すと移動、右下のXでバルカン発射できます");
       }
     } else {
-      updateGyroStatus("PCはキーボード、スマホは右下コントローラーで移動と発射ができます（Pキーで一時停止）");
+      updateGyroStatus("PCはキーボード、スマホは画面左側のスティックと右下のボタンで操作できます（Pキーで一時停止）");
     }
 
     // reduced-motion なら明滅を止める（走査線は静止画なのでそのまま残す）
