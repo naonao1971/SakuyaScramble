@@ -99,7 +99,9 @@
     .pad { display: none; }
     body.touch .pad {
       position: absolute;
-      bottom: 8px;
+      /* 下端ぎりぎりに置くと、端末や埋め込み表示によっては画面の外や
+         ツールバーの裏に隠れる。少し持ち上げて親指の自然な位置に置く */
+      bottom: 14%;
       display: flex;
       gap: 10px;
     }
@@ -746,7 +748,7 @@
       return {
         left: input.left || stick.x < 0,
         right: input.right || stick.x > 0,
-        jump: input.jump || stick.up,
+        jump: input.jump || stick.up || !!stick.jumpTap,
         fire: input.fire
       };
     }
@@ -1843,7 +1845,7 @@
       ctx.font = C.jfont(16);
       ctx.fillStyle = C.ink;
       const lines = isTouch
-        ? ["左半分を押したまま倒す: 左右で加速・減速／上でジャンプ", "右手の JUMP 長押しで高く跳ぶ　SHOT で撃つ"]
+        ? ["左半分を押したまま倒す: 左右で前後／上でジャンプ", "右半分(または JUMP)を長押しで高く跳ぶ　SHOT で撃つ"]
         : ["← → 加速・減速　　SPACE / ↑ 長押しで高く跳ぶ　　X 撃つ", "敵は撃つか、上から踏んで倒せる"];
       ctx.fillText(lines[0], W / 2, 226);
       ctx.fillStyle = C.dim;
@@ -2084,6 +2086,8 @@
     const JOY_R = 24;      // 原点が指を追う半径
     const JOY_UP = 14;     // これ以上上に倒すとジャンプ
     const stick = { x: 0, up: false };
+    // 右半分を押している指(ジャンプ用)。ボタンが見えない端末でも跳べるようにする
+    const jumpTouches = new Set();
     const ring = document.getElementById("joyring");
     const knob = document.getElementById("joyknob");
     let joy = null;
@@ -2099,6 +2103,8 @@
       ring.classList.add("on"); knob.classList.add("on");
     }
     function joyEnd(e) {
+      if (e && jumpTouches.delete(e.pointerId)) { stick.jumpTap = jumpTouches.size > 0; return; }
+      if (!e) { jumpTouches.clear(); stick.jumpTap = false; }
       if (e && joy && e.pointerId !== joy.id) return;
       joy = null;
       stick.x = 0; stick.up = false;
@@ -2116,6 +2122,15 @@
         try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* 古いブラウザ */ }
         joyShow(joy.ox, joy.oy, joy.ox, joy.oy);
         joyHintUpdate();
+        return;
+      }
+      // 右半分: 押している間ジャンプ(JUMPボタンと同じ)
+      if (state.phase === "play" && !leftHalf && e.pointerType !== "mouse") {
+        e.preventDefault();
+        if (!isTouch) setTouchMode(true);
+        jumpTouches.add(e.pointerId);
+        stick.jumpTap = true;
+        try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* 古いブラウザ */ }
         return;
       }
       startOrRestart();
