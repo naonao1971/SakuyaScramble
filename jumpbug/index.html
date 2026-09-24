@@ -1226,7 +1226,7 @@
     // ⌐◨-◨ カー。ワーゲンビートルの屋根に ⌐◨-◨ が乗っている。
     // 原点=当たり判定の底辺中央、右向き。
     //  車体 … 丸い屋根・後ろへ流れるリア・盛り上がったフェンダーのビートル型。
-    //         夜の町や洞窟の暗い背景で埋もれないよう、クリーム色の車体に濃い輪郭線。
+    //         夜の町や洞窟の暗い背景で埋もれないよう、明るいピンクの車体に濃い輪郭線。
     //         (漆黒の車体も試したが、等倍では背景に溶けて車の形が読めなかった)
     //  ⌐◨-◨ … Nouns の赤ノグルズを屋根にかける。⌐ のつるから鉢巻がなびく
     function drawCar(car, scale = 1, blink = false) {
@@ -1241,8 +1241,8 @@
       ctx.scale(1 + sq * 0.16, 1 - sq * 0.22);
       if (blink) ctx.globalAlpha = 0.35;
       const f = state.frame;
-      const BODY = "#EDE3CC";      // クリーム
-      const SHADE = "#C9B993";     // 車体の下半分の影
+      const BODY = "#FF9CC9";      // ピンク
+      const SHADE = "#E0679F";     // 車体の下半分の影
       const LINE = "#1A1226";      // 輪郭線
       const WHEEL_X = [-15, 16];
 
@@ -1333,8 +1333,8 @@
       ctx.stroke();
 
       // 金のライン(ベルトライン)とドア
-      ctx.fillStyle = C.magenta;
-      ctx.fillRect(-24, -15.5, 44, 1.5);    // 咲耶のマゼンタのライン
+      ctx.fillStyle = "#FFF1F7";
+      ctx.fillRect(-24, -15.5, 44, 1.5);    // 白のライン(ピンクの車体にマゼンタは溶けるため)
       ctx.fillStyle = "#8A6A2A";
       ctx.fillRect(-1, -13, 4, 1);          // ドアノブ
       ctx.fillStyle = LINE;
@@ -1365,6 +1365,8 @@
       ctx.fillRect(-22, -32, 7, 3);          // ⌐ のつる
       ctx.fillRect(-22, -32, 3, 6);          // ⌐ の先の折れ
       ctx.fillRect(-1.5, -31.5, 4, 3);       // - のブリッジ
+      ctx.fillStyle = LINE;                  // ピンクの屋根と赤のレンズの境目
+      ctx.fillRect(-16, -25.5, 33, 1);
       for (const lx of [-15.5, 2.5]) {       // ◨ ◨
         ctx.fillStyle = C.nounRed;
         ctx.fillRect(lx, -37, 14, 12);
