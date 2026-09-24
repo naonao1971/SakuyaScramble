@@ -251,7 +251,7 @@
 
   <div class="info">
     <b>咲耶ジャンプバグ（プロトタイプ）</b> ─ むかし懐かしの「ジャンプバグ」風。⌐◨-◨カーは地面や屋根に触れるたび勝手に跳ねる。
-    <kbd>←</kbd><kbd>→</kbd> 加速/減速　<kbd>SPACE</kbd>/<kbd>↑</kbd>/<kbd>Z</kbd> ジャンプ（押している間は高く跳ぶ）　<kbd>X</kbd> ショット　<kbd>P</kbd> 一時停止　<kbd>M</kbd> 音<br>
+    <kbd>←</kbd><kbd>→</kbd> 加速/減速　<kbd>SPACE</kbd>/<kbd>↑</kbd>/<kbd>Z</kbd> ジャンプ（押している間は高く跳ぶ。空中でもう2回まで跳べる）　<kbd>X</kbd> ショット　<kbd>P</kbd> 一時停止　<kbd>M</kbd> 音<br>
     画面は一定の速さで勝手に進む（強制スクロール）。壁と画面の左端にはさまれてもミス。敵は撃つか上から踏むと倒せる。溶岩に落ちる・トゲや敵に当たる・燃料切れでミス。途中の提灯がチェックポイント。
   </div>
   <footer>
@@ -311,8 +311,10 @@
       bounceHigh: 10.5,
       maxFall: 11,
       maxSpeed: 5.4,
-      accel: 0.22
+      accel: 0.22,
+      airJump: 8.5        // 空中ジャンプの初速。短押しで約110px、長押しで約150px上がる
     };
+    const AIR_JUMPS = 2;  // 着地するまでに空中で跳べる回数(連続ジャンプ)
     const GROUND_Y = 480;           // 地面の上端
     const CAR_W = 50, CAR_H = 30;   // 当たり判定。見た目の尾翼(⌐)は判定外にはみ出させて易しくする
     const FUEL_DRAIN = 0.028;       // 満タン(100)で約60秒
@@ -729,7 +731,7 @@
 
     function makeCar(x, y) {
       return { x, y, vx: 0, vy: 0, facing: 1, squash: 0, wheel: 0, inv: 0, fireCd: 0, lastLand: 0,
-               jumpPrev: false, wantJump: false, jumpHold: 0 };
+               jumpPrev: false, wantJump: false, jumpHold: 0, airJumps: 0 };
     }
 
     function spawnEnemies() {
@@ -861,7 +863,8 @@
       // 伸びる」だけだったので、落ちている最中に押して着地前に離すと、次の跳ねが
       // わずかに高くなるだけで「ジャンプしない」ように見えた
       //  - 跳ねた直後(上昇の出だし)に押した → その場で大ジャンプに切り替える
-      //  - それ以外(落下中など)に押した → 次の着地で大ジャンプする(予約)
+      //  - 空中で押した → その場でもう一度跳ぶ(連続ジャンプ。着地までに AIR_JUMPS 回まで)
+      //  - 空中ジャンプを使い切ってから押した → 次の着地で大ジャンプする(予約)
       //  - 短く押しただけでも JUMP_HOLD フレームは長押し扱いにして、しっかり跳ばせる
       const pressed = I.jump && !car.jumpPrev;
       car.jumpPrev = I.jump;
@@ -869,6 +872,10 @@
         if (car.vy < 0 && state.frame - car.lastLand <= 14 && car.jumpHold <= 0) {
           car.vy = -PHYS.bounceHigh;
           startHighJump(car);
+        } else if (car.airJumps < AIR_JUMPS) {
+          car.airJumps++;
+          car.vy = -PHYS.airJump;
+          startAirJump(car);
         } else {
           car.wantJump = true;
         }
@@ -919,6 +926,7 @@
       if (landed) {
         const high = I.jump || car.wantJump;
         car.wantJump = false;
+        car.airJumps = 0;
         car.vy = -(high ? PHYS.bounceHigh : PHYS.bounceLow);
         car.squash = 1;
         car.lastLand = state.frame;
@@ -966,6 +974,19 @@
       // 大ジャンプの合図。タイヤの下からマゼンタの火花を散らす
       for (let i = 0; i < 10; i++) {
         state.particles.push({ x: car.x + 6 + Math.random() * 38, y: car.y + CAR_H, vx: (Math.random() - 0.5) * 3, vy: 1 + Math.random() * 2, life: 20, max: 20, color: i % 2 ? C.magenta : C.gold, size: 3, grav: 0.05 });
+      }
+    }
+
+    // 空中ジャンプ。足元に金の輪を散らし、何段目かが音の高さで分かるようにする
+    function startAirJump(car) {
+      car.jumpHold = JUMP_HOLD;
+      car.squash = 0.6;
+      const f = car.airJumps === 1 ? 520 : 700;
+      SFX.tone({ freq: f, to: f * 1.8, dur: 0.12, type: "square", gain: 0.1 });
+      const cx = car.x + CAR_W / 2, cy = car.y + CAR_H;
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        state.particles.push({ x: cx, y: cy, vx: Math.cos(a) * 2.6, vy: Math.sin(a) * 1.1 + 0.6, life: 18, max: 18, color: C.gold, size: 3, grav: 0 });
       }
     }
 
@@ -1875,8 +1896,8 @@
       ctx.font = C.jfont(16);
       ctx.fillStyle = C.ink;
       const lines = isTouch
-        ? ["左半分を押したまま倒す: 左右で前後／上でジャンプ", "右半分(または JUMP)を長押しで高く跳ぶ　SHOT で撃つ"]
-        : ["← → 加速・減速　　SPACE / ↑ 長押しで高く跳ぶ　　X 撃つ", "敵は撃つか、上から踏んで倒せる"];
+        ? ["左半分を押したまま倒す: 左右で前後／上でジャンプ", "右半分(または JUMP)長押しで高く、空中でもう2回まで跳べる　SHOT で撃つ"]
+        : ["← → 加速・減速　　SPACE / ↑ 長押しで高く跳ぶ　　X 撃つ", "長押しで高く跳ぶ。空中でもう2回まで跳べる"];
       ctx.fillText(lines[0], W / 2, 226);
       ctx.fillStyle = C.dim;
       ctx.fillText(lines[1], W / 2, 250);
