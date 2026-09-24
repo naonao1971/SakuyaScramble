@@ -728,7 +728,8 @@
     };
 
     function makeCar(x, y) {
-      return { x, y, vx: 0, vy: 0, facing: 1, squash: 0, wheel: 0, inv: 0, fireCd: 0, lastLand: 0 };
+      return { x, y, vx: 0, vy: 0, facing: 1, squash: 0, wheel: 0, inv: 0, fireCd: 0, lastLand: 0,
+               jumpPrev: false, wantJump: false, jumpHold: 0 };
     }
 
     function spawnEnemies() {
@@ -856,7 +857,25 @@
       const target = dir > 0 ? PHYS.maxSpeed : dir < 0 ? scroll * 0.2 : scroll;
       car.vx += Math.sign(target - car.vx) * Math.min(PHYS.accel, Math.abs(target - car.vx));
 
-      const g = I.jump && car.vy < 0 ? PHYS.gravityHeld : PHYS.gravity;
+      // ジャンプは押した瞬間に必ず手応えを返す。以前は「押している間だけ上昇が
+      // 伸びる」だけだったので、落ちている最中に押して着地前に離すと、次の跳ねが
+      // わずかに高くなるだけで「ジャンプしない」ように見えた
+      //  - 跳ねた直後(上昇の出だし)に押した → その場で大ジャンプに切り替える
+      //  - それ以外(落下中など)に押した → 次の着地で大ジャンプする(予約)
+      //  - 短く押しただけでも JUMP_HOLD フレームは長押し扱いにして、しっかり跳ばせる
+      const pressed = I.jump && !car.jumpPrev;
+      car.jumpPrev = I.jump;
+      if (pressed) {
+        if (car.vy < 0 && state.frame - car.lastLand <= 14 && car.jumpHold <= 0) {
+          car.vy = -PHYS.bounceHigh;
+          startHighJump(car);
+        } else {
+          car.wantJump = true;
+        }
+      }
+      const lift = (I.jump || car.jumpHold > 0) && car.vy < 0;
+      if (car.jumpHold > 0) car.jumpHold--;
+      const g = lift ? PHYS.gravityHeld : PHYS.gravity;
       car.vy = Math.min(PHYS.maxFall, car.vy + g);
 
       const near = solidsNear(car.x - 20, car.x + CAR_W + 20);
@@ -898,11 +917,12 @@
         }
       }
       if (landed) {
-        const high = I.jump;
+        const high = I.jump || car.wantJump;
+        car.wantJump = false;
         car.vy = -(high ? PHYS.bounceHigh : PHYS.bounceLow);
         car.squash = 1;
         car.lastLand = state.frame;
-        SFX.boing(high);
+        if (high) startHighJump(car); else SFX.boing(false);
         for (let i = 0; i < 4; i++) {
           state.particles.push({ x: car.x + 8 + Math.random() * 34, y: car.y + CAR_H, vx: (Math.random() - 0.5) * 2, vy: -Math.random() * 1.2, life: 18, max: 18, color: "rgba(200,180,230,0.7)", size: 3, grav: 0 });
         }
@@ -939,6 +959,16 @@
     }
 
     // 本家ジャンプバグと同じ強制スクロール。車の位置に関係なく一定の速さで進む
+    const JUMP_HOLD = 12;   // 短押しでも長押し扱いにするフレーム数
+    function startHighJump(car) {
+      car.jumpHold = JUMP_HOLD;
+      SFX.boing(true);
+      // 大ジャンプの合図。タイヤの下からマゼンタの火花を散らす
+      for (let i = 0; i < 10; i++) {
+        state.particles.push({ x: car.x + 6 + Math.random() * 38, y: car.y + CAR_H, vx: (Math.random() - 0.5) * 3, vy: 1 + Math.random() * 2, life: 20, max: 20, color: i % 2 ? C.magenta : C.gold, size: 3, grav: 0.05 });
+      }
+    }
+
     function updateCamera() {
       state.camX = Math.min(state.camX + SCROLL[state.zone], level.end - W);
     }
