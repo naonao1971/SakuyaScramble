@@ -274,7 +274,7 @@
 
   <div class="info">
     <b>咲耶ジャンプバグ（プロトタイプ）</b> ─ むかし懐かしの「ジャンプバグ」風。⌐◨-◨カーは地面や屋根に触れるたび勝手に跳ねる。
-    <kbd>←</kbd><kbd>→</kbd> 加速/減速　<kbd>SPACE</kbd>/<kbd>↑</kbd>/<kbd>Z</kbd> ジャンプ（押している間は高く跳ぶ。空中でもう2回まで跳べる）　<kbd>X</kbd> ショット　<kbd>V</kbd> 自動連射　<kbd>P</kbd> 一時停止　<kbd>M</kbd> 音<br>
+    <kbd>←</kbd><kbd>→</kbd> 前進/バック（画面は止まらないが、戻ってコインを取れる）　<kbd>SPACE</kbd>/<kbd>↑</kbd>/<kbd>Z</kbd> ジャンプ（押している間は高く跳ぶ。空中でもう2回まで跳べる）　<kbd>X</kbd> ショット　<kbd>V</kbd> 自動連射　<kbd>P</kbd> 一時停止　<kbd>M</kbd> 音<br>
     画面は一定の速さで勝手に進む（強制スクロール）。壁と画面の左端にはさまれてもミス。敵は撃つか上から踏むと倒せる。溶岩に落ちる・トゲや敵に当たる・燃料切れでミス。途中の提灯がチェックポイント。
   </div>
   <footer>
@@ -369,6 +369,8 @@
       bounceHigh: 10.5,
       maxFall: 11,
       maxSpeed: 5.4,
+      maxBack: 3.2,       // バックの速さ(画面に対しては スクロール+3.2 で左へ動く)
+      accelBack: 0.32,    // バックへの切り返しは少し速く
       accel: 0.22,
       airJump: 8.5        // 空中ジャンプの初速。短押しで約110px、長押しで約150px上がる
     };
@@ -917,10 +919,14 @@
       const car = state.car;
       const I = effectiveInput();
       const dir = (I.right ? 1 : 0) - (I.left ? 1 : 0);
-      if (dir !== 0) car.facing = dir;
+      // 車は常に前(右)を向く。←はバックで下がるだけなので、自動連射も前へ撃ち続ける
+      car.facing = 1;
       const scroll = SCROLL[state.zone];
-      const target = dir > 0 ? PHYS.maxSpeed : dir < 0 ? scroll * 0.2 : scroll;
-      car.vx += Math.sign(target - car.vx) * Math.min(PHYS.accel, Math.abs(target - car.vx));
+      // 画面は止めずに進み続けるが、←で本当に後ろへ下がれる(咲耶スクランブルと同じく
+      // 画面の中は自由に動ける)。通り過ぎたコインやCNPを、左端に消える前に取りに戻れる
+      const target = dir > 0 ? PHYS.maxSpeed : dir < 0 ? -PHYS.maxBack : scroll;
+      const accel = dir < 0 ? PHYS.accelBack : PHYS.accel;
+      car.vx += Math.sign(target - car.vx) * Math.min(accel, Math.abs(target - car.vx));
 
       // ジャンプは押した瞬間に必ず手応えを返す。以前は「押している間だけ上昇が
       // 伸びる」だけだったので、落ちている最中に押して着地前に離すと、次の跳ねが
@@ -2002,7 +2008,7 @@
       ctx.fillStyle = C.ink;
       const lines = isTouch
         ? ["左半分を押したまま倒す: 左右で前後／上でジャンプ", "右半分(または JUMP)長押しで高く、空中でもう2回まで跳べる　SHOT で撃つ"]
-        : ["← → 加速・減速　　SPACE / ↑ 長押しで高く跳ぶ　　X 撃つ", "長押しで高く跳ぶ。空中でもう2回まで跳べる"];
+        : ["← → 前進・バック　　SPACE / ↑ 長押しで高く跳ぶ　　X 撃つ", "長押しで高く跳ぶ。空中でもう2回まで跳べる"];
       ctx.fillText(lines[0], W / 2, 226);
       ctx.fillStyle = C.dim;
       ctx.fillText(lines[1], W / 2, 250);
