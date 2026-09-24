@@ -117,6 +117,28 @@
       height: clamp(52px, 17vh, 76px);
     }
     .pad button.jump { color: var(--magenta); }
+    .pad.right { align-items: center; }
+    /* 自動連射の切り替え(咲耶スクランブルと同じ長押しトグル)。
+       SHOT の隣にあるので、かすめただけで切り替わらないよう長押しにする。
+       押している間は琥珀が下から満ち、満ちてから離すと切り替わる */
+    .pad button.auto {
+      width: 44px;
+      height: 44px;
+      color: var(--gold);
+      opacity: 0.55;
+    }
+    .pad button.auto.on { opacity: 1; box-shadow: var(--bevel-up), 0 0 0 2px var(--magenta); }
+    .hold-toggle { position: relative; overflow: hidden; }
+    .hold-toggle::after {
+      content: "";
+      position: absolute;
+      left: 0; bottom: 0;
+      width: 100%; height: 0;
+      background: rgba(232, 197, 106, 0.38);
+      pointer-events: none;
+    }
+    .hold-toggle.holding::after { height: 100%; transition: height 600ms linear; }
+    @media (prefers-reduced-motion: reduce) { .hold-toggle.holding::after { transition: none; } }
     .pad button.fire { color: var(--gold); }
 
     /* スマホ横持ちでは余白を捨てて画面いっぱいに使う */
@@ -243,6 +265,7 @@
     <div id="joyhint" aria-hidden="true"></div>
     <div id="joyhintcap" aria-hidden="true">左半分のどこでも押したまま倒す</div>
     <div class="pad right">
+      <button id="btnAuto" type="button" class="auto hold-toggle" aria-label="自動連射:オン(長押しでオフ)" data-icon="auto"></button>
       <button type="button" class="fire" data-key="fire" aria-label="ショット" data-icon="shot"></button>
       <button type="button" class="jump" data-key="jump" aria-label="ジャンプ" data-icon="jump"></button>
     </div>
@@ -251,7 +274,7 @@
 
   <div class="info">
     <b>咲耶ジャンプバグ（プロトタイプ）</b> ─ むかし懐かしの「ジャンプバグ」風。⌐◨-◨カーは地面や屋根に触れるたび勝手に跳ねる。
-    <kbd>←</kbd><kbd>→</kbd> 加速/減速　<kbd>SPACE</kbd>/<kbd>↑</kbd>/<kbd>Z</kbd> ジャンプ（押している間は高く跳ぶ。空中でもう2回まで跳べる）　<kbd>X</kbd> ショット　<kbd>P</kbd> 一時停止　<kbd>M</kbd> 音<br>
+    <kbd>←</kbd><kbd>→</kbd> 加速/減速　<kbd>SPACE</kbd>/<kbd>↑</kbd>/<kbd>Z</kbd> ジャンプ（押している間は高く跳ぶ。空中でもう2回まで跳べる）　<kbd>X</kbd> ショット　<kbd>V</kbd> 自動連射　<kbd>P</kbd> 一時停止　<kbd>M</kbd> 音<br>
     画面は一定の速さで勝手に進む（強制スクロール）。壁と画面の左端にはさまれてもミス。敵は撃つか上から踏むと倒せる。溶岩に落ちる・トゲや敵に当たる・燃料切れでミス。途中の提灯がチェックポイント。
   </div>
   <footer>
@@ -282,6 +305,8 @@
               "######.#.#.", "##.###...#.", "....##..#..", ".....#.....", "..........."],
       mute: ["...........", ".....#.....", "....##.....", "##.###.#..#", "######..##.", "######..##.",
              "######.#..#", "##.###.....", "....##.....", ".....#.....", "..........."],
+      auto: ["...........", "...........", "#...#...#..", "##..##..##.", "###.###.###", "##..##..##.",
+             "#...#...#..", "...........", "...........", "...........", "..........."],
       pad: ["...........", "...........", ".#########.", "##.######.#", "#...####.#.", "##.######.#",
             "###########", "###.....###", ".#.......#.", "...........", "..........."]
     };
@@ -310,8 +335,8 @@
       if (window.__fitWrap) window.__fitWrap();
     }
     setTouchMode(isTouch);
-    window.addEventListener("touchstart", () => { if (!isTouch) setTouchMode(true); }, { passive: true, capture: true });
-    window.addEventListener("pointerdown", (e) => { if (e.pointerType === "touch" && !isTouch) setTouchMode(true); }, { capture: true });
+    window.addEventListener("touchstart", () => { if (!isTouch) { setTouchMode(true); onTouchDetected(); } }, { passive: true, capture: true });
+    window.addEventListener("pointerdown", (e) => { if (e.pointerType === "touch" && !isTouch) { setTouchMode(true); onTouchDetected(); } }, { capture: true });
     const portraitMQ = window.matchMedia("(orientation: portrait)");
 
     // ------------------------------------------------------------------
@@ -656,7 +681,11 @@
         SFX.tone({ freq: high ? 200 : 170, to: high ? 560 : 340, dur: high ? 0.16 : 0.1, type: "triangle", gain: high ? 0.16 : 0.1 });
       },
       bonk() { SFX.tone({ freq: 160, to: 70, dur: 0.1, type: "square", gain: 0.12 }); },
-      shot() { SFX.tone({ freq: 1100, to: 380, dur: 0.07, type: "square", gain: 0.07 }); },
+      // 自動連射は毎秒5発鳴り続けるので、音量を絞ってピッチを散らす(咲耶スクランブルのバルカンと同じ考え)
+      shot(auto) {
+        if (auto) SFX.tone({ freq: 900 + Math.random() * 160, to: 420, dur: 0.05, type: "square", gain: 0.035 });
+        else SFX.tone({ freq: 1100, to: 380, dur: 0.07, type: "square", gain: 0.07 });
+      },
       coin() {
         SFX.tone({ freq: 988, dur: 0.05, gain: 0.08 });
         SFX.tone({ freq: 1319, dur: 0.12, gain: 0.08, delay: 0.05 });
@@ -735,6 +764,7 @@
     try { hiScore = Number(localStorage.getItem("sakuyaJumpBugHi")) || 0; } catch (e) { /* 保存不可の環境でも遊べる */ }
 
     const input = { left: false, right: false, jump: false, fire: false };
+    let autoFire = isTouch;   // 自動連射。スマホは最初からオン(咲耶スクランブルと同じ)
     const state = {
       phase: "title",   // title | play | dying | goal | clear | over
       paused: false,
@@ -986,11 +1016,12 @@
 
       // ショット
       if (car.fireCd > 0) car.fireCd--;
-      if (I.fire && car.fireCd === 0 && state.bullets.length < 3) {
+      // 自動連射がオンなら撃ち続ける。ジャンプに集中できるように
+      if ((I.fire || autoFire) && car.fireCd === 0 && state.bullets.length < 3) {
         const bx = car.facing > 0 ? car.x + CAR_W + 4 : car.x - 12;
         state.bullets.push({ x: bx, y: car.y + 12, vx: car.facing * 11 + car.vx * 0.5, life: 55 });
         car.fireCd = 12;
-        SFX.shot();
+        SFX.shot(!I.fire);
       }
 
       // 燃料
@@ -1767,6 +1798,28 @@
       ctx.textAlign = "left";
     }
 
+    // 短い通知(自動連射の切り替えなど)。ロスターの下に出す
+    function showToast(text) { state.toast = { text, t: 90 }; }
+    function drawToast() {
+      const tt = state.toast;
+      if (!tt) return;
+      tt.t--;
+      if (tt.t <= 0) { state.toast = null; return; }
+      ctx.globalAlpha = Math.min(1, tt.t / 15);
+      ctx.font = C.jfont(16);
+      ctx.textAlign = "center";
+      const w = ctx.measureText(tt.text).width + 28;
+      ctx.fillStyle = "rgba(4,6,12,0.82)";
+      ctx.fillRect(W / 2 - w / 2, 70, w, 28);
+      ctx.strokeStyle = "rgba(232,197,106,0.55)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(W / 2 - w / 2 + 0.5, 70.5, w - 1, 27);
+      ctx.fillStyle = C.ink;
+      ctx.fillText(tt.text, W / 2, 90);
+      ctx.textAlign = "left";
+      ctx.globalAlpha = 1;
+    }
+
     function drawHud() {
       // スコア
       ctx.font = C.font(12);
@@ -2036,6 +2089,7 @@
       drawWorld();
       ctx.restore();
       drawHud();
+      drawToast();
       if (state.phase === "clear") drawResult("STAGE CLEAR!", C.gold);
       if (state.phase === "over") drawResult("GAME OVER", C.danger);
       if (state.paused) {
@@ -2149,6 +2203,7 @@
       if ((e.code === "Space" || e.code === "Enter") && !e.repeat) startOrRestart();
       if ((e.code === "KeyP" || e.code === "Escape") && !e.repeat) setPaused(!state.paused);
       if (e.code === "KeyM" && !e.repeat) toggleMute();
+      if (e.code === "KeyV" && !e.repeat) toggleAutoFire();
     });
     window.addEventListener("keyup", (e) => {
       const k = KEYMAP[e.code];
@@ -2161,7 +2216,7 @@
     document.addEventListener("visibilitychange", () => { if (document.hidden) setPaused(true); });
 
     // タッチボタン。押している間だけ input を立てる(指がずれても離すまで保持)
-    document.querySelectorAll(".pad button").forEach((btn) => {
+    document.querySelectorAll(".pad button[data-key]").forEach((btn) => {
       const key = btn.dataset.key;
       const on = (e) => {
         e.preventDefault();
@@ -2177,6 +2232,52 @@
       btn.addEventListener("lostpointercapture", off);
       btn.addEventListener("contextmenu", (e) => e.preventDefault());
     });
+    // ------------------------------------------------------------------
+    // 自動連射(咲耶スクランブルと同じ)。スマホでは最初からオン、PCはオフ。
+    // ボタンは長押し(600ms)で切り替え。短いタップでは切り替えず、やり方を知らせる。
+    // PC は V キーで切り替え
+    // ------------------------------------------------------------------
+    const HOLD_TOGGLE_MS = 600;
+    const autoBtn = document.getElementById("btnAuto");
+    function updateAutoUI() {
+      autoBtn.classList.toggle("on", autoFire);
+      autoBtn.setAttribute("aria-label", autoFire ? "自動連射:オン(長押しでオフ)" : "自動連射:オフ(長押しでオン)");
+    }
+    // 後からタッチ端末だと分かったときも、スマホと同じく自動連射をオンにする
+    let autoTouched = false;
+    function onTouchDetected() {
+      if (autoTouched || autoFire) return;
+      autoFire = true;
+      updateAutoUI();
+    }
+    function toggleAutoFire() {
+      autoTouched = true;
+      autoFire = !autoFire;
+      updateAutoUI();
+      showToast(autoFire ? "自動連射: オン" : "自動連射: オフ");
+    }
+    (function bindHoldToggle(button, action, onShortTap) {
+      let startedAt = 0;
+      const clear = () => { startedAt = 0; button.classList.remove("holding"); };
+      button.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        try { button.setPointerCapture(e.pointerId); } catch (err) { /* 古いブラウザ */ }
+        startedAt = performance.now();
+        button.classList.add("holding");
+      });
+      button.addEventListener("pointerup", (e) => {
+        e.preventDefault();
+        const long = startedAt > 0 && performance.now() - startedAt >= HOLD_TOGGLE_MS;
+        clear();
+        if (long) action(); else onShortTap();
+      });
+      button.addEventListener("pointercancel", clear);
+      button.addEventListener("lostpointercapture", clear);
+      button.addEventListener("contextmenu", (e) => e.preventDefault());
+    })(autoBtn, toggleAutoFire, () => showToast("長押しで自動連射を切り替え"));
+    updateAutoUI();
+
     // ------------------------------------------------------------------
     // バーチャルスティック(咲耶Nounラリーの浮動式を移植)
     //  - プレイ中、画面の左半分のどこでも、触れた場所にスティックが出る
