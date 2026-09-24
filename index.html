@@ -5225,8 +5225,9 @@
     // 倒した量に応じたアナログ入力(stickX/stickY, -1〜1)にして、ジャイロと同じく
     // 細かい操作を効かせる
     const JOY_DEAD = 6; // 中心からこれ未満は無入力(置いただけで動き出さない)
-    // いっぱいに倒したときの推力(キー入力=1)。1だと効きすぎるという実機の感想で0.7に下げた
-    const STICK_SENSITIVITY = 0.7;
+    // いっぱいに倒したときの推力(キー入力=1)。実機で「効きすぎる」という感想があり、
+    // 1 → 0.7 → 0.6 と下げた
+    const STICK_SENSITIVITY = 0.6;
     const JOY_R = 24; // 原点が指を追う半径。ここまで倒すと最大入力
     const joyRing = document.getElementById("joyring");
     const joyKnob = document.getElementById("joyknob");
