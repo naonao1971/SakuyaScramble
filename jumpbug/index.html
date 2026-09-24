@@ -1223,10 +1223,12 @@
     // ------------------------------------------------------------------
     // 描画
     // ------------------------------------------------------------------
-    // ⌐◨-◨ カー。原点=当たり判定の底辺中央、右向き。
-    //  ◨ ◨ … 2枚のレンズがそのまま車体(キャビン)。左半分が白、右半分が黒の瞳
-    //  -   … ブリッジが車体をつなぐ
-    //  ⌐   … つるが後ろに伸びてリアスポイラーになる。咲耶のマゼンタの鉢巻がなびく
+    // ⌐◨-◨ カー。ワーゲンビートルの屋根に ⌐◨-◨ が乗っている。
+    // 原点=当たり判定の底辺中央、右向き。
+    //  車体 … 丸い屋根・後ろへ流れるリア・盛り上がったフェンダーのビートル型。
+    //         夜の町や洞窟の暗い背景で埋もれないよう、クリーム色の車体に濃い輪郭線。
+    //         (漆黒の車体も試したが、等倍では背景に溶けて車の形が読めなかった)
+    //  ⌐◨-◨ … Nouns の赤ノグルズを屋根にかける。⌐ のつるから鉢巻がなびく
     function drawCar(car, scale = 1, blink = false) {
       const cx = car.x + CAR_W / 2;
       const by = car.y + CAR_H;
@@ -1238,56 +1240,28 @@
       const sq = car.squash;
       ctx.scale(1 + sq * 0.16, 1 - sq * 0.22);
       if (blink) ctx.globalAlpha = 0.35;
-
       const f = state.frame;
-      // 鉢巻(スカーフ)。スポイラーの角から後ろへ流す
+      const BODY = "#EDE3CC";      // クリーム
+      const SHADE = "#C9B993";     // 車体の下半分の影
+      const LINE = "#1A1226";      // 輪郭線
+      const WHEEL_X = [-15, 16];
+
+      // 鉢巻(スカーフ)。屋根の ⌐ のつるの先から後ろへ流す
       ctx.fillStyle = C.magenta;
       ctx.beginPath();
-      ctx.moveTo(-34, -27);
-      for (let i = 1; i <= 4; i++) {
-        ctx.lineTo(-34 - i * 7, -27 + Math.sin(f * 0.3 + i) * 3 + i * 0.8);
-      }
-      for (let i = 4; i >= 1; i--) {
-        ctx.lineTo(-34 - i * 7, -23 + Math.sin(f * 0.3 + i) * 3 + i * 1.2);
-      }
-      ctx.lineTo(-34, -23);
+      ctx.moveTo(-22, -32);
+      for (let i = 1; i <= 4; i++) ctx.lineTo(-22 - i * 6, -32 + Math.sin(f * 0.3 + i) * 2.5 + i * 0.9);
+      for (let i = 4; i >= 1; i--) ctx.lineTo(-22 - i * 6, -29 + Math.sin(f * 0.3 + i) * 2.5 + i * 1.2);
+      ctx.lineTo(-22, -29);
       ctx.closePath();
       ctx.fill();
 
-      // シャシー(下回り)
-      ctx.fillStyle = "#1A1226";
-      ctx.fillRect(-26, -12, 56, 6);
-      ctx.fillStyle = C.gold;
-      ctx.fillRect(-24, -10, 52, 1);
-
-      // ⌐ (スポイラー)
-      ctx.fillStyle = C.nounRed;
-      ctx.fillRect(-34, -28, 14, 5);
-      ctx.fillRect(-34, -28, 5, 11);
-      // - (ブリッジ)
-      ctx.fillRect(-4, -25, 12, 5);
-      // ◨ ◨ (レンズ = キャビン)
-      for (const lx of [-22, 6]) {
-        ctx.fillStyle = C.nounRed;
-        ctx.fillRect(lx, -33, 22, 22);
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fillRect(lx + 4, -29, 7, 14);
-        ctx.fillStyle = "#000000";
-        ctx.fillRect(lx + 11, -29, 7, 14);
-      }
-      // ヘッドライト
-      ctx.fillStyle = C.gold;
-      ctx.fillRect(28, -20, 4, 4);
-
-      // タイヤ
-      for (const wx of [-12, 17]) {
+      // タイヤ(車体より先に描き、上半分をフェンダーで隠す)
+      for (const wx of WHEEL_X) {
         ctx.fillStyle = "#0B0810";
         ctx.beginPath();
         ctx.arc(wx, -6.5, 6.5, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = "#3A2F4A";
-        ctx.lineWidth = 1;
-        ctx.stroke();
         ctx.save();
         ctx.translate(wx, -6.5);
         ctx.rotate(car.wheel);
@@ -1295,6 +1269,109 @@
         ctx.fillRect(-4, -0.8, 8, 1.6);
         ctx.fillRect(-0.8, -4, 1.6, 8);
         ctx.restore();
+        ctx.fillStyle = "#D9D2E6";
+        ctx.beginPath();
+        ctx.arc(wx, -6.5, 1.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // 車体。丸い屋根から後ろへなだらかに落ち、前は短いボンネット
+      ctx.beginPath();
+      ctx.moveTo(-29, -7);
+      ctx.lineTo(-29, -10);
+      ctx.bezierCurveTo(-29, -16, -26, -21, -19, -23.5);
+      ctx.bezierCurveTo(-12, -26.5, 4, -27, 9, -23);
+      ctx.bezierCurveTo(12, -20.5, 15, -16.5, 18, -14);
+      ctx.bezierCurveTo(23, -13, 28, -12.5, 29, -10);
+      ctx.lineTo(29, -7);
+      ctx.closePath();
+      ctx.fillStyle = BODY;
+      ctx.fill();
+      ctx.save();
+      ctx.clip();
+      ctx.fillStyle = SHADE;
+      ctx.fillRect(-32, -12, 64, 6);
+      ctx.restore();
+      ctx.strokeStyle = LINE;
+      ctx.lineWidth = 1.4;
+      ctx.lineJoin = "round";
+      ctx.stroke();
+
+      // フェンダー。タイヤの上に丸く盛り上げる(ビートルの顔)
+      for (const wx of WHEEL_X) {
+        ctx.beginPath();
+        ctx.ellipse(wx, -7, 9, 7.5, 0, Math.PI, 0);
+        ctx.closePath();
+        ctx.fillStyle = SHADE;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(wx, -7, 9, 7.5, 0, Math.PI, 0);
+        ctx.strokeStyle = LINE;
+        ctx.stroke();
+      }
+      // ステップ(フェンダーの間の踏み板)
+      ctx.fillStyle = LINE;
+      ctx.fillRect(-6, -8, 13, 2);
+
+      // 窓。屋根の丸みに沿った1枚ガラスを、センターピラーで2つに割る
+      ctx.beginPath();
+      ctx.moveTo(-18, -17);
+      ctx.bezierCurveTo(-16, -22, -6, -24.5, 2, -24);
+      ctx.bezierCurveTo(7, -23, 10, -20, 12, -17);
+      ctx.closePath();
+      ctx.fillStyle = "#07050C";
+      ctx.fill();
+      ctx.fillStyle = BODY;
+      ctx.fillRect(-4, -25, 2.5, 8.5);
+      ctx.fillStyle = LINE;
+      ctx.fillRect(-4.5, -25, 0.8, 8.5);
+      // ガラスの映り込み
+      ctx.strokeStyle = "rgba(255,45,155,0.55)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(4, -22); ctx.lineTo(8, -19);
+      ctx.stroke();
+
+      // 金のライン(ベルトライン)とドア
+      ctx.fillStyle = C.magenta;
+      ctx.fillRect(-24, -15.5, 44, 1.5);    // 咲耶のマゼンタのライン
+      ctx.fillStyle = "#8A6A2A";
+      ctx.fillRect(-1, -13, 4, 1);          // ドアノブ
+      ctx.fillStyle = LINE;
+      ctx.fillRect(-4, -14, 1, 7);          // ドアの合わせ目
+      // リアのエンジンルーバー
+      for (let i = 0; i < 3; i++) ctx.fillRect(-26 + i * 2, -14, 1, 4);
+
+      // 丸目のヘッドライトとテールランプ、金のバンパー
+      ctx.fillStyle = C.gold;
+      ctx.beginPath();
+      ctx.arc(22.5, -12.5, 2.6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = LINE;
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+      ctx.fillStyle = "#FFF4C8";
+      ctx.beginPath();
+      ctx.arc(23, -13, 1.1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = C.danger;
+      ctx.fillRect(-29, -14, 2, 3);
+      ctx.fillStyle = C.gold;
+      ctx.fillRect(27, -9, 4, 2);
+      ctx.fillRect(-31, -9, 4, 2);
+
+      // ⌐◨-◨ を屋根にかける
+      ctx.fillStyle = C.nounRed;
+      ctx.fillRect(-22, -32, 7, 3);          // ⌐ のつる
+      ctx.fillRect(-22, -32, 3, 6);          // ⌐ の先の折れ
+      ctx.fillRect(-1.5, -31.5, 4, 3);       // - のブリッジ
+      for (const lx of [-15.5, 2.5]) {       // ◨ ◨
+        ctx.fillStyle = C.nounRed;
+        ctx.fillRect(lx, -37, 14, 12);
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(lx + 2.5, -34.5, 4.5, 7);
+        ctx.fillStyle = "#000000";
+        ctx.fillRect(lx + 7, -34.5, 4.5, 7);
       }
       ctx.restore();
     }
