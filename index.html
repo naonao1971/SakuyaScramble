@@ -89,7 +89,10 @@
       align-items: center;
       gap: 18px;
       min-height: 100dvh;
-      padding: 20px 12px 40px;
+      /* ホーム画面アプリ(black-translucent)では、ページがステータスバーの下まで
+         広がる。上の逃げ幅を足さないと、縦持ちの案内画面の枠が時計や電波表示と
+         重なる(ブラウザ表示では env() は0なので見た目は変わらない) */
+      padding: calc(20px + env(safe-area-inset-top)) 12px 40px;
       box-sizing: border-box;
       touch-action: manipulation;
       /* スマホでボタンや画面を長押し/ドラッグしたときに、テキストや要素が
@@ -117,7 +120,7 @@
     }
     /* 全画面表示中はアドレスバー分の余白が要らないので、盤面をより大きく使う */
     body.is-fullscreen {
-      padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+      padding: calc(8px + env(safe-area-inset-top)) 8px calc(8px + env(safe-area-inset-bottom));
       gap: 8px;
     }
     body.is-fullscreen canvas {
@@ -286,8 +289,12 @@
          the iPhone home-indicator / notch via safe-area-inset.
          row-reverse: 右端(親指の付け根側)から X → 💣 → 各トグル の順に並べる */
       position: fixed;
-      right: calc(18px + env(safe-area-inset-right));
-      bottom: calc(18px + env(safe-area-inset-bottom));
+      /* キャンバスの右下の角の内側に置く(JSの positionFirePad が --fire-pad-*
+         にキャンバスの実寸から求めた値を入れる)。画面の下端基準で置くと、
+         ホームバーの逃げ幅ぶん持ち上がってキャンバスの下端をまたぎ、その下の
+         案内文に重なっていた。ノッチ/ホームバーより内側には必ず収める */
+      right: max(calc(12px + env(safe-area-inset-right)), var(--fire-pad-right, 0px));
+      bottom: max(calc(12px + env(safe-area-inset-bottom)), var(--fire-pad-bottom, 0px));
       z-index: 6;
       display: none;
       pointer-events: auto;
@@ -4619,13 +4626,25 @@
     let _gameControlsWereShown = null;
     function updateGameControlsVisibility() {
       if (!touchControlsEnabled) return;
-      const shouldShow = state.started && !state.gameOver && !state.cleared;
+      // 縦持ちの案内画面(orientationOverlay)が出ている間はゲームが止まっていて
+      // 押しても反応しないので、画面の下に取り残さないよう隠す
+      const shouldShow = state.started && !state.gameOver && !state.cleared && !orientationBlocked;
       if (shouldShow === _gameControlsWereShown) return;
       firePad.style.display = shouldShow ? "flex" : "none";
       controlsBottom.style.display = shouldShow ? "flex" : "none";
+      if (shouldShow) positionFirePad();
       // 押したままゲームオーバー/クリアになったら、スティックの輪を残さない
       if (!shouldShow) releaseStick();
       _gameControlsWereShown = shouldShow;
+    }
+
+    // ボタン群をキャンバスの右下の角の内側に合わせる(CSS側でノッチ/ホームバーの
+    // 逃げ幅より内側に来るよう max() で下限を掛けている)
+    const FIRE_PAD_INSET = 8;
+    function positionFirePad() {
+      const rect = canvas.getBoundingClientRect();
+      firePad.style.setProperty("--fire-pad-right", `${window.innerWidth - rect.right + FIRE_PAD_INSET}px`);
+      firePad.style.setProperty("--fire-pad-bottom", `${window.innerHeight - rect.bottom + FIRE_PAD_INSET}px`);
     }
 
     // canvasの実寸中心にtransform: translate(-50%,-50%)の基準点を合わせる。
@@ -4662,6 +4681,7 @@
       if (_startButtonWasShown) positionStartButton();
       if (orientationBlocked) positionOrientationOverlay();
       if (_pauseButtonWasShown) positionPauseButton();
+      if (_gameControlsWereShown) positionFirePad();
     });
 
     // same left/top-at-canvas-origin mapping as positionStartButton, sized to
@@ -5270,14 +5290,17 @@
     // 影だけ置くと「その丸を押すもの」と誤解され、どこを押しても指の下に
     // スティックが出るという、この操作のいちばん良いところが伝わらない
     let _joyHintShown = false;
+    // ボタン群と同じくキャンバスの実寸を基準にし、左下の角の内側に置く
+    // (画面の下端基準だと、ホームバーの逃げ幅ぶんキャンバスの外へはみ出していた)
     function positionJoyHint() {
-      const x = 90;
-      const y = window.innerHeight - 90;
+      const rect = canvas.getBoundingClientRect();
+      const x = rect.left + 72;
+      const y = rect.bottom - 60;
       joyHint.style.left = `${x}px`;
       joyHint.style.top = `${y}px`;
-      // 文字は中央揃えなので、そのまま x に置くと画面の左端からはみ出す
+      // 文字は中央揃えなので、そのまま x に置くとキャンバスの左端からはみ出す
       const cw = joyHintCap.offsetWidth || 130;
-      joyHintCap.style.left = `${Math.max(x, cw / 2 + 8)}px`;
+      joyHintCap.style.left = `${Math.max(x, rect.left + cw / 2 + 8)}px`;
       joyHintCap.style.top = `${y - 52}px`;
     }
     // 毎フレーム render() から呼ばれるので、DOMに触るのは表示が切り替わる時だけ
@@ -5458,6 +5481,8 @@
       if (_startButtonWasShown) positionStartButton();
       if (_pauseButtonWasShown) positionPauseButton();
       if (orientationBlocked) positionOrientationOverlay();
+      if (_gameControlsWereShown) positionFirePad();
+      if (_joyHintShown) positionJoyHint();
     }
     if (fullscreenToggle) {
       if (supportsFullscreen && isMobileDevice) {
