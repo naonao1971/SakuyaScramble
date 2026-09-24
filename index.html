@@ -2643,9 +2643,9 @@
       // gyro tilt: proportional (analog) thrust instead of full digital thrust, for finer control
       state.ship.vx += horizontalThrust * gyro.sensitivity * state.input.gyroX;
       state.ship.vy += verticalThrust * gyro.sensitivity * state.input.gyroY;
-      // バーチャルスティック: 倒した量に比例。いっぱいに倒すとキー入力と同じ推力
-      state.ship.vx += horizontalThrust * state.input.stickX;
-      state.ship.vy += verticalThrust * state.input.stickY;
+      // バーチャルスティック: 倒した量に比例(最大でキー入力の STICK_SENSITIVITY 倍)
+      state.ship.vx += horizontalThrust * STICK_SENSITIVITY * state.input.stickX;
+      state.ship.vy += verticalThrust * STICK_SENSITIVITY * state.input.stickY;
       state.ship.vx *= drag;
       state.ship.vy *= drag;
       state.ship.x += state.ship.vx;
@@ -3666,7 +3666,7 @@
             if (state.input.left) state.ship.vx -= horizontalThrust;
             if (state.input.right) state.ship.vx += horizontalThrust;
             state.ship.vx += horizontalThrust * gyro.sensitivity * state.input.gyroX;
-            state.ship.vx += horizontalThrust * state.input.stickX;
+            state.ship.vx += horizontalThrust * STICK_SENSITIVITY * state.input.stickX;
             state.ship.vx *= drag;
             state.ship.x += state.ship.vx;
             const row = state.fall.rows[Math.floor(state.ship.y)] || state.fall.rows[state.fall.rows.length - 1];
@@ -3691,7 +3691,7 @@
             if (state.input.left) state.ship.vx -= horizontalThrust;
             if (state.input.right) state.ship.vx += horizontalThrust;
             state.ship.vx += horizontalThrust * gyro.sensitivity * state.input.gyroX;
-            state.ship.vx += horizontalThrust * state.input.stickX;
+            state.ship.vx += horizontalThrust * STICK_SENSITIVITY * state.input.stickX;
             state.ship.vx *= drag;
             state.ship.x += state.ship.vx;
             const row = state.fall.rows[Math.floor(state.ship.y)] || state.fall.rows[state.fall.rows.length - 1];
@@ -5223,8 +5223,10 @@
     //
     // ラリーは迷路なので4方向に丸めているが、こちらは斜め移動が要るので丸めない。
     // 倒した量に応じたアナログ入力(stickX/stickY, -1〜1)にして、ジャイロと同じく
-    // 細かい操作を効かせる。いっぱいに倒したときの推力は旧十字キーと同じにする
+    // 細かい操作を効かせる
     const JOY_DEAD = 6; // 中心からこれ未満は無入力(置いただけで動き出さない)
+    // いっぱいに倒したときの推力(キー入力=1)。1だと効きすぎるという実機の感想で0.7に下げた
+    const STICK_SENSITIVITY = 0.7;
     const JOY_R = 24; // 原点が指を追う半径。ここまで倒すと最大入力
     const joyRing = document.getElementById("joyring");
     const joyKnob = document.getElementById("joyknob");
