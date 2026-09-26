@@ -29,13 +29,18 @@ description: 咲耶シリーズのブラウザゲーム（レトロアーケー�
    - CNP を出すなら `kit.cnp.chars` と `kit.cnp.draw()`。救出キャラは `ch.no`（1始まり）で記録する
    - 結果画面と演出動画は kit に任せる。動画は `cutscenes: { clear: {src, image}, gameOver: {src} }` に渡すだけで、
      再生、飛ばす処理、ジングルへの切り替え、結果画面の描画は書かない。独自の飾りは `resultScreen.decorate` で足す
+   - スコア・残機・チェックポイント・CNP の回収・HUD は `kit.score` / `kit.lives` / `kit.checkpoint` / `kit.cnp.run` / `kit.hud` を使う。
+     HUD の位置と見た目を独自に作らない（左上スコア、上段中央ロスター、右上残機・ゲージ）
+   - 自動連射は `controls.autoFire`、ジャンプ等をスティックの上や画面右半分でも押せるようにするときは
+     `stickUpButton` / `rightHalfButton` を使う。キーは P（ポーズ）・M（音）・V（自動連射）を変えない
+   - ランキングに進み具合を残すときは `kit.gameOver({ cleared, progress })`（progress は 0〜100）
    - 定番の効果音は `kit.sfx.pickup()` などを使い、同じ意味の音はタイトル間でそろえる
 5. タイトル名・OGP画像・アイコンは、sakuya-kit の `tools/ogp.html` で作って差し替える（手順は全タイトル共通。中身はタイトルごとに自由）
    - 書き出した ogp.png / apple-touch-icon.png / icon-192.png / icon-512.png / favicon-32.png / manifest.json をリポジトリ直下に上書きで置く
    - 書き出した `<head>` の中身で index.html の `<head>` を丸ごと入れ替える。OGP やアイコンのタグを手で書かない
    - `createKit` の `title` / `subtitle` も同じ値にする
    - `CNAME` だけはタイトル用に手で書く
-6. 共通 GAS の URL を `gasUrl` に入れる（新しい GAS は作らない）
+6. 共通 GAS の URL を `gasUrl` に入れる（新しい GAS は作らない）。スコアに上限があるなら `_games` の「スコア上限」と `maxScore` に同じ値を入れる
 7. 公開するときに、スプレッドシートの `_games` シートでそのタイトルの「総合に含める」を TRUE にし、
    「タイトル」列を正式名にする（総合ランキングに載る）。スコアは総合ランキングで他タイトルと 1位比で比べられるので、
    タイトル内で桁をそろえる必要はないが、公開後にスコアの付け方を大きく変えない
@@ -59,7 +64,7 @@ description: 咲耶シリーズのブラウザゲーム（レトロアーケー�
 
 - [ ] X のカード確認ツールなどで、OGP 画像・タイトル・説明文が出る
 - [ ] 開発者コンソールに sakuya-kit の警告が出ていない
-- [ ] PC: 矢印 / WASD で移動、P でポーズ、Enter / Space でスタート
+- [ ] PC: 矢印 / WASD で移動、P でポーズ、M で音、（自動連射があれば）V で切り替え、Enter / Space でスタート
 - [ ] スマホ横持ち: 左半分のスティック、右下のボタン、長押しトグル（🔊 ⛶ 🕹️）
 - [ ] ジャイロを使うタイトル: iPhone で許可ダイアログが出る。🕹️/📱 の長押しで切り替わる
 - [ ] スマホ縦持ち: 案内が出て、ゲームが止まる

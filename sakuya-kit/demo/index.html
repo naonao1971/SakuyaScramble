@@ -44,27 +44,24 @@
     import { createKit } from "../kit.js";
 
     // ===== ここから下がタイトル固有の中身 =====
-    // 例: 30秒のあいだ浮遊するCNPを集める。岩に当たるとHPが減る。
+    // 例: 30秒のあいだ浮遊するCNPを集めて、岩を撃ち落とす。燃料が尽きるか残機が無くなると終わり。
+    // スコア・残機・CNPの回収・HUD・自動連射は kit の部品を使っている。
     const W = 960, H = 540;
-    const game = {
-      ship: { x: 120, y: H / 2, vx: 0, vy: 0, r: 12, hp: 3, inv: 0 },
-      items: [],
-      rocks: [],
-      timer: 0,
-      score: 0,
-      rescued: new Set(),
-      dash: 0,
-    };
     const DURATION = 30 * 60;
+    const game = { ship: null, items: [], rocks: [], shots: [], timer: 0, fuel: 100, dash: 0 };
 
+    function newShip() {
+      const cp = kit.checkpoint.value || { x: 120, y: H / 2 };
+      return { x: cp.x, y: cp.y, vx: 0, vy: 0, r: 12, inv: 90 };
+    }
     function reset() {
-      Object.assign(game.ship, { x: 120, y: H / 2, vx: 0, vy: 0, hp: 3, inv: 0 });
       game.items.length = 0;
       game.rocks.length = 0;
+      game.shots.length = 0;
       game.timer = 0;
-      game.score = 0;
-      game.rescued.clear();
+      game.fuel = 100;
       game.dash = 0;
+      game.ship = newShip();
     }
 
     const kit = createKit({
@@ -72,7 +69,9 @@
       title: "SAKUYA KIT DEMO",
       subtitle: "- CATCH THE CNP -",
       gasUrl: "", // 共通GASのURL（gas/apps-script.gs）
+      maxScore: 99999, // これを超える記録は登録させない（GAS の _games のスコア上限と同じ値にする）
       cnp: true,
+      lives: { start: 3, extendEvery: 3000 }, // 3000点ごとに1UP
       controls: {
         stick: true,
         // 傾き操作を使うタイトルだけ有効にする（既定は使わない）
@@ -84,30 +83,24 @@
           { id: "dash", label: "X", ariaLabel: "ダッシュ", keys: ["KeyX", "Space"], primary: true,
             onPress: () => { game.dash = 20; kit.sfx.shot(); } },
         ],
+        // 自動連射（V キー／🔫 の長押しで切り替え。タッチ端末は最初からオン）
+        //   button: "dash" にすると、X を短くタップで切り替える方式（咲耶ジャンプバグ方式）になる
+        autoFire: { interval: 12, onFire: () => fire() },
       },
       share: {
         when: "clear",
         text: (r) => `SAKUYA KIT DEMO をクリア！\nスコア ${r.score}\n救出 ${r.rescued.length}/11`,
       },
-      help: { pc: "矢印/WASDで移動、Xでダッシュ（Pキーで一時停止）" },
-
+      help: { pc: "矢印/WASDで移動、Xでダッシュ、Vで自動連射、Mで音（Pキーで一時停止）" },
       // CLEAR / GAME OVER の演出動画（パスはタイトル側の置き場所）。無ければ省略してよく、
       // そのときはジングルと文字だけの結果画面になる。image は動画を流し終えた後の静止画
       cutscenes: {
         // clear: { src: "clear.mp4", image: "clear.png" },
         // gameOver: { src: "gameover.mp4" },
       },
-      // 結果画面は kit が共通の見た目で描く。救出ロスター等は decorate で足す
-      resultScreen: {
-        decorate(ctx, { kind, rect, result }) {
-          if (kind !== "clear") return;
-          ctx.font = kit.retro.fontBody(14);
-          ctx.fillStyle = kit.retro.colors.ink;
-          ctx.fillText(`救出 ${result.rescued.length}/11`, 480, (rect ? rect.y + rect.h : 240) + 100);
-        },
-      },
 
       onStart: reset,
+      onExtend: () => kit.sfx.bonus(),
 
       update(k) {
         const s = game.ship;
@@ -119,41 +112,47 @@
         s.x = Math.max(s.r, Math.min(W - s.r, s.x + s.vx));
         s.y = Math.max(s.r, Math.min(H - s.r, s.y + s.vy));
         if (s.inv > 0) s.inv--;
+        game.fuel = Math.max(0, game.fuel - 0.03);
 
         if (Math.random() < 0.02) {
-          const ch = k.cnp.chars[Math.floor(Math.random() * k.cnp.chars.length)];
+          const ch = k.cnp.run.pick(); // まだ取っていないキャラほど出やすい
           game.items.push({ ch, x: W + 30, y: 60 + Math.random() * (H - 120), t: Math.random() * 6 });
         }
         if (Math.random() < 0.025) {
-          game.rocks.push({ x: W + 20, y: Math.random() * H, r: 12 + Math.random() * 16, v: 2 + Math.random() * 3 });
+          game.rocks.push({ x: W + 20, y: 70 + Math.random() * (H - 70), r: 12 + Math.random() * 16, v: 2 + Math.random() * 3 });
         }
         for (const it of game.items) { it.x -= 2; it.t += 0.05; }
         for (const r of game.rocks) r.x -= r.v;
+        for (const b of game.shots) b.x += 9;
 
         game.items = game.items.filter((it) => {
           const y = it.y + Math.sin(it.t) * 12;
           if (Math.hypot(it.x - s.x, y - s.y) < 30) {
-            game.score += 100;
-            game.rescued.add(it.ch.no);
+            k.score.add(k.cnp.run.collect(it.ch.no) ? 300 : 100);
+            game.fuel = Math.min(100, game.fuel + 10);
             k.sfx.pickup();
             return false;
           }
           return it.x > -40;
         });
         game.rocks = game.rocks.filter((r) => {
+          const hit = game.shots.find((b) => Math.hypot(b.x - r.x, b.y - r.y) < r.r + 4);
+          if (hit) { hit.x = W + 99; k.score.add(50); k.sfx.explode(); return false; }
           if (s.inv === 0 && Math.hypot(r.x - s.x, r.y - s.y) < r.r + s.r) {
-            s.hp--;
-            s.inv = 60;
             k.sfx.hit();
+            k.checkpoint.set({ x: 120, y: s.y }); // 例: 復活地点をやられた高さにする
+            if (k.lives.lose() > 0) game.ship = newShip();
+            else return end(false), false;
           }
           return r.x > -40;
         });
+        game.shots = game.shots.filter((b) => b.x < W + 20);
 
         game.timer++;
-        if (s.hp <= 0) k.gameOver({ score: game.score, cleared: false, rescued: [...game.rescued] });
+        if (game.fuel <= 0) end(false);
         else if (game.timer >= DURATION) {
-          game.score += s.hp * 500;
-          k.gameOver({ score: game.score, cleared: true, rescued: [...game.rescued] });
+          k.score.add(k.lives.value * 500 + Math.floor(game.fuel) * 10);
+          end(true);
         }
       },
 
@@ -172,9 +171,11 @@
         for (const it of game.items) k.cnp.draw(ctx, it.ch, it.x, it.y + Math.sin(it.t) * 12, 48);
         ctx.fillStyle = k.retro.alpha(colors.ink, 0.35);
         for (const r of game.rocks) { ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2); ctx.fill(); }
+        ctx.fillStyle = colors.gold;
+        for (const b of game.shots) ctx.fillRect(b.x - 6, b.y - 1, 12, 3);
 
         const s = game.ship;
-        if (!(s.inv > 0 && k.frame % 8 < 4)) {
+        if (s && !(s.inv > 0 && k.frame % 8 < 4)) {
           ctx.fillStyle = colors.magenta;
           ctx.beginPath();
           ctx.moveTo(s.x + 16, s.y);
@@ -183,16 +184,26 @@
           ctx.fill();
         }
 
-        ctx.font = k.retro.font(14);
-        ctx.fillStyle = colors.gold;
-        ctx.textAlign = "left";
-        ctx.fillText(`SCORE ${game.score}`, 16, 30);
+        // HUD は kit の共通部品（全タイトル同じ位置・同じ見た目）
+        k.hud.score();
+        k.hud.roster();
+        k.hud.lives();
+        k.hud.gauge({ label: "FUEL", ratio: game.fuel / 100 });
+        ctx.font = k.retro.font(10);
+        ctx.fillStyle = colors.dim;
         ctx.textAlign = "right";
-        ctx.fillText(`TIME ${Math.max(0, Math.ceil((DURATION - game.timer) / 60))}`, W - 16, 30);
-        ctx.fillText("♥".repeat(Math.max(0, s.hp)), W - 16, 54);
-
+        ctx.fillText(`TIME ${Math.max(0, Math.ceil((DURATION - game.timer) / 60))}`, W - 16, 80);
+        ctx.textAlign = "left";
       },
     });
+
+    function fire() {
+      if (game.ship) game.shots.push({ x: game.ship.x + 14, y: game.ship.y });
+    }
+    // 救出キャラ・スコアは kit が持っているので、終わりはクリアかどうかだけ渡せばよい
+    function end(cleared) {
+      kit.gameOver({ cleared, progress: (game.timer / DURATION) * 100 });
+    }
     window.kit = kit; // デバッグ用
   </script>
 </body>

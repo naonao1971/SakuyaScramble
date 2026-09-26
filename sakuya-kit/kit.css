@@ -275,6 +275,10 @@ body.sk-fullscreen .sk-wrap canvas {
   box-shadow: var(--bevel-down);
   transform: translateY(2px);
 }
+/* 自動連射がオンの間、切り替えを兼ねるボタン（咲耶ジャンプバグ方式）をマゼンタで縁取る */
+.sk-btn.sk-auto-on {
+  border-color: var(--magenta);
+}
 /* 長押しトグル: 押している間だけ下から満ち、満ちてから離すと切り替わる */
 .sk-hold {
   position: relative;
@@ -474,6 +478,12 @@ body.sk-joyhint-on .sk-joyhintcap {
   font-size: 11px;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+/* 2段目: クリア / 進行度 / CNP の体数 */
+.sk-lb-sub {
+  grid-column: 1 / -1;
+  color: var(--dim);
+  font-size: 11px;
 }
 /* CNPロスター: 行の全幅を使う2段目 */
 .sk-lb-roster {

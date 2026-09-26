@@ -65,7 +65,34 @@ export function createCnp() {
     else drawPlaceholder(ctx, ch, x, y, size);
   }
 
-  return { chars, draw, drawPlaceholder, byNo: (no) => chars[no - 1] || null };
+  // まだ取っていないキャラの影（ロスターの空き枠用）。絵の形だけを暗い色で塗る。
+  // 画像の読み込み後に一度だけ作って使い回す
+  const SIL_PX = 64;
+  function silhouette(ch) {
+    if (ch.sil !== undefined) return ch.sil;
+    if (!ch.ready) return null;
+    const c = document.createElement("canvas");
+    c.width = c.height = SIL_PX;
+    const g = c.getContext("2d");
+    g.drawImage(ch.img, 0, 0, SIL_PX, SIL_PX);
+    g.globalCompositeOperation = "source-in";
+    g.fillStyle = "rgba(60,52,80,0.9)";
+    g.fillRect(0, 0, SIL_PX, SIL_PX);
+    ch.sil = c;
+    return c;
+  }
+  function drawSilhouette(ctx, ch, x, y, size) {
+    const s = silhouette(ch);
+    if (s) ctx.drawImage(s, x - size / 2, y - size / 2, size, size);
+    else {
+      ctx.save();
+      ctx.fillStyle = "rgba(232,197,106,0.18)";
+      ctx.fillRect(x - size / 2 + 3, y - size / 2 + 3, size - 6, size - 6);
+      ctx.restore();
+    }
+  }
+
+  return { chars, draw, drawPlaceholder, drawSilhouette, byNo: (no) => chars[no - 1] || null };
 }
 
 // "1,3,7" / [1,3,7] → Set(1,3,7)（範囲外は捨てる）

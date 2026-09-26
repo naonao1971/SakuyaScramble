@@ -5,7 +5,8 @@
 
 | 部品 | 内容 |
 |---|---|
-| コントローラー | キーボード、左半分のバーチャルスティック、ジャイロ（任意）、右下のボタン群、長押しトグル |
+| コントローラー | キーボード、左半分のバーチャルスティック（アナログ／4方向／上でボタン）、画面右半分の長押し、ジャイロ（任意）、右下のボタン群、長押しトグル、自動連射（V）、音（M） |
+| お決まりの仕組み | スコア（1UP・ハイスコア保存）、残機、チェックポイント、CNP の回収管理、HUD（スコア・ロスター・残機・ゲージ） |
 | ポーズ | canvas 中央のボタン、P / Esc キー、タブ切替や通知の割り込み時の入力リセット |
 | スコア登録 | TOP10 入り判定、ニックネームと X ID（実在確認つき）の入力フォーム |
 | ランキング | Google スプレッドシート + GAS（全タイトルで1本の GAS を共有）。タイトル別と**総合ランキング**の切り替えタブ付き |
@@ -78,12 +79,20 @@
 | `canvas` | `#game` | |
 | `gasUrl` | `""` | 空ならランキングは「まだ記録がありません」のまま |
 | `overall` | `true` | ランキングに「このゲーム / 総合」のタブを出す |
-| `cnp` | `false` | `true` で `kit.cnp` を使えるようにし、ランキングに救出ロスターを出す |
+| `cnp` | `false` | `true` で `kit.cnp` を使えるようにし、ランキングに救出ロスターを出す。権利表記のフッターも出る |
+| `lives` | なし | `{ start: 3, extendEvery: 20000 }`（`true` なら3機・1UPなし） |
+| `hiScoreKey` | `sakuya-kit:hi:<gameId>` | 旧版のハイスコアを引き継ぐときに、旧版の localStorage のキーを指定 |
+| `maxScore` | なし | これを超える記録は登録フォームを出さない（GAS の `_games` のスコア上限と同じ値にする） |
+| `rankingLabels` | `{ clear: "クリア", progress: "進行" }` | ランキングの2段目の言葉（ラリーなら `progress: "踏破"`） |
 | `controls.stick` | `true` | 左半分のバーチャルスティック |
 | `controls.stickDigital4` | `false` | スティックを4方向に丸める（迷路系向け） |
 | `controls.stickSensitivity` | `0.5` | いっぱいに倒したときの強さ（キー入力 = 1） |
 | `controls.gyro` | `false` | 傾き操作。下の「ジャイロ操作」を参照 |
 | `controls.keys` | 矢印 / WASD | `{ up: [...], down: [...], left: [...], right: [...] }` |
+| `controls.stickUpButton` | なし | スティックを上に倒したときに押すボタンの id（ジャンプ等） |
+| `controls.rightHalfButton` | なし | 画面の右半分を押している間押すボタンの id |
+| `controls.autoFire` | なし | 下の「自動連射」を参照 |
+| `controls.muteKey` | `"KeyM"` | 音の切り替えキー |
 | `controls.buttons` | `[]` | `{ id, label, ariaLabel, keys, primary, onPress, onRelease }`。右端から並ぶ |
 | `controls.toggles` | `[]` | 長押しトグル `{ id, name, label, labelOff, value, onChange }` |
 | `controls.mute` / `controls.fullscreen` | `true` | 🔊 と ⛶ のトグル |
@@ -120,6 +129,35 @@
 | `kit.gyro` | ジャイロ無効なら `null`。`active`、`recalibrate()`、`toggle()` |
 | `kit.ranking` | `load()`、`loadOverall(force)`、`setTab("game" \| "overall")`、`records`、`overall` |
 | `kit.cutscene` | `playing`、`kind`（`"clear"` / `"gameOver"` / `null`）、`skip()`、`videos` |
+
+## 自動連射
+
+```js
+controls: {
+  autoFire: { onFire: (kit) => fireVulcan(), interval: 10 },          // 🔫 の長押しトグル（スクランブル方式）
+  // autoFire: { onFire, button: "fire" },  // fire ボタンを短くタップで切り替え、押し続けたら通常の押下（ジャンプバグ方式）
+}
+```
+
+- `defaultOn`: `"touch"`（既定。タッチ端末だけ最初からオン）/ `true` / `false`
+- `key`: 切り替えキー（既定 `"KeyV"`）。`tapMs`: ボタン方式でタップとみなす長さ（既定 250ms）
+- オンの間、プレイ中は `interval` フレームごとに `onFire(kit)` が呼ばれる（ポーズ中・縦持ち中は止まる）
+- ボタン方式では、オンの間そのボタンをマゼンタで縁取る
+- `kit.autoFire.on` / `set(bool)` / `toggle()`
+
+## お決まりの仕組み（使う分だけ）
+
+| | 使い方 |
+|---|---|
+| スコア | `kit.score.add(100)`、`kit.score.value`、`kit.score.hi`。`lives.extendEvery` ごとに残機+1（`onExtend` フック） |
+| 残機 | `kit.lives.lose()`（残りを返す）、`gain()`、`value` |
+| チェックポイント | `kit.checkpoint.set({ x, y }, index)`、`kit.checkpoint.value` |
+| CNP の回収 | `kit.cnp.run.collect(ch.no)`（初めてなら true）、`has(no)`、`count`、`list()`、`pick(weight?)`（未回収ほど出やすい） |
+| HUD | `kit.hud.score()`（左上）、`kit.hud.roster()`（上段中央）、`kit.hud.lives()`（右上）、`kit.hud.gauge({ label: "FUEL", ratio })` |
+
+- どれもスタートのたびに kit が初期化します
+- `kit.gameOver({ cleared, progress })` だけ呼べば、スコアは `kit.score.value`、救出キャラは `kit.cnp.run.list()` が使われ、ハイスコアも保存されます（明示して渡すこともできます）
+- ランキングには、クリア・進行度（0〜100）・CNP の体数も記録され、2段目に表示されます
 
 ## ジャイロ操作（使うタイトルだけ）
 
@@ -203,11 +241,13 @@ canvas 側の `kit.retro.colors` も同じトークンを読むので、CSS と 
 
 | `_games` の列 | 内容 |
 |---|---|
+| スコア上限 | これを超える記録（と負の値）は GAS が断る。空欄なら上限なし |
 | gameId | `createKit({ gameId })` と同じ値 |
 | タイトル | 総合ランキングに出す名前 |
 | シート名 | スコアを入れるシート（咲耶スクランブルは既存の `ranking`） |
 | 総合に含める | `TRUE` のタイトルだけが総合ランキングの対象 |
 
+- スコアのシートは、列の**位置ではなく1行目の見出し**で読み書きします。ラリーとジャンプバグの旧版のシートは、共通のスプレッドシートにそのままコピーすれば読めます（「踏破率」は「進行度」として扱う）
 - 初めてスコアが届いたタイトルは、`_games` に自動で行が足されます（総合には `FALSE` の状態で入る）。公開するタイトルは手で `TRUE` にしてください。デモやテスト用は `FALSE` のままにします
 - `_games` の編集に再デプロイは要りません（総合ランキングは最大1分キャッシュされます）
 
@@ -241,6 +281,7 @@ assets/cnp/        CNP 画像（256x256・透過 PNG）
 gas/               共通ランキング用 Apps Script
 demo/              最小の動作例（テンプレートの元）
 tools/ogp.html     タイトル表記・OGP画像・アイコン・<head>・manifest.json を作るツール
+docs/INVENTORY.md  3作の共通部品の棚卸し（何を kit に入れ、何をタイトル側に残したか）
 skills/sakuyagamesskill/SKILL.md
                    新作を作るときに Claude が従うルール（テンプレートの .claude/skills/sakuyagamesskill/ に置く）
 ```

@@ -77,10 +77,18 @@ export function injectDom(cfg, canvas) {
     </section>`);
   wrap.after(leaderboard);
 
+  // 権利表記。footer に文字列を渡せばそれを出す。省略時は CNP を使うタイトル(cnp: true)だけ
+  // 非公式ファンアートの表記を出す（kit 自体はキャラに依存しない）
   let footer = null;
-  if (cfg.footer !== false) {
+  const footerText =
+    typeof cfg.footer === "string"
+      ? cfg.footer
+      : cfg.footer === undefined && cfg.cnp
+        ? "本作は CryptoNinja / CryptoNinja Partners の非公式ファンアートです"
+        : "";
+  if (footerText) {
     footer = el(`<footer class="sk-footer"></footer>`);
-    footer.textContent = cfg.footer || "本作は CryptoNinja / CryptoNinja Partners の非公式ファンアートです";
+    footer.textContent = footerText;
     leaderboard.after(footer);
   }
 

@@ -1,15 +1,27 @@
 // 移動用バーチャルスティック。画面の左半分のどこを押しても、指の下に出る浮動式。
 // 倒した量に応じたアナログ入力(stickX/stickY, -1..1)を input に書く。
-// options.digital4 = true で4方向に丸める（迷路系タイトル向け）。
+// digital4 = true で4方向に丸める（迷路系タイトル向け。咲耶Nounラリー方式）。
+//   - 中心付近では今の向きを保つ（指を少し戻しただけで止まらない）
+//   - 別の軸へ乗り換えるには、その軸が HYST 倍優勢になる必要がある（斜めでぶれない）
+// onUp(bool): 上に倒したかどうか（ジャンプ等に使う。咲耶ジャンプバグ方式）
 const JOY_DEAD = 6; // 中心からこれ未満は無入力(置いただけで動き出さない)
+const JOY_DEAD_DIGITAL = 12;
 const JOY_R = 24; // 原点が指を追う半径。ここまで倒すと最大入力
+const JOY_HYST = 1.2;
+const JOY_UP = 14; // これ以上上に倒すと「上」
 
-export function createStick({ dom, canvas, input, isPlayable, digital4 = false }) {
+export function createStick({ dom, canvas, input, isPlayable, digital4 = false, onUp = null }) {
   const { joyRing, joyKnob, joyHint, joyHintCap } = dom;
   let joy = null; // { id, ox, oy }
   let taught = false; // 一度でも倒したら、そのプレイではもう影を出さない
   let hintShown = false;
   let enabled = true;
+  let upOn = false;
+  const setUp = (v) => {
+    if (v === upOn) return;
+    upOn = v;
+    if (onUp) onUp(v);
+  };
 
   function show(ox, oy, kx, ky) {
     joyRing.style.left = `${ox}px`;
@@ -22,6 +34,7 @@ export function createStick({ dom, canvas, input, isPlayable, digital4 = false }
 
   function release() {
     joy = null;
+    setUp(false);
     input.stickX = 0;
     input.stickY = 0;
     joyRing.classList.remove("on");
@@ -81,19 +94,24 @@ export function createStick({ dom, canvas, input, isPlayable, digital4 = false }
       len = JOY_R;
     }
     show(joy.ox, joy.oy, joy.ox + dx, joy.oy + dy);
-    if (len < JOY_DEAD) {
+    setUp(dy <= -JOY_UP);
+    if (digital4) {
+      const ax = Math.abs(dx), ay = Math.abs(dy);
+      if (Math.max(ax, ay) >= JOY_DEAD_DIGITAL) {
+        const horiz = input.stickX !== 0;
+        const vert = input.stickY !== 0;
+        let useH;
+        if (!horiz && !vert) useH = ax > ay;
+        else if (horiz) useH = !(ay > ax * JOY_HYST);
+        else useH = ax > ay * JOY_HYST;
+        input.stickX = useH ? Math.sign(dx) : 0;
+        input.stickY = useH ? 0 : Math.sign(dy);
+      }
+      // 中心付近では今の向きを保つ
+    } else if (len < JOY_DEAD) {
       input.stickX = 0;
       input.stickY = 0;
       return;
-    }
-    if (digital4) {
-      if (Math.abs(dx) >= Math.abs(dy)) {
-        input.stickX = dx < 0 ? -1 : 1;
-        input.stickY = 0;
-      } else {
-        input.stickX = 0;
-        input.stickY = dy < 0 ? -1 : 1;
-      }
     } else {
       const mag = (len - JOY_DEAD) / (JOY_R - JOY_DEAD);
       // 円の中で斜めいっぱいに倒すと各軸0.71にしかならない。√2倍して各軸1で頭打ちに

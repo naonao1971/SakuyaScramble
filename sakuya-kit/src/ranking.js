@@ -57,6 +57,16 @@ export function rosterHTML(cnp, rescued) {
   return `<span class="sk-lb-roster">${slots}<span class="sk-lb-roster-count">${got.size}/${cnp.chars.length}</span></span>`;
 }
 
+// 記録の2段目（クリア / 進行度 / CNP の体数）。ロスター（番号の一覧）がある記録は roster 側で見せる
+function subLineHTML(cnp, r, labels) {
+  const parts = [];
+  if (r.cleared === true || r.cleared === "TRUE") parts.push(escapeHTML(labels.clear));
+  else if (r.progress != null && r.progress !== "") parts.push(`${escapeHTML(labels.progress)} ${Math.floor(Number(r.progress) || 0)}%`);
+  const hasList = cnp && parseRescued(r.rescued, cnp.chars.length).size > 0;
+  if (!hasList && r.cnp != null && r.cnp !== "" && cnp) parts.push(`CNP ${Number(r.cnp) || 0}/${cnp.chars.length}`);
+  return parts.length ? `<span class="sk-lb-sub">${parts.join(" ・ ")}</span>` : "";
+}
+
 // ── 総合ランキング ──
 // GAS の ?action=overall が返す { games, players, maxPerGame } を描く
 export function overallRowsHTML(data, cnp, limit = 10) {
@@ -81,7 +91,8 @@ export function overallRowsHTML(data, cnp, limit = 10) {
           <span class="sk-lb-xname">${xHTML(p.xid)}</span>
           <span class="sk-lb-score">${Math.floor(Number(p.total) || 0)}pt</span>
           <span class="sk-lb-games">${chips}</span>
-          ${rosterHTML(cnp, p.rescued)}
+          ${rosterHTML(cnp, p.rescued) ||
+            (cnp && p.cnpBest ? `<span class="sk-lb-sub">CNP 最高 ${p.cnpBest}/${cnp.chars.length}</span>` : "")}
         </li>`;
     })
     .join("");
@@ -97,7 +108,8 @@ export function fetchOverall(gasUrl) {
   return fetch(withParams(gasUrl, { action: "overall" }), { cache: "no-store" }).then((r) => r.json());
 }
 
-export function createRanking({ dom, gasUrl, gameId, cnp, isMobile, getResult, overall = true }) {
+export function createRanking({ dom, gasUrl, gameId, cnp, isMobile, getResult, overall = true, maxScore = null, labels = {} }) {
+  const L = { clear: "クリア", progress: "進行", ...labels };
   let cache = [];
   let tab = "game";
   let overallData = null;
@@ -175,6 +187,7 @@ export function createRanking({ dom, gasUrl, gameId, cnp, isMobile, getResult, o
             <span class="sk-lb-name">${deviceIcon ? `<span title="${escapeHTML(r.device)}">${deviceIcon}</span> ` : ""}${escapeHTML(r.nickname)}</span>
             <span class="sk-lb-xname">${xPart}</span>
             <span class="sk-lb-score">${Math.floor(Number(r.score) || 0)}</span>
+            ${subLineHTML(cnp, r, L)}
             ${rosterHTML(cnp, r.rescued)}
           </li>`;
       })
@@ -197,6 +210,11 @@ export function createRanking({ dom, gasUrl, gameId, cnp, isMobile, getResult, o
 
   function qualifies(score) {
     if (!(score > 0)) return false;
+    // 上限を超える記録は GAS が断るので、フォームを出さない（出すと「登録に失敗」になるだけ）
+    if (maxScore != null && score > maxScore) {
+      console.warn(`sakuya-kit: スコア ${score} が maxScore ${maxScore} を超えています`);
+      return false;
+    }
     if (cache.length < 10) return true;
     return score > cache[9].score;
   }
@@ -320,6 +338,9 @@ export function createRanking({ dom, gasUrl, gameId, cnp, isMobile, getResult, o
       created: Date.now(),
       device: isMobile ? "モバイル" : "PC",
       rescued: Array.isArray(result.rescued) ? result.rescued.join(",") : String(result.rescued || ""),
+      cnp: result.cnp != null ? result.cnp : "",
+      cleared: !!result.cleared,
+      progress: result.progress != null ? result.progress : "",
     };
     dom.submit.disabled = true;
     dom.submitStatus.textContent = "登録中...";

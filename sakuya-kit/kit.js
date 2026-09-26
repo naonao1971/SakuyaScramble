@@ -18,6 +18,7 @@ import { createCnp, CNP_DEFS } from "./src/cnp.js";
 import { shareResult, openXIntent } from "./src/share.js";
 import { createCutscene } from "./src/cutscene.js";
 import { pageTitle } from "./src/brand.js";
+import { createScore, createLives, createCheckpoint, createCnpRun, createHud } from "./src/play.js";
 import {
   setupFullscreenUi,
   supportsFullscreen,
@@ -90,6 +91,13 @@ export function createKit(cfg) {
     keys: DEFAULT_KEYS,
     buttons: [],
     toggles: [],
+    // 自動連射。{ onFire, interval, defaultOn, key, button, tapMs }（下の「自動連射」参照）
+    autoFire: null,
+    // スティックを上に倒したとき押すボタンの id（ジャンプ等）
+    stickUpButton: null,
+    // 画面の右半分を押している間押すボタンの id（ボタンが見えにくい端末でも操作できる）
+    rightHalfButton: null,
+    muteKey: "KeyM",
     ...(cfg.controls || {}),
   };
   // autoStart: スタート時に自動で傾き操作へ切り替える（咲耶スクランブル方式）。
@@ -105,7 +113,7 @@ export function createKit(cfg) {
   let phase = "title"; // "title" | "playing" | "over"
   let paused = false;
   let frame = 0;
-  let result = null; // { score, cleared, rescued }
+  let result = null; // { score, cleared, rescued, cnp, progress, newRecord }
   let resultHandled = false;
   let orientationBlocked = false;
   const listeners = {};
@@ -143,6 +151,21 @@ export function createKit(cfg) {
   const sfx = createSfx();
   const retro = createRetro(canvas, () => frame);
   const cnp = cfg.cnp ? createCnp() : null;
+  const cnpRun = cnp ? createCnpRun(cnp) : null;
+  if (cnp) cnp.run = cnpRun;
+  const livesCfg = cfg.lives === true ? {} : cfg.lives;
+  const lives = livesCfg ? createLives(livesCfg) : null;
+  const score = createScore({
+    gameId: cfg.gameId,
+    hiScoreKey: cfg.hiScoreKey,
+    extendEvery: livesCfg && livesCfg.extendEvery ? livesCfg.extendEvery : 0,
+    onExtend: () => {
+      if (lives) lives.gain();
+      emit("extend");
+    },
+  });
+  const checkpoint = createCheckpoint();
+  const hud = createHud({ ctx, canvas, retro, score, lives, cnp, run: cnpRun });
   const ranking = createRanking({
     dom,
     gasUrl: cfg.gasUrl || "",
@@ -151,6 +174,8 @@ export function createKit(cfg) {
     isMobile,
     getResult: () => result,
     overall: cfg.overall,
+    maxScore: cfg.maxScore,
+    labels: cfg.rankingLabels,
   });
 
   // ---- CLEAR / GAME OVER の演出動画 ----
@@ -200,7 +225,15 @@ export function createKit(cfg) {
 
   // ---- 操作系（タッチ端末のみ） ----
   const stick = controls.stick
-    ? createStick({ dom, canvas, input, isPlayable, digital4: controls.stickDigital4 })
+    ? createStick({
+        dom,
+        canvas,
+        input,
+        // スティックと置き場所の影はタッチ端末だけ（PCで左側をクリックしても出さない）
+        isPlayable: () => isMobile && isPlayable(),
+        digital4: controls.stickDigital4,
+        onUp: controls.stickUpButton ? (up) => pressById(controls.stickUpButton, up, "stick") : null,
+      })
     : null;
 
   const holdButtons = [];
@@ -216,14 +249,56 @@ export function createKit(cfg) {
     return b;
   }
 
+  // ---- 自動連射 ----
+  // defaultOn: "touch"（既定。タッチ端末だけ最初からオン）/ true / false
+  // button を指定すると、そのボタンを短くタップ(tapMs未満)で切り替え、押し続ける間は通常の押下になる
+  //（咲耶ジャンプバグ方式）。指定しなければ 🔫 の長押しトグルを出す（咲耶スクランブル方式）。
+  // key（既定 V）でも切り替えられる。
+  const af = controls.autoFire
+    ? { interval: 10, defaultOn: "touch", key: "KeyV", button: null, tapMs: 250, ...controls.autoFire }
+    : null;
+  let autoFireOn = af ? (af.defaultOn === "touch" ? isMobile : !!af.defaultOn) : false;
+  let autoFireTimer = 0;
+  let autoFireToggleUi = null;
+  function setAutoFire(on, announce = true) {
+    if (!af) return;
+    autoFireOn = !!on;
+    autoFireTimer = 0;
+    if (autoFireToggleUi) autoFireToggleUi.set(autoFireOn);
+    const bdef = af.button && buttonDefs.find((d) => d.id === af.button);
+    if (bdef && bdef.el) bdef.el.classList.toggle("sk-auto-on", autoFireOn);
+    if (announce) status(autoFireOn ? "自動連射: オン" : "自動連射: オフ");
+    emit("autoFire", autoFireOn);
+  }
+
   // 主ボタン・副ボタン（右端から並ぶ）
-  const buttonDefs = controls.buttons.map((def) => ({ keys: [], ...def }));
+  // 1つのボタンを複数の入力元（画面のボタン・キー・スティックの上・画面右半分）から押せるので、
+  // 押している入力元の集合で持ち、全部離れたときに離したことにする
+  const buttonDefs = controls.buttons.map((def) => ({ keys: [], ...def, _src: new Set(), _downAt: 0 }));
   for (const def of buttonDefs) {
     input.buttons[def.id] = false;
     const b = makeBtn("sk-btn" + (def.primary ? " sk-primary" : ""), def.label, def.ariaLabel || def.label);
     def.el = b;
-    bindPress(b, () => pressButton(def, true), () => pressButton(def, false));
+    bindPress(b, () => pressSource(def, "pad", true), () => pressSource(def, "pad", false));
     pressButtons.push(b);
+  }
+
+  function pressSource(def, src, down) {
+    if (down) def._src.add(src);
+    else def._src.delete(src);
+    const now = def._src.size > 0;
+    if (src === "pad" && af && af.button === def.id) {
+      // 短いタップは自動連射の切り替え（押し続けたら通常の押下）
+      if (down) def._downAt = performance.now();
+      else if (def._downAt && performance.now() - def._downAt < af.tapMs && phase === "playing" && !paused) {
+        setAutoFire(!autoFireOn);
+      }
+    }
+    pressButton(def, now);
+  }
+  function pressById(id, down, src) {
+    const def = buttonDefs.find((d) => d.id === id);
+    if (def) pressSource(def, src, down);
   }
 
   function pressButton(def, down) {
@@ -232,6 +307,28 @@ export function createKit(cfg) {
     if (phase !== "playing" || paused) return;
     if (down && def.onPress) def.onPress();
     if (!down && def.onRelease) def.onRelease();
+  }
+
+
+  // 画面の右半分を押している間、指定のボタンを押す（ボタン自体・入力欄の上は除く）
+  if (controls.rightHalfButton) {
+    const touches = new Set();
+    document.addEventListener(
+      "pointerdown",
+      (e) => {
+        if (!isPlayable() || e.clientX < window.innerWidth / 2) return;
+        if (e.target && e.target.closest && e.target.closest("button, input, a, .sk-leaderboard")) return;
+        touches.add(e.pointerId);
+        pressById(controls.rightHalfButton, true, "right");
+      },
+      { passive: true }
+    );
+    const up = (e) => {
+      if (!touches.delete(e.pointerId)) return;
+      if (!touches.size) pressById(controls.rightHalfButton, false, "right");
+    };
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
   }
 
   // 長押しトグル（ゲーム固有 → ミュート → 全画面 → ジャイロ の順に内側へ）
@@ -260,6 +357,21 @@ export function createKit(cfg) {
     return { el: b, render, set: (v) => ((toggleState[id] = !!v), render()) };
   }
 
+  // 自動連射のトグル（🔫）。ボタン方式でないときだけ
+  function addToggleLater() {
+    return addToggle({
+      id: "autofire",
+      label: "🔫",
+      ariaOn: "自動連射:オン(長押しでオフ)",
+      ariaOff: "自動連射:オフ(長押しでオン)",
+      value: autoFireOn,
+      onChange: (v) => setAutoFire(v),
+    });
+  }
+
+  if (af && !af.button) autoFireToggleUi = addToggleLater();
+  if (af) setAutoFire(autoFireOn, false);
+
   for (const t of controls.toggles) {
     addToggle({
       ariaOn: `${t.name || t.id}:オン(長押しでオフ)`,
@@ -272,22 +384,37 @@ export function createKit(cfg) {
     });
   }
 
+  // 音のオン/オフ。🔊 の長押しと M キーのどちらからでも。設定はこの端末に残す
+  const MUTE_KEY = "sakuya-kit:mute";
+  let soundToggle = null;
+  try {
+    sfx.setMuted(localStorage.getItem(MUTE_KEY) === "1");
+  } catch (e) {
+    /* 保存できない環境では毎回オン */
+  }
+  async function setSound(on) {
+    await sfx.unlock(); // オンに戻した直後から鳴るよう、ここでも起こしておく
+    sfx.setMuted(!on);
+    try {
+      localStorage.setItem(MUTE_KEY, on ? "0" : "1");
+    } catch (e) {
+      /* 無視 */
+    }
+    if (soundToggle) soundToggle.set(on);
+    for (const cs of Object.values(cutscenes)) cs.syncMuted(); // 再生中の演出動画にも即反映
+    emit("mute", !on);
+    status(on ? "効果音: オン" : "効果音: オフ");
+    if (on) sfx.pickup(); // 音量の確認用に一発鳴らす
+  }
   if (controls.mute) {
-    addToggle({
+    soundToggle = addToggle({
       id: "sound",
       label: "🔊",
       labelOff: "🔇",
       ariaOn: "効果音:オン(長押しでオフ)",
       ariaOff: "効果音:オフ(長押しでオン)",
-      value: true,
-      onChange: async (on) => {
-        await sfx.unlock(); // オンに戻した直後から鳴るよう、ここでも起こしておく
-        sfx.setMuted(!on);
-        for (const cs of Object.values(cutscenes)) cs.syncMuted(); // 再生中の演出動画にも即反映
-        emit("mute", !on);
-        status(on ? "効果音: オン" : "効果音: オフ");
-        if (on) sfx.pickup(); // 音量の確認用に一発鳴らす
-      },
+      value: !sfx.muted,
+      onChange: (on) => setSound(on),
     });
   }
 
@@ -477,6 +604,7 @@ export function createKit(cfg) {
     if (stick) stick.release();
     for (const def of buttonDefs) {
       if (def.el && def.el._skReset) def.el._skReset();
+      def._src.clear();
       input.buttons[def.id] = false;
     }
     for (const b of holdButtons) if (b._skReset) b._skReset();
@@ -509,11 +637,17 @@ export function createKit(cfg) {
     }
     const btn = buttonDefs.find((d) => d.keys.includes(e.code));
     if (btn) {
-      if (!e.repeat) pressButton(btn, true);
+      if (!e.repeat) pressSource(btn, "key:" + e.code, true);
       e.preventDefault();
       return;
     }
-    if ((e.code === "KeyP" || e.code === "Escape") && !e.repeat) {
+    if (controls.muteKey && e.code === controls.muteKey && !e.repeat) {
+      setSound(sfx.muted);
+      e.preventDefault();
+    } else if (af && af.key && e.code === af.key && !e.repeat) {
+      if (phase === "playing" && !paused) setAutoFire(!autoFireOn);
+      e.preventDefault();
+    } else if ((e.code === "KeyP" || e.code === "Escape") && !e.repeat) {
       setPaused(!paused);
       e.preventDefault();
     } else if ((e.code === "Enter" || e.code === "Space") && phase !== "playing" && !resultsBlocked()) {
@@ -529,7 +663,7 @@ export function createKit(cfg) {
       return;
     }
     const btn = buttonDefs.find((d) => d.keys.includes(e.code));
-    if (btn) pressButton(btn, false);
+    if (btn) pressSource(btn, "key:" + e.code, false);
   });
 
   // ---- ピンチズーム封じ（プレイ中のみ） ----
@@ -588,6 +722,11 @@ export function createKit(cfg) {
     ranking.hideForm();
     resetInputs();
     if (stick) stick.resetTeaching();
+    score.reset();
+    if (lives) lives.reset();
+    checkpoint.reset();
+    if (cnpRun) cnpRun.reset();
+    autoFireTimer = 0;
     phase = "playing";
     if (!gyro || !gyro.active) {
       status(cfg.help && cfg.help.playing ? cfg.help.playing : isMobile ? "画面の左側を押したまま倒すと移動できます" : "");
@@ -598,10 +737,15 @@ export function createKit(cfg) {
   // ---- ゲームから呼ぶ: 1プレイの終了 ----
   function gameOver(r = {}) {
     if (phase !== "playing") return;
+    const rescued = r.rescued || (cnpRun ? cnpRun.list() : []);
+    const finalScore = Math.floor(r.score != null ? r.score : score.value);
     result = {
-      score: Math.floor(r.score || 0),
+      score: finalScore,
       cleared: !!r.cleared,
-      rescued: r.rescued || [],
+      rescued,
+      cnp: r.cnp != null ? r.cnp : rescued.length,
+      progress: r.progress != null ? Math.max(0, Math.min(100, Math.round(r.progress))) : r.cleared ? 100 : null,
+      newRecord: score.commit(finalScore),
     };
     phase = "over";
     paused = false;
@@ -726,7 +870,14 @@ export function createKit(cfg) {
     let steps = 0;
     while (acc >= TARGET_FRAME_MS && steps < MAX_CATCHUP_STEPS) {
       frame++;
-      if (phase === "playing" && !paused && !orientationBlocked && cfg.update) cfg.update(kit);
+      if (phase === "playing" && !paused && !orientationBlocked) {
+        if (cnpRun) cnpRun.tick();
+        if (af && autoFireOn && af.onFire && ++autoFireTimer >= af.interval) {
+          autoFireTimer = 0;
+          af.onFire(kit);
+        }
+        if (cfg.update) cfg.update(kit);
+      }
       acc -= TARGET_FRAME_MS;
       steps++;
     }
@@ -776,6 +927,18 @@ export function createKit(cfg) {
     start: requestStart,
     resetInputs,
     toggle: (id) => toggleState[id],
+    score,
+    lives,
+    checkpoint,
+    hud,
+    autoFire: {
+      get on() {
+        return autoFireOn;
+      },
+      set: (v) => setAutoFire(v),
+      toggle: () => setAutoFire(!autoFireOn),
+    },
+    setSound,
     cutscene: {
       get playing() {
         return !!activeCutscene && activeCutscene.isPlaying();
