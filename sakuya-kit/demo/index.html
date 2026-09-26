@@ -56,7 +56,11 @@
       cnp: true,
       controls: {
         stick: true,
-        gyro: true,
+        // 傾き操作を使うタイトルだけ有効にする（既定は使わない）
+        //   gyro: true                        … スタート時に自動で傾き操作へ（咲耶スクランブル方式）
+        //   gyro: { autoStart: false }        … 最初はスティック。📱 を長押しした人だけ傾き操作へ
+        //   gyro: { sensitivity: 0.55, deadzoneDeg: 4, maxDeg: 28 } … 効き具合の調整
+        gyro: false,
         buttons: [
           { id: "dash", label: "X", ariaLabel: "ダッシュ", keys: ["KeyX", "Space"], primary: true,
             onPress: () => { game.dash = 20; kit.sfx.shot(); } },

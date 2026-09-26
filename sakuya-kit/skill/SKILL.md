@@ -23,6 +23,8 @@ description: 咲耶シリーズのブラウザゲーム（レトロアーケー�
 3. `index.html` の `createKit({...})` に、タイトル、ボタン、トグル、`cnp`、`share` を設定する
 4. ゲーム本体を `update(kit)` / `render(ctx, kit)` に書く
    - 移動は `kit.input.axis()` を使う（キー、スティック、ジャイロが合成済み）
+   - 傾き操作は既定で使わない。使うときは `controls.gyro` を指定する（自前で deviceorientation を扱わない）。
+     傾きが主役のゲームは `true`、おまけなら `{ autoStart: false }`
    - 1プレイの終わりは必ず `kit.gameOver({ score, cleared, rescued })`
    - CNP を出すなら `kit.cnp.chars` と `kit.cnp.draw()`。救出キャラは `ch.no`（1始まり）で記録する
    - 結果画面と演出動画は kit に任せる。動画は `cutscenes: { clear: {src, image}, gameOver: {src} }` に渡すだけで、
@@ -43,6 +45,7 @@ description: 咲耶シリーズのブラウザゲーム（レトロアーケー�
 
 - [ ] PC: 矢印 / WASD で移動、P でポーズ、Enter / Space でスタート
 - [ ] スマホ横持ち: 左半分のスティック、右下のボタン、長押しトグル（🔊 ⛶ 🕹️）
+- [ ] ジャイロを使うタイトル: iPhone で許可ダイアログが出る。🕹️/📱 の長押しで切り替わる
 - [ ] スマホ縦持ち: 案内が出て、ゲームが止まる
 - [ ] iPhone: 初回スタートで効果音が鳴る。ジャイロ許可ダイアログのあとも鳴る
 - [ ] ゲームオーバー動画がタップで飛ばせる。クリア動画は流し終えると静止画に戻る。🔊 オフで動画も無音になる

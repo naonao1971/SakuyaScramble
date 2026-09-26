@@ -80,8 +80,7 @@
 | `controls.stick` | `true` | 左半分のバーチャルスティック |
 | `controls.stickDigital4` | `false` | スティックを4方向に丸める（迷路系向け） |
 | `controls.stickSensitivity` | `0.5` | いっぱいに倒したときの強さ（キー入力 = 1） |
-| `controls.gyro` | `false` | 傾き操作（スタート時に自動で有効化し、🕹️ のトグルで切り替え） |
-| `controls.gyroSensitivity` | `0.55` | |
+| `controls.gyro` | `false` | 傾き操作。下の「ジャイロ操作」を参照 |
 | `controls.keys` | 矢印 / WASD | `{ up: [...], down: [...], left: [...], right: [...] }` |
 | `controls.buttons` | `[]` | `{ id, label, ariaLabel, keys, primary, onPress, onRelease }`。右端から並ぶ |
 | `controls.toggles` | `[]` | 長押しトグル `{ id, name, label, labelOff, value, onChange }` |
@@ -116,7 +115,25 @@
 | `kit.cnp` | `chars`（`id` `label` `hue` `no` `img` `ready`）、`draw(ctx, ch, x, y, size)`、`byNo(no)` |
 | `kit.status(msg)` | canvas の下の案内文 |
 | `kit.gameOver(result)` / `kit.setPaused(bool)` / `kit.start()` | |
+| `kit.gyro` | ジャイロ無効なら `null`。`active`、`recalibrate()`、`toggle()` |
 | `kit.cutscene` | `playing`、`kind`（`"clear"` / `"gameOver"` / `null`）、`skip()`、`videos` |
+
+## ジャイロ操作（使うタイトルだけ）
+
+既定では使いません。使うタイトルは `controls.gyro` を指定します。
+
+| 指定 | 動き |
+|---|---|
+| `gyro: true` | スタート時に自動で傾き操作に切り替える（咲耶スクランブル方式）。🕹️ を長押しするとスティックに戻る |
+| `gyro: { autoStart: false }` | 最初はスティック。📱 を長押しした人だけ傾き操作に切り替わる |
+| `gyro: { sensitivity: 0.55, deadzoneDeg: 4, maxDeg: 28 }` | 効き具合の調整（全開時の強さ、無視する傾き、最大入力になる傾き） |
+
+- 傾きは `kit.input.axis()` に合成されるので、ゲーム側の移動処理は変わりません。生の値は `kit.input.gyroX` / `gyroY` です
+- 基準（水平）は、傾き操作を始めたときの持ち方です。端末を回転させると取り直します
+- 傾き操作中はスティックを無効にします（両方が足し合わさると、左側に触れただけで流れるため）
+- iOS の許可ダイアログはスタートのタップ、またはトグルの長押しから出します
+- 許可されても傾きデータが届かない端末では、1.5 秒後に自動でスティックへ戻します
+- タッチ端末でない場合（PC）は何も起きません
 
 ## 結果の演出（CLEAR / GAME OVER）
 

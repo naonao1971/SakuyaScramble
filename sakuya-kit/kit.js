@@ -47,6 +47,7 @@ export function createKit(cfg) {
     stick: true,
     stickDigital4: false,
     stickSensitivity: 0.5, // いっぱいに倒したときの推力(キー入力=1)
+    // 傾き操作。既定は使わない。true または { autoStart, sensitivity, deadzoneDeg, maxDeg }
     gyro: false,
     gyroSensitivity: 0.55,
     mute: true,
@@ -56,6 +57,12 @@ export function createKit(cfg) {
     toggles: [],
     ...(cfg.controls || {}),
   };
+  // autoStart: スタート時に自動で傾き操作へ切り替える（咲耶スクランブル方式）。
+  //            false なら最初はスティックで、📱 のトグルを長押しした人だけ傾き操作になる
+  const gyroOpts = controls.gyro
+    ? { autoStart: true, deadzoneDeg: 4, maxDeg: 28, ...(controls.gyro === true ? {} : controls.gyro) }
+    : null;
+  if (gyroOpts && typeof gyroOpts.sensitivity === "number") controls.gyroSensitivity = gyroOpts.sensitivity;
   const isMobile = "ontouchstart" in window || navigator.maxTouchPoints > 0;
   const portraitMQ = window.matchMedia("(orientation: portrait)");
 
@@ -266,16 +273,18 @@ export function createKit(cfg) {
 
   let gyro = null;
   let gyroToggle = null;
-  if (controls.gyro) {
+  if (gyroOpts) {
     gyro = createGyro({
       input,
       status,
       onActiveChange: (usingTilt) => {
         // 傾きが効いている間はスティックを受け付けない（足し合わさると勝手に流れる）
         if (stick) stick.setEnabled(!usingTilt);
-        if (gyroToggle) gyroToggle.set(gyro.active || !gyro.userChoiceMade);
+        if (gyroToggle) gyroToggle.set(gyro.active || (!gyro.userChoiceMade && gyroOpts.autoStart));
       },
     });
+    gyro.deadzoneDeg = gyroOpts.deadzoneDeg; // この角度までの傾きは無視（手ぶれ）
+    gyro.maxDeg = gyroOpts.maxDeg; // この角度まで傾けると最大入力
     if (gyro.available && isMobile) {
       // アイコンが今のモードを表す: 🕹️ = タップでキー/タッチへ、📱 = タップで傾きへ
       gyroToggle = addToggle({
@@ -285,7 +294,7 @@ export function createKit(cfg) {
         ariaOn: "傾き操作:オン(長押しでキー/タッチ操作へ)",
         ariaOff: "傾き操作:オフ(長押しで傾き操作へ)",
         iconState: true,
-        value: true,
+        value: gyroOpts.autoStart,
         onChange: async () => {
           await gyro.toggle();
           gyroToggle.set(gyro.active);
@@ -515,7 +524,7 @@ export function createKit(cfg) {
       emit("startGesture"); // その他、ユーザー操作の中で済ませたい処理
       if (isMobile && controls.fullscreen) requestFullscreen().then(() => fsUi.sync());
       if (gyro && gyro.available && isMobile) {
-        if (!gyro.userChoiceMade) {
+        if (!gyro.userChoiceMade && gyroOpts.autoStart) {
           await gyro.enableIfAvailable();
           // iOSの許可ダイアログ表示中に AudioContext が suspended に戻ることがある
           await sfx.unlock();
@@ -697,7 +706,7 @@ export function createKit(cfg) {
     status(
       cfg.help && cfg.help.mobile
         ? cfg.help.mobile
-        : gyro && gyro.available
+        : gyro && gyro.available && gyroOpts.autoStart
           ? "スタートを押すと、対応端末では傾き操作に切り替わります"
           : "画面の左側を押したまま倒すと移動、右下のボタンで操作できます"
     );
