@@ -11,6 +11,7 @@
 | ランキング | Google スプレッドシート + GAS（全タイトルで1本の GAS を共有）。タイトル別と**総合ランキング**の切り替えタブ付き |
 | CNP | 11体の ID・名前・色・画像の正典、ランキングに出す救出ロスター |
 | 結果の演出 | CLEAR / GAME OVER の演出動画（解錠、フォールバック、スキップ、ミュート連動）と、共通の見た目の結果画面 |
+| タイトル・OGP | `<title>`、OGP / Twitter Card、アイコン、manifest.json、OGP 画像を共通の形で作るツール（`tools/ogp.html`） |
 | その他 | スタートボタン、縦持ち案内、全画面／ホーム画面追加の案内、効果音とミュート、シェア、60Hz 固定ループ、レトロ UI |
 
 ビルドは不要です（素の ES Modules）。
@@ -157,6 +158,20 @@
 - 救出ロスターなど、タイトル独自の飾りは `resultScreen.decorate(ctx, { kind, rect, result, playing, kit })` で描き足します。`rect` は動画または静止画を描いた枠です
 - 再生中かどうかは `kit.cutscene.playing` / `kit.cutscene.kind` で分かります（パイロット窓を隠すときなど）
 
+## タイトル表記・OGP・アイコン
+
+OGP は X や LINE のクローラが `<head>` を直接読んで作ります。JavaScript は実行されないので、kit.js からは差し込めません。
+そこで、`<head>` と画像は **`tools/ogp.html`** で作り、ファイルとして置きます（ブラウザで開くだけで使えます）。
+
+| 入力 | 出力 |
+|---|---|
+| 主題、副題、日本語名、説明文、URL、キービジュアル | `ogp.png`（1200x630）、`apple-touch-icon.png`、`icon-192.png`、`icon-512.png`、`favicon-32.png`、`manifest.json`、`<head>` の中身、`createKit` のタイトル設定 |
+
+- **タイトル表記：** `<title>` と `og:title` は「主題 ─ 副題」（例：`SAKUYA SCRAMBLE ─ RESCUE 11 CNP`）。副題の前後の `- -` は外します
+- **OGP 画像：** キービジュアルを全面に敷き、左上にシリーズ名、左下に主題（金）と副題（マゼンタ）、右下にドメイン、外周に金の枠
+- **アイコン：** 黒地に金の枠、中央にモチーフ（キービジュアルの一部、または文字・絵文字）
+- `createKit` の title/subtitle と `<title>` がずれていると、kit が開発者コンソールに警告を出します
+
 ## 色を変えたいとき
 
 部品の寸法、配置、ベベルは変えません。変えてよいのは色トークンだけで、kit.css の後に書きます。
@@ -211,6 +226,7 @@ src/               部品ごとのモジュール
 assets/cnp/        CNP 画像（256x256・透過 PNG）
 gas/               共通ランキング用 Apps Script
 demo/              最小の動作例（テンプレートの元）
+tools/ogp.html     タイトル表記・OGP画像・アイコン・<head>・manifest.json を作るツール
 skills/sakuyagamesskill/SKILL.md
                    新作を作るときに Claude が従うルール（テンプレートの .claude/skills/sakuyagamesskill/ に置く）
 ```

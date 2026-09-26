@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SAKUYA KIT ─ OGP / HEAD MAKER</title>
+  <link rel="stylesheet" href="../kit.css" />
+  <style>
+    body { align-items: stretch; max-width: 1180px; margin: 0 auto; }
+    h1 { font-family: var(--font-display); color: var(--gold); font-size: 16px; line-height: 1.6; margin: 0; }
+    h2 { font-family: var(--font-display); color: var(--gold); font-size: 12px; margin: 0 0 12px; }
+    .lead { color: var(--dim); font-size: 13px; line-height: 1.8; margin: 0; }
+    .grid { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 18px; align-items: start; }
+    @media (max-width: 860px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+    .card { background: var(--panel); border: 2px solid var(--edge-hi); box-shadow: var(--bevel-up); padding: 16px; min-width: 0; }
+    label { display: block; font-size: 12px; color: var(--dim); margin: 0 0 12px; }
+    label span { display: block; margin-bottom: 4px; }
+    input[type="text"], input[type="url"], textarea, select {
+      width: 100%; box-sizing: border-box; padding: 8px 10px; border: 2px solid var(--edge-hi); border-radius: 0;
+      background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px;
+    }
+    textarea { font-family: ui-monospace, monospace; font-size: 11px; line-height: 1.5; min-height: 150px; resize: vertical; }
+    input[type="range"] { width: 100%; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .row > label { flex: 1 1 120px; }
+    canvas.preview { width: 100%; height: auto; display: block; border: 2px solid var(--edge-hi); background: #000; }
+    .icons { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; margin-top: 14px; }
+    .icons figure { margin: 0; text-align: center; color: var(--dim); font-size: 11px; }
+    .icons canvas { display: block; margin: 0 auto 4px; image-rendering: pixelated; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+    .out + .out { margin-top: 16px; }
+    .out-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 6px; }
+    .out-head b { font-size: 12px; color: var(--ink); font-weight: 400; }
+    .sk-cta { padding: 10px 14px; }
+    .hint { color: var(--dim); font-size: 11px; line-height: 1.7; margin: 8px 0 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>OGP / HEAD MAKER</h1>
+    <p class="lead">咲耶シリーズ共通のタイトル表記・OGP画像・アイコン・&lt;head&gt;・manifest.json を作ります。
+      書き出したファイルはゲームのリポジトリの直下に置き、&lt;head&gt; は index.html にそのまま貼ってください。</p>
+  </header>
+
+  <div class="grid">
+    <section class="card" aria-label="設定">
+      <h2>1. タイトル</h2>
+      <label><span>gameId（ランキングのシート名。英数字・-・_）</span><input id="gameId" type="text" value="scramble" /></label>
+      <label><span>主題（英字・大文字推奨）</span><input id="title" type="text" value="SAKUYA SCRAMBLE" /></label>
+      <label><span>副題（「- 〜 -」の形。無くてもよい）</span><input id="subtitle" type="text" value="- RESCUE 11 CNP -" /></label>
+      <label><span>日本語名（ホーム画面のアイコン名・シェア文）</span><input id="nameJa" type="text" value="咲耶スクランブル" /></label>
+      <label><span>説明文（OGPの description。60〜90字が目安）</span><textarea id="description" style="min-height:70px">クリプト忍者咲耶の宇宙船で洞窟を駆け抜け、散らばったCNP11体を救出するブラウザゲーム</textarea></label>
+      <label><span>公開URL（末尾 / まで）</span><input id="url" type="url" value="https://sakuya.naoblock.jp/" /></label>
+      <div class="row">
+        <label><span>ハッシュタグ</span><input id="hashtag" type="text" value="咲耶スクランブル" /></label>
+        <label><span>kit のバージョン</span><input id="kitVersion" type="text" value="0.1.0" /></label>
+      </div>
+
+      <h2>2. キービジュアル</h2>
+      <label><span>画像（横長推奨。ページの外へは送信しません）</span><input id="file" type="file" accept="image/*" /></label>
+      <div class="row">
+        <label><span>OGPの横位置</span><input id="ogFocusX" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+        <label><span>OGPの縦位置</span><input id="ogFocusY" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+      </div>
+
+      <h2>3. アイコン</h2>
+      <label><span>中央のモチーフ</span>
+        <select id="iconKind">
+          <option value="image">キービジュアルの一部</option>
+          <option value="text">文字・絵文字</option>
+        </select>
+      </label>
+      <label id="iconTextWrap"><span>文字・絵文字（1〜2文字）</span><input id="iconText" type="text" value="▶" /></label>
+      <div class="row" id="iconCropWrap">
+        <label><span>横位置</span><input id="icFocusX" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
+        <label><span>縦位置</span><input id="icFocusY" type="range" min="0" max="1" step="0.01" value="0.55" /></label>
+        <label><span>拡大</span><input id="icZoom" type="range" min="1" max="4" step="0.05" value="2.6" /></label>
+      </div>
+    </section>
+
+    <section class="card" aria-label="プレビューと書き出し">
+      <h2>OGP 画像（1200×630）</h2>
+      <canvas id="ogp" class="preview" width="1200" height="630"></canvas>
+      <p class="hint">X・LINE・Discord でリンクを貼ったときのカードです。文字は左下に固定、絵は全面に敷きます。</p>
+      <div class="icons">
+        <figure><canvas id="ic180" width="180" height="180" style="width:90px"></canvas>180（apple-touch-icon）</figure>
+        <figure><canvas id="ic512" width="512" height="512" style="width:90px"></canvas>512 / 192（manifest）</figure>
+        <figure><canvas id="ic32" width="32" height="32" style="width:32px"></canvas>32（favicon）</figure>
+      </div>
+      <div class="actions">
+        <button class="sk-cta" id="dlAll" type="button">画像をまとめて保存</button>
+        <button class="sk-cta" id="dlManifest" type="button">manifest.json を保存</button>
+      </div>
+      <p class="hint">保存されるファイル: ogp.png / apple-touch-icon.png / icon-192.png / icon-512.png / favicon-32.png / manifest.json</p>
+
+      <div class="out" style="margin-top:20px">
+        <div class="out-head"><b>index.html の &lt;head&gt; の中身</b><button class="sk-cta" data-copy="head" type="button">コピー</button></div>
+        <textarea id="head" readonly></textarea>
+      </div>
+      <div class="out">
+        <div class="out-head"><b>createKit の設定（タイトル表記をそろえる部分）</b><button class="sk-cta" data-copy="kit" type="button">コピー</button></div>
+        <textarea id="kit" readonly style="min-height:110px"></textarea>
+      </div>
+    </section>
+  </div>
+
+  <script type="module">
+    import { drawOgp, drawIcon, headHTML, manifestJSON, kitSnippet } from "../src/brand.js";
+
+    const $ = (id) => document.getElementById(id);
+    let image = null;
+
+    function meta() {
+      return {
+        gameId: $("gameId").value.trim(),
+        title: $("title").value.trim(),
+        subtitle: $("subtitle").value.trim(),
+        nameJa: $("nameJa").value.trim(),
+        description: $("description").value.trim(),
+        url: $("url").value.trim(),
+        hashtag: $("hashtag").value.trim(),
+        kitVersion: $("kitVersion").value.trim() || "0.1.0",
+      };
+    }
+    function motif() {
+      return {
+        kind: $("iconKind").value,
+        text: $("iconText").value,
+        focusX: +$("icFocusX").value,
+        focusY: +$("icFocusY").value,
+        zoom: +$("icZoom").value,
+      };
+    }
+
+    const ic192 = document.createElement("canvas");
+    function redraw() {
+      const m = meta();
+      drawOgp($("ogp"), m, image, { focusX: +$("ogFocusX").value, focusY: +$("ogFocusY").value });
+      const mo = motif();
+      drawIcon($("ic180"), 180, mo, image);
+      drawIcon($("ic512"), 512, mo, image);
+      drawIcon(ic192, 192, mo, image);
+      drawIcon($("ic32"), 32, mo, image);
+      $("iconTextWrap").hidden = mo.kind !== "text";
+      $("iconCropWrap").hidden = mo.kind !== "image";
+      $("head").value = headHTML(m);
+      $("kit").value = kitSnippet(m);
+    }
+
+    function save(blob, name) {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+    }
+    const savePng = (canvas, name) => new Promise((res) => canvas.toBlob((b) => { save(b, name); res(); }, "image/png"));
+
+    $("dlAll").addEventListener("click", async () => {
+      await savePng($("ogp"), "ogp.png");
+      await savePng($("ic180"), "apple-touch-icon.png");
+      await savePng(ic192, "icon-192.png");
+      await savePng($("ic512"), "icon-512.png");
+      await savePng($("ic32"), "favicon-32.png");
+    });
+    $("dlManifest").addEventListener("click", () =>
+      save(new Blob([manifestJSON(meta())], { type: "application/json" }), "manifest.json"));
+
+    for (const b of document.querySelectorAll("[data-copy]")) {
+      b.addEventListener("click", async () => {
+        const ta = $(b.dataset.copy);
+        try {
+          await navigator.clipboard.writeText(ta.value);
+          b.textContent = "コピーしました";
+        } catch (e) {
+          ta.select();
+          b.textContent = "選択しました";
+        }
+        setTimeout(() => (b.textContent = "コピー"), 1500);
+      });
+    }
+
+    $("file").addEventListener("change", () => {
+      const f = $("file").files[0];
+      if (!f) return;
+      const img = new Image();
+      img.onload = () => { image = img; redraw(); };
+      img.src = URL.createObjectURL(f);
+    });
+    for (const el of document.querySelectorAll("input, textarea, select")) {
+      if (el.type !== "file") el.addEventListener("input", redraw);
+    }
+
+    redraw();
+    // canvas は CSS の書体指定を見ないので、読み込み後に描き直す
+    if (document.fonts && document.fonts.load) {
+      Promise.all([document.fonts.load('16px "Press Start 2P"'), document.fonts.load('16px "DotGothic16"')])
+        .then(redraw, () => {});
+    }
+    window.__brand = { redraw, setImage: (img) => { image = img; redraw(); } }; // テスト用
+  </script>
+</body>
+</html>

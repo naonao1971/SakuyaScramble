@@ -17,6 +17,7 @@ import { createRetro, alpha } from "./src/retro.js";
 import { createCnp, CNP_DEFS } from "./src/cnp.js";
 import { shareResult, openXIntent } from "./src/share.js";
 import { createCutscene } from "./src/cutscene.js";
+import { pageTitle } from "./src/brand.js";
 import {
   setupFullscreenUi,
   supportsFullscreen,
@@ -26,7 +27,7 @@ import {
 } from "./src/fullscreen.js";
 
 export const VERSION = "0.1.0";
-export { CNP_DEFS, alpha, openXIntent };
+export { CNP_DEFS, alpha, openXIntent, pageTitle };
 
 // 総合ランキングだけを表示する（シリーズのポータルページ等、ゲームの無いページ用）。
 //   mountOverallRanking(document.getElementById("board"), { gasUrl, limit: 50 })
@@ -70,6 +71,13 @@ export function createKit(cfg) {
   const canvas = cfg.canvas || document.getElementById("game");
   if (!canvas) throw new Error("sakuya-kit: canvas が見つかりません");
   const ctx = canvas.getContext("2d");
+  // <title>・OGP と画面内のタイトル表記がずれていないか（tools/ogp.html で作った <head> と同じ形か）
+  if (cfg.title && document.title && document.title !== pageTitle(cfg)) {
+    console.warn(
+      `sakuya-kit: <title>「${document.title}」が createKit の title/subtitle から作る表記「${pageTitle(cfg)}」と違います。` +
+        "tools/ogp.html で <head> を作り直してください"
+    );
+  }
   const controls = {
     stick: true,
     stickDigital4: false,
