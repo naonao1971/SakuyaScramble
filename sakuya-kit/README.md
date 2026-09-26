@@ -10,6 +10,7 @@
 | スコア登録 | TOP10 入り判定、ニックネームと X ID（実在確認つき）の入力フォーム |
 | ランキング | Google スプレッドシート + GAS（全タイトルで1本の GAS を共有） |
 | CNP | 11体の ID・名前・色・画像の正典、ランキングに出す救出ロスター |
+| 結果の演出 | CLEAR / GAME OVER の演出動画（解錠、フォールバック、スキップ、ミュート連動）と、共通の見た目の結果画面 |
 | その他 | スタートボタン、縦持ち案内、全画面／ホーム画面追加の案内、効果音とミュート、シェア、60Hz 固定ループ、レトロ UI |
 
 ビルドは不要です（素の ES Modules）。
@@ -45,6 +46,10 @@
       ],
     },
     share: { when: "clear", text: (r) => `スコア ${r.score}` },
+    cutscenes: {
+      clear: { src: "clear.mp4", image: "clear.png" }, // 流し終えたら静止画に戻る
+      gameOver: { src: "gameover.mp4" },               // タップ・キーで飛ばせる
+    },
 
     onStart() { /* 1プレイ分の状態を初期化 */ },
     update(kit) { /* 60Hz 固定で呼ばれる。プレイ中かつ非ポーズ時のみ */ },
@@ -85,6 +90,9 @@
 | `startAnchor` | 下端中央 | スタートボタンを置く canvas 座標 `{ x, y }` |
 | `help` | | `{ pc, mobile, playing }` の案内文 |
 | `footer` | 非公式ファンアート表記 | `false` で出さない |
+| `cutscenes.clear` / `cutscenes.gameOver` | なし | `{ src, image?, skippable?, blockResults?, loop? }`。下の「結果の演出」を参照 |
+| `resultScreen` | 標準の結果画面 | `{ clearTitle, gameOverTitle, mediaWidth, decorate(ctx, info) }`。`false` にすると kit は描かない |
+| `jingle` | `true` | 動画が無い、または再生できないときに `sfx.clear()` / `sfx.gameOver()` を鳴らす |
 | `resultsBlocked()` | | `true` を返す間は結果画面（ランキング・スタート）を出さない。演出動画の再生中などに使う |
 
 ### フック
@@ -108,6 +116,27 @@
 | `kit.cnp` | `chars`（`id` `label` `hue` `no` `img` `ready`）、`draw(ctx, ch, x, y, size)`、`byNo(no)` |
 | `kit.status(msg)` | canvas の下の案内文 |
 | `kit.gameOver(result)` / `kit.setPaused(bool)` / `kit.start()` | |
+| `kit.cutscene` | `playing`、`kind`（`"clear"` / `"gameOver"` / `null`）、`skip()`、`videos` |
+
+## 結果の演出（CLEAR / GAME OVER）
+
+`kit.gameOver({ cleared })` を呼ぶと、kit が次の順で処理します。
+
+1. `cutscenes` に動画があり、途切れずに流せる状態なら、動画を再生する（音は動画のものを使う）
+2. 動画が無い、読み込みが間に合わない、再生できない場合は、ジングル（`sfx.clear` / `sfx.gameOver`）を鳴らす
+3. 結果画面を共通の見た目で描く
+
+| | GAME OVER（既定） | CLEAR（既定） |
+|---|---|---|
+| 飛ばせるか (`skippable`) | タップ・キーで飛ばせる | 飛ばせない |
+| 再生中の結果画面 (`blockResults`) | 隠す（流し終えるか飛ばしてから出す） | 出す（ランキング入力と並行） |
+| 画面 | 動画だけ → 終わったら「GAME OVER / PUSH START」 | 上に動画 → 終わったら `image` の静止画、下に「CLEAR / SCORE」 |
+
+- 動画は `preload="none"` で、スタートのタップのときに解錠と読み込みを始めます（iOS 対策）
+- 🔊 のトグルは、再生中の動画の音にもすぐ反映されます
+- 再スタートすると動画は止まり、先頭に戻ります
+- 救出ロスターなど、タイトル独自の飾りは `resultScreen.decorate(ctx, { kind, rect, result, playing, kit })` で描き足します。`rect` は動画または静止画を描いた枠です
+- 再生中かどうかは `kit.cutscene.playing` / `kit.cutscene.kind` で分かります（パイロット窓を隠すときなど）
 
 ## 色を変えたいとき
 

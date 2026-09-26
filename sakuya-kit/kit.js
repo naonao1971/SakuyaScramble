@@ -3,7 +3,7 @@
 // ゲーム側は「1プレイの中身(update/render)」だけを書き、それ以外は kit が持つ:
 //   スタート / ポーズ / 縦持ち案内 / 60Hz固定ループ / キーボード・スティック・
 //   ジャイロ・ボタン / 効果音とミュート / 全画面 / スコア登録・ランキング /
-//   CNPキャラ / シェア / レトロUI
+//   CNPキャラ / シェア / レトロUI / CLEAR・GAME OVER の演出動画と結果画面
 //
 // 使い方は README.md。公開APIを変えるときは CHANGELOG.md に書き、
 // 破壊的変更ならメジャー番号を上げる（各タイトルはバージョン固定で読んでいる）。
@@ -16,6 +16,7 @@ import { createRanking } from "./src/ranking.js";
 import { createRetro, alpha } from "./src/retro.js";
 import { createCnp, CNP_DEFS } from "./src/cnp.js";
 import { shareResult, openXIntent } from "./src/share.js";
+import { createCutscene } from "./src/cutscene.js";
 import {
   setupFullscreenUi,
   supportsFullscreen,
@@ -107,6 +108,43 @@ export function createKit(cfg) {
     cnp,
     isMobile,
     getResult: () => result,
+  });
+
+  // ---- CLEAR / GAME OVER の演出動画 ----
+  // 既定: GAME OVER は死ぬたびに流れるので飛ばせる＆流している間は結果画面を出さない。
+  //       CLEAR は1回きりのご褒美なので飛ばせず、流しながらランキングも出す。
+  const csCfg = cfg.cutscenes || {};
+  const cutscenes = {};
+  for (const [kind, defaults] of [
+    ["gameOver", { skippable: true, blockResults: true }],
+    ["clear", { skippable: false, blockResults: false }],
+  ]) {
+    const c = csCfg[kind];
+    if (!c) continue;
+    cutscenes[kind] = createCutscene({ wrap: dom.wrap, sfx, ...defaults, ...c });
+  }
+  let activeCutscene = null;
+  for (const cs of Object.values(cutscenes)) {
+    cs.onEnded(() => {
+      if (activeCutscene === cs) activeCutscene = null;
+    });
+  }
+  function skipCutscene() {
+    if (!activeCutscene || !activeCutscene.skippable) return false;
+    activeCutscene.stop();
+    activeCutscene = null;
+    return true;
+  }
+  function stopCutscenes() {
+    activeCutscene = null;
+    for (const cs of Object.values(cutscenes)) cs.stop();
+  }
+  // 結果画面を止めている演出があるか（コマが出ている間だけ。出ないなら待たせない）
+  const cutsceneBlocking = () =>
+    !!activeCutscene && activeCutscene.blockResults && activeCutscene.isPlaying() && activeCutscene.hasFrame();
+  // ゲームオーバー演出はいつでも飛ばせる。飛ばしても流し終えたのと同じ結果画面へ進む
+  canvas.addEventListener("pointerdown", () => {
+    if (phase === "over") skipCutscene();
   });
 
   function emit(name, ...args) {
@@ -202,6 +240,7 @@ export function createKit(cfg) {
       onChange: async (on) => {
         await sfx.unlock(); // オンに戻した直後から鳴るよう、ここでも起こしておく
         sfx.setMuted(!on);
+        for (const cs of Object.values(cutscenes)) cs.syncMuted(); // 再生中の演出動画にも即反映
         emit("mute", !on);
         status(on ? "効果音: オン" : "効果音: オフ");
         if (on) sfx.pickup(); // 音量の確認用に一発鳴らす
@@ -326,7 +365,8 @@ export function createKit(cfg) {
   }
 
   // ---- 表示の切り替え（毎フレーム。DOMに触るのは変化した時だけ） ----
-  const resultsBlocked = () => (typeof cfg.resultsBlocked === "function" ? !!cfg.resultsBlocked() : false);
+  const resultsBlocked = () =>
+    cutsceneBlocking() || (typeof cfg.resultsBlocked === "function" ? !!cfg.resultsBlocked() : false);
 
   function updateUi() {
     const waiting = phase !== "playing";
@@ -412,6 +452,10 @@ export function createKit(cfg) {
   window.addEventListener("keydown", (e) => {
     if (cfg.onKeyDown && cfg.onKeyDown(e) === false) return;
     if (isTyping(e)) return;
+    if (phase === "over" && skipCutscene()) {
+      e.preventDefault();
+      return;
+    }
     const dir = dirOf(e.code);
     if (dir) {
       input[dir] = true;
@@ -466,7 +510,9 @@ export function createKit(cfg) {
     starting = true;
     try {
       const audio = sfx.unlock();
-      emit("startGesture"); // 動画の解錠など、ユーザー操作の中で済ませたい処理
+      // 演出動画もユーザー操作が必要なので、ここが唯一の解錠点（読み込みもここから始まる）
+      for (const cs of Object.values(cutscenes)) cs.unlock();
+      emit("startGesture"); // その他、ユーザー操作の中で済ませたい処理
       if (isMobile && controls.fullscreen) requestFullscreen().then(() => fsUi.sync());
       if (gyro && gyro.available && isMobile) {
         if (!gyro.userChoiceMade) {
@@ -493,6 +539,7 @@ export function createKit(cfg) {
     dom.pause.textContent = "⏸";
     dom.pause.setAttribute("aria-label", "一時停止");
     dom.shareStatus.textContent = "";
+    stopCutscenes();
     ranking.hideForm();
     resetInputs();
     if (stick) stick.resetTeaching();
@@ -515,6 +562,19 @@ export function createKit(cfg) {
     paused = false;
     resetInputs();
     status("");
+    // 音は動画側を使う。動画が無い/間に合わない/再生できないときだけジングルを鳴らす
+    const jingle = () => {
+      if (cfg.jingle === false) return;
+      if (result.cleared) sfx.clear();
+      else sfx.gameOver();
+    };
+    const cs = cutscenes[result.cleared ? "clear" : "gameOver"];
+    if (cs && cs.canPlayThrough()) {
+      activeCutscene = cs;
+      cs.play(jingle);
+    } else {
+      jingle();
+    }
     emit("gameOver", result);
   }
 
@@ -535,6 +595,74 @@ export function createKit(cfg) {
         dom.shareBtn.disabled = false;
       }
     });
+  }
+
+  // ---- 結果画面（全タイトル共通の見た目） ----
+  // GAME OVER: 暗幕 → 演出動画(再生中のみ) → 流し終えたら「GAME OVER / PUSH START」
+  // CLEAR    : 暗幕 → 上に動画(流し終えたら静止画) → 下に「CLEAR / SCORE」
+  //            ここに PUSH START は描かない（真下に明滅するスタートボタンが出るため）
+  const rs = { clearTitle: "CLEAR", gameOverTitle: "GAME OVER", mediaWidth: 560, ...(cfg.resultScreen || {}) };
+  function drawMedia(m, y) {
+    const w = rs.mediaWidth;
+    const h = w * (m.h / m.w);
+    const x = (canvas.width - w) / 2;
+    const top = y == null ? (canvas.height - h) / 2 : y;
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.5)";
+    ctx.shadowBlur = 20;
+    ctx.drawImage(m.src, x, top, w, h);
+    ctx.restore();
+    ctx.save();
+    ctx.strokeStyle = retro.colors.gold;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x + 1, top + 1, w - 2, h - 2);
+    ctx.restore();
+    return { x, y: top, w, h, video: m.video };
+  }
+  function drawResultScreen() {
+    const c = retro.colors;
+    const cleared = result.cleared;
+    const cs = cutscenes[cleared ? "clear" : "gameOver"];
+    ctx.save();
+    ctx.fillStyle = cleared ? "rgba(6, 20, 16, 0.75)" : "rgba(0, 0, 0, 0.72)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.textAlign = "center";
+    if (!cleared) {
+      const m = cs && activeCutscene === cs ? cs.media() : null;
+      if (m && m.video) {
+        // 演出中は動画だけを見せ、文字は流し終えてから出す
+        const rect = drawMedia(m);
+        if (rs.decorate) rs.decorate(ctx, { kind: "gameOver", rect, result, playing: true, kit });
+        ctx.restore();
+        return;
+      }
+      ctx.fillStyle = c.danger;
+      ctx.font = retro.font(34);
+      ctx.fillText(rs.gameOverTitle, canvas.width / 2, canvas.height / 2 - 16);
+      if (retro.blinkOn()) {
+        ctx.fillStyle = c.ink;
+        ctx.font = retro.font(12);
+        ctx.fillText("PUSH START", canvas.width / 2, canvas.height / 2 + 32);
+      }
+      if (rs.decorate) rs.decorate(ctx, { kind: "gameOver", rect: null, result, playing: false, kit });
+    } else {
+      let textTop = canvas.height / 2 - 30;
+      const m = cs ? cs.media() : null;
+      let rect = null;
+      if (m) {
+        rect = drawMedia(m, 20);
+        textTop = rect.y + rect.h + 42;
+      }
+      ctx.fillStyle = c.gold;
+      ctx.font = retro.font(30);
+      ctx.fillText(rs.clearTitle, canvas.width / 2, textTop);
+      ctx.fillStyle = c.ink;
+      ctx.font = retro.font(14);
+      ctx.fillText(`SCORE ${String(result.score).padStart(7, "0")}`, canvas.width / 2, textTop + 36);
+      // 画像の左右の余白に救出ロスターを並べる等は decorate で足す
+      if (rs.decorate) rs.decorate(ctx, { kind: "clear", rect, result, playing: !!(m && m.video), kit });
+    }
+    ctx.restore();
   }
 
   // ---- 60Hz 固定ステップのループ ----
@@ -560,6 +688,7 @@ export function createKit(cfg) {
     if (steps === MAX_CATCHUP_STEPS) acc = 0;
     updateUi();
     if (cfg.render) cfg.render(ctx, kit);
+    if (phase === "over" && result && cfg.resultScreen !== false) drawResultScreen();
     if (phase === "playing" && paused) retro.pauseOverlay(isMobile);
   }
 
@@ -602,6 +731,16 @@ export function createKit(cfg) {
     start: requestStart,
     resetInputs,
     toggle: (id) => toggleState[id],
+    cutscene: {
+      get playing() {
+        return !!activeCutscene && activeCutscene.isPlaying();
+      },
+      get kind() {
+        return activeCutscene ? (activeCutscene === cutscenes.clear ? "clear" : "gameOver") : null;
+      },
+      skip: skipCutscene,
+      videos: cutscenes,
+    },
     on(name, fn) {
       (listeners[name] = listeners[name] || []).push(fn);
       return kit;

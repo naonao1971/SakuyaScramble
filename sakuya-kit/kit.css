@@ -99,6 +99,17 @@ body.sk-fullscreen .sk-wrap canvas {
   image-rendering: pixelated;
   touch-action: none;
 }
+/* 演出動画の供給元。canvasへ描くだけなので画面には出さない。
+   display:none / visibility:hidden だとコマの更新が止まる環境があるので1pxに畳む */
+.sk-video {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  left: 0;
+  top: 0;
+}
 .sk-status {
   min-height: 1.4em;
   color: var(--dim);

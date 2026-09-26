@@ -68,8 +68,23 @@
       },
       help: { pc: "矢印/WASDで移動、Xでダッシュ（Pキーで一時停止）" },
 
+      // CLEAR / GAME OVER の演出動画（パスはタイトル側の置き場所）。無ければ省略してよく、
+      // そのときはジングルと文字だけの結果画面になる。image は動画を流し終えた後の静止画
+      cutscenes: {
+        // clear: { src: "clear.mp4", image: "clear.png" },
+        // gameOver: { src: "gameover.mp4" },
+      },
+      // 結果画面は kit が共通の見た目で描く。救出ロスター等は decorate で足す
+      resultScreen: {
+        decorate(ctx, { kind, rect, result }) {
+          if (kind !== "clear") return;
+          ctx.font = kit.retro.fontBody(14);
+          ctx.fillStyle = kit.retro.colors.ink;
+          ctx.fillText(`救出 ${result.rescued.length}/11`, 480, (rect ? rect.y + rect.h : 240) + 100);
+        },
+      },
+
       onStart: reset,
-      onGameOver: (r) => (r.cleared ? kit.sfx.clear() : kit.sfx.gameOver()),
 
       update(k) {
         const s = game.ship;
@@ -153,11 +168,6 @@
         ctx.fillText(`TIME ${Math.max(0, Math.ceil((DURATION - game.timer) / 60))}`, W - 16, 30);
         ctx.fillText("♥".repeat(Math.max(0, s.hp)), W - 16, 54);
 
-        if (k.phase === "over") {
-          const r = k.result;
-          k.retro.caption(r.cleared ? "CLEAR!" : "GAME OVER", `SCORE ${r.score}  救出 ${r.rescued.length}/11`,
-            r.cleared ? colors.gold : colors.danger);
-        }
       },
     });
     window.kit = kit; // デバッグ用
