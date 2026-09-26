@@ -65,7 +65,15 @@ export function injectDom(cfg, canvas) {
         <p class="sk-note sk-share-status"></p>
       </div>
       <h2 class="sk-lb-title">🏆 TOP10 ランキング</h2>
+      <div class="sk-lb-tabs" role="tablist" hidden>
+        <button class="sk-lb-tab" type="button" role="tab" data-tab="game" aria-selected="true">このゲーム</button>
+        <button class="sk-lb-tab" type="button" role="tab" data-tab="overall" aria-selected="false">総合</button>
+      </div>
       <ol class="sk-lb-list"></ol>
+      <div class="sk-lb-overall" hidden>
+        <p class="sk-lb-note"></p>
+        <ol class="sk-lb-list sk-lb-overall-list"></ol>
+      </div>
     </section>`);
   wrap.after(leaderboard);
 
@@ -156,6 +164,11 @@ export function injectDom(cfg, canvas) {
     fsClose: q(fsModal, ".sk-fs-close"),
     leaderboard,
     lbList: q(leaderboard, ".sk-lb-list"),
+    lbTitle: q(leaderboard, ".sk-lb-title"),
+    lbTabs: q(leaderboard, ".sk-lb-tabs"),
+    lbOverall: q(leaderboard, ".sk-lb-overall"),
+    lbOverallList: q(leaderboard, ".sk-lb-overall-list"),
+    lbOverallNote: q(leaderboard, ".sk-lb-note"),
     register: q(leaderboard, ".sk-register"),
     nick: q(leaderboard, ".sk-nick"),
     xidInput: q(leaderboard, ".sk-xid-input"),

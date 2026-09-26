@@ -12,7 +12,7 @@ import { createSfx } from "./src/sfx.js";
 import { createGyro } from "./src/gyro.js";
 import { createStick } from "./src/stick.js";
 import { bindPress, bindHold } from "./src/buttons.js";
-import { createRanking } from "./src/ranking.js";
+import { createRanking, fetchOverall, overallRowsHTML, overallNote } from "./src/ranking.js";
 import { createRetro, alpha } from "./src/retro.js";
 import { createCnp, CNP_DEFS } from "./src/cnp.js";
 import { shareResult, openXIntent } from "./src/share.js";
@@ -27,6 +27,33 @@ import {
 
 export const VERSION = "0.1.0";
 export { CNP_DEFS, alpha, openXIntent };
+
+// 総合ランキングだけを表示する（シリーズのポータルページ等、ゲームの無いページ用）。
+//   mountOverallRanking(document.getElementById("board"), { gasUrl, limit: 50 })
+// kit.css を読み込んでおくこと。
+export function mountOverallRanking(container, { gasUrl, cnp = true, limit = 10, title = "🏆 咲耶シリーズ 総合ランキング" } = {}) {
+  const board = createCnpIfNeeded(cnp);
+  container.classList.add("sk-leaderboard", "visible");
+  container.innerHTML = `<h2 class="sk-lb-title"></h2><p class="sk-lb-note"></p><ol class="sk-lb-list"><li class="sk-lb-empty">読み込み中...</li></ol>`;
+  container.querySelector(".sk-lb-title").textContent = title;
+  const list = container.querySelector(".sk-lb-list");
+  const note = container.querySelector(".sk-lb-note");
+  const reload = () =>
+    fetchOverall(gasUrl)
+      .then((d) => {
+        note.textContent = overallNote(d);
+        list.innerHTML = overallRowsHTML(d, board, limit);
+        return d;
+      })
+      .catch(() => {
+        list.innerHTML = '<li class="sk-lb-empty">読み込めませんでした</li>';
+      });
+  reload();
+  return { reload };
+}
+function createCnpIfNeeded(on) {
+  return on ? createCnp() : null;
+}
 
 const DEFAULT_KEYS = {
   up: ["ArrowUp", "KeyW"],
@@ -115,6 +142,7 @@ export function createKit(cfg) {
     cnp,
     isMobile,
     getResult: () => result,
+    overall: cfg.overall,
   });
 
   // ---- CLEAR / GAME OVER の演出動画 ----

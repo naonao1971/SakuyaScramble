@@ -8,34 +8,155 @@ import { parseRescued } from "./cnp.js";
 // ただし即スクロールするとCLEAR画面を見る前に飛ぶので、少し見せてから誘導する
 const FORM_SCROLL_DELAY_MS = 2000;
 const X_ID_RE = /^[A-Za-z0-9_]{1,15}$/;
+// 登録したニックネームとX IDを次回のフォームに入れておく（この端末・このドメインだけ）
+const PLAYER_STORE_KEY = "sakuya-kit:player";
 
-export function createRanking({ dom, gasUrl, gameId, cnp, isMobile, getResult }) {
+function loadPlayer() {
+  try {
+    return JSON.parse(localStorage.getItem(PLAYER_STORE_KEY) || "null") || {};
+  } catch (e) {
+    return {};
+  }
+}
+function savePlayer(p) {
+  try {
+    localStorage.setItem(PLAYER_STORE_KEY, JSON.stringify(p));
+  } catch (e) {
+    /* プライベートブラウズ等では保存しない */
+  }
+}
+
+function withParams(gasUrl, params) {
+  const u = new URL(gasUrl);
+  for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
+  return u.toString();
+}
+
+// Xのアイコンとリンク
+function xHTML(rawXid) {
+  const xid = String(rawXid || "").replace(/^@/, "").trim();
+  if (!X_ID_RE.test(xid)) return "";
+  return `<img class="sk-lb-avatar" src="https://unavatar.io/x/${encodeURIComponent(xid)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+     <a class="sk-lb-xlink" href="https://x.com/${encodeURIComponent(xid)}" target="_blank" rel="noopener noreferrer">@${escapeHTML(xid)}</a>`;
+}
+
+const medalOf = (rank) => (rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `${rank}`);
+
+// CNPロスター。救出キャラを持たない記録では出さない
+export function rosterHTML(cnp, rescued) {
+  if (!cnp) return "";
+  const got = parseRescued(rescued, cnp.chars.length);
+  if (!got.size) return "";
+  const slots = cnp.chars
+    .map((ch) => {
+      const on = got.has(ch.no);
+      const img = on ? `<img src="${escapeHTML(ch.src)}" alt="" onerror="this.remove()">` : "";
+      return `<span class="sk-lb-slot${on ? " got" : ""}" style="--h:${ch.hue}" title="${escapeHTML(ch.label)}">${img}</span>`;
+    })
+    .join("");
+  return `<span class="sk-lb-roster">${slots}<span class="sk-lb-roster-count">${got.size}/${cnp.chars.length}</span></span>`;
+}
+
+// ── 総合ランキング ──
+// GAS の ?action=overall が返す { games, players, maxPerGame } を描く
+export function overallRowsHTML(data, cnp, limit = 10) {
+  const players = (data && data.players) || [];
+  if (!players.length) return '<li class="sk-lb-empty">まだ記録がありません</li>';
+  const games = data.games || [];
+  const max = data.maxPerGame || 1000;
+  return players
+    .slice(0, limit)
+    .map((p, i) => {
+      const chips = games
+        .map((g) => {
+          const e = p.games && p.games[g.id];
+          const pts = e ? e.points : "—";
+          const top = e && e.points >= max ? " sk-lb-game-top" : "";
+          return `<span>${escapeHTML(g.title)} <span class="sk-lb-game-pts${top}">${pts}</span></span>`;
+        })
+        .join("");
+      return `<li class="sk-lb-row">
+          <span class="sk-lb-rank">${medalOf(i + 1)}</span>
+          <span class="sk-lb-name">${escapeHTML(p.nickname)}</span>
+          <span class="sk-lb-xname">${xHTML(p.xid)}</span>
+          <span class="sk-lb-score">${Math.floor(Number(p.total) || 0)}pt</span>
+          <span class="sk-lb-games">${chips}</span>
+          ${rosterHTML(cnp, p.rescued)}
+        </li>`;
+    })
+    .join("");
+}
+
+export function overallNote(data) {
+  const n = ((data && data.games) || []).length;
+  const max = (data && data.maxPerGame) || 1000;
+  return `各タイトルの自己ベスト ÷ そのタイトルの1位 × ${max} の合計（対象 ${n} タイトル／X IDが同じ記録は同じ人として合算）`;
+}
+
+export function fetchOverall(gasUrl) {
+  return fetch(withParams(gasUrl, { action: "overall" }), { cache: "no-store" }).then((r) => r.json());
+}
+
+export function createRanking({ dom, gasUrl, gameId, cnp, isMobile, getResult, overall = true }) {
   let cache = [];
+  let tab = "game";
+  let overallData = null;
+  let overallLoading = null;
   let xidState = "empty"; // "empty" | "loading" | "found" | "error"
   let xidToken = 0;
   let scrollTimer = null;
 
-  function endpoint(extra) {
-    if (!gasUrl) return "";
-    const u = new URL(gasUrl);
-    u.searchParams.set("game", gameId);
-    if (extra) for (const [k, v] of Object.entries(extra)) u.searchParams.set(k, v);
-    return u.toString();
+  const endpoint = () => (gasUrl ? withParams(gasUrl, { game: gameId }) : "");
+  const overallOn = !!gasUrl && overall !== false;
+
+  // ── 「このゲーム / 総合」の切り替え ──
+  function setTab(next) {
+    tab = next;
+    for (const b of dom.lbTabs.querySelectorAll(".sk-lb-tab")) {
+      b.setAttribute("aria-selected", String(b.dataset.tab === tab));
+    }
+    dom.lbList.hidden = tab !== "game";
+    dom.lbOverall.hidden = tab !== "overall";
+    dom.lbTitle.textContent = tab === "overall" ? "🏆 総合ランキング TOP10" : "🏆 TOP10 ランキング";
+    if (tab === "overall") loadOverall(false);
+  }
+  if (overallOn) {
+    dom.lbTabs.hidden = false;
+    for (const b of dom.lbTabs.querySelectorAll(".sk-lb-tab")) {
+      b.addEventListener("click", () => setTab(b.dataset.tab));
+    }
   }
 
-  // ランキング1行ぶんのCNPロスター。救出キャラを持たない記録では出さない
-  function rosterHTML(rescued) {
-    if (!cnp) return "";
-    const got = parseRescued(rescued, cnp.chars.length);
-    if (!got.size) return "";
-    const slots = cnp.chars
-      .map((ch) => {
-        const on = got.has(ch.no);
-        const img = on ? `<img src="${escapeHTML(ch.src)}" alt="" onerror="this.remove()">` : "";
-        return `<span class="sk-lb-slot${on ? " got" : ""}" style="--h:${ch.hue}" title="${escapeHTML(ch.label)}">${img}</span>`;
+  function renderOverall() {
+    dom.lbOverallNote.textContent = overallData ? overallNote(overallData) : "";
+    dom.lbOverallList.innerHTML = overallData
+      ? overallRowsHTML(overallData, cnp)
+      : '<li class="sk-lb-empty">読み込み中...</li>';
+  }
+
+  // force=false なら一度読んだものを使い回す（タブを行き来するたびに通信しない）
+  function loadOverall(force) {
+    if (!overallOn) return Promise.resolve(null);
+    if (overallData && !force) {
+      renderOverall();
+      return Promise.resolve(overallData);
+    }
+    if (overallLoading) return overallLoading;
+    renderOverall();
+    overallLoading = fetchOverall(gasUrl)
+      .then((d) => {
+        overallData = d;
+        return d;
       })
-      .join("");
-    return `<span class="sk-lb-roster">${slots}<span class="sk-lb-roster-count">${got.size}/${cnp.chars.length}</span></span>`;
+      .catch(() => {
+        overallData = { games: [], players: [] };
+        return overallData;
+      })
+      .finally(() => {
+        overallLoading = null;
+        renderOverall();
+      });
+    return overallLoading;
   }
 
   function render() {
@@ -46,20 +167,15 @@ export function createRanking({ dom, gasUrl, gameId, cnp, isMobile, getResult })
     dom.lbList.innerHTML = cache
       .slice(0, 10)
       .map((r, i) => {
-        const rank = i + 1;
-        const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `${rank}`;
-        const xid = String(r.xid || "").replace(/^@/, "").trim();
-        const xPart = X_ID_RE.test(xid)
-          ? `<img class="sk-lb-avatar" src="https://unavatar.io/x/${encodeURIComponent(xid)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
-             <a class="sk-lb-xlink" href="https://x.com/${encodeURIComponent(xid)}" target="_blank" rel="noopener noreferrer">@${escapeHTML(xid)}</a>`
-          : "";
+        const medal = medalOf(i + 1);
+        const xPart = xHTML(r.xid);
         const deviceIcon = r.device === "モバイル" ? "📱" : r.device === "PC" ? "💻" : "";
         return `<li class="sk-lb-row">
             <span class="sk-lb-rank">${medal}</span>
             <span class="sk-lb-name">${deviceIcon ? `<span title="${escapeHTML(r.device)}">${deviceIcon}</span> ` : ""}${escapeHTML(r.nickname)}</span>
             <span class="sk-lb-xname">${xPart}</span>
             <span class="sk-lb-score">${Math.floor(Number(r.score) || 0)}</span>
-            ${rosterHTML(r.rescued)}
+            ${rosterHTML(cnp, r.rescued)}
           </li>`;
       })
       .join("");
@@ -102,11 +218,13 @@ export function createRanking({ dom, gasUrl, gameId, cnp, isMobile, getResult })
 
   function showForm() {
     dom.register.classList.add("visible");
-    dom.nick.value = "";
-    dom.xidInput.value = "";
+    const saved = loadPlayer();
+    dom.nick.value = saved.nickname || "";
+    dom.xidInput.value = saved.xid || "";
     dom.submitStatus.textContent = "";
     xidState = "empty";
     setXidPreview(null, "");
+    if (dom.xidInput.value) verifyXid(dom.xidInput.value);
     updateSubmit();
     clearTimeout(scrollTimer);
     scrollTimer = setTimeout(scrollToForm, FORM_SCROLL_DELAY_MS);
@@ -210,8 +328,10 @@ export function createRanking({ dom, gasUrl, gameId, cnp, isMobile, getResult })
       .then((d) => {
         if (d.success) {
           dom.submitStatus.textContent = "登録しました！";
+          savePlayer({ nickname: record.nickname, xid: record.xid });
           hideForm();
           load();
+          if (overallData || tab === "overall") loadOverall(true);
         } else {
           dom.submitStatus.textContent = "登録に失敗しました: " + (d.error || "");
           updateSubmit();
@@ -226,11 +346,16 @@ export function createRanking({ dom, gasUrl, gameId, cnp, isMobile, getResult })
   return {
     load,
     render,
+    loadOverall,
+    setTab,
     qualifies,
     setVisible,
     showForm,
     hideForm,
-    rosterHTML,
+    rosterHTML: (rescued) => rosterHTML(cnp, rescued),
+    get overall() {
+      return overallData;
+    },
     get records() {
       return cache;
     },

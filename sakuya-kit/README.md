@@ -8,7 +8,7 @@
 | コントローラー | キーボード、左半分のバーチャルスティック、ジャイロ（任意）、右下のボタン群、長押しトグル |
 | ポーズ | canvas 中央のボタン、P / Esc キー、タブ切替や通知の割り込み時の入力リセット |
 | スコア登録 | TOP10 入り判定、ニックネームと X ID（実在確認つき）の入力フォーム |
-| ランキング | Google スプレッドシート + GAS（全タイトルで1本の GAS を共有） |
+| ランキング | Google スプレッドシート + GAS（全タイトルで1本の GAS を共有）。タイトル別と**総合ランキング**の切り替えタブ付き |
 | CNP | 11体の ID・名前・色・画像の正典、ランキングに出す救出ロスター |
 | 結果の演出 | CLEAR / GAME OVER の演出動画（解錠、フォールバック、スキップ、ミュート連動）と、共通の見た目の結果画面 |
 | その他 | スタートボタン、縦持ち案内、全画面／ホーム画面追加の案内、効果音とミュート、シェア、60Hz 固定ループ、レトロ UI |
@@ -76,6 +76,7 @@
 | `title` / `subtitle` | | 縦持ち案内に出す |
 | `canvas` | `#game` | |
 | `gasUrl` | `""` | 空ならランキングは「まだ記録がありません」のまま |
+| `overall` | `true` | ランキングに「このゲーム / 総合」のタブを出す |
 | `cnp` | `false` | `true` で `kit.cnp` を使えるようにし、ランキングに救出ロスターを出す |
 | `controls.stick` | `true` | 左半分のバーチャルスティック |
 | `controls.stickDigital4` | `false` | スティックを4方向に丸める（迷路系向け） |
@@ -116,6 +117,7 @@
 | `kit.status(msg)` | canvas の下の案内文 |
 | `kit.gameOver(result)` / `kit.setPaused(bool)` / `kit.start()` | |
 | `kit.gyro` | ジャイロ無効なら `null`。`active`、`recalibrate()`、`toggle()` |
+| `kit.ranking` | `load()`、`loadOverall(force)`、`setTab("game" \| "overall")`、`records`、`overall` |
 | `kit.cutscene` | `playing`、`kind`（`"clear"` / `"gameOver"` / `null`）、`skip()`、`videos` |
 
 ## ジャイロ操作（使うタイトルだけ）
@@ -165,10 +167,41 @@
 
 canvas 側の `kit.retro.colors` も同じトークンを読むので、CSS と JS の両方を直す必要はありません。
 
-## ランキング（GAS）
+## ランキング（GAS）と総合ランキング
 
 [`gas/apps-script.gs`](gas/apps-script.gs) を1つのスプレッドシートにデプロイし、全タイトルでその URL を共有します。
-シートはタイトルごとに `gameId` の名前で自動的に作られます。
+スコアはタイトルごとのシートに入り、タイトルの一覧はスプレッドシートの `_games` シートで管理します。
+
+| `_games` の列 | 内容 |
+|---|---|
+| gameId | `createKit({ gameId })` と同じ値 |
+| タイトル | 総合ランキングに出す名前 |
+| シート名 | スコアを入れるシート（咲耶スクランブルは既存の `ranking`） |
+| 総合に含める | `TRUE` のタイトルだけが総合ランキングの対象 |
+
+- 初めてスコアが届いたタイトルは、`_games` に自動で行が足されます（総合には `FALSE` の状態で入る）。公開するタイトルは手で `TRUE` にしてください。デモやテスト用は `FALSE` のままにします
+- `_games` の編集に再デプロイは要りません（総合ランキングは最大1分キャッシュされます）
+
+### 総合ランキングの計算
+
+1. タイトルごとに、各プレイヤーの自己ベストを出す
+2. **自己ベスト ÷ そのタイトルの1位 × 1000** を、そのタイトルのポイントにする（どのタイトルも満点は 1000）
+3. 全タイトルのポイントの合計で順位を付ける（同点なら遊んだタイトル数が多い方が上）
+
+- 同じ人の判定は、X ID があれば X ID（大文字と小文字は区別しない）、無ければニックネームで行います
+- 救出した CNP は、全タイトル・全プレイの分を合算して表示します
+- 登録したニックネームと X ID は、次回の登録フォームに自動で入ります（同じ端末・同じドメインの中だけ）
+
+### ゲームの無いページに総合ランキングだけ出す
+
+```html
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/naonao1971/sakuya-kit@0.1.0/kit.css">
+<section id="board"></section>
+<script type="module">
+  import { mountOverallRanking } from "https://cdn.jsdelivr.net/gh/naonao1971/sakuya-kit@0.1.0/kit.js";
+  mountOverallRanking(document.getElementById("board"), { gasUrl: "https://script.google.com/macros/s/.../exec", limit: 50 });
+</script>
+```
 
 ## ディレクトリ
 
