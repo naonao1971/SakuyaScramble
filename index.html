@@ -1,1670 +1,114 @@
 <!doctype html>
 <html lang="ja">
 <head>
+  <!-- この <head> は sakuya-kit の tools/ogp.html が書き出す共通の形。値を変えるときもツールで作り直す -->
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#06070C" />
-  <!-- ホーム画面に追加した場合、Safari独自のUIバーなしで全画面起動させる -->
+  <!-- ホーム画面に追加したとき、Safari のバーなしの全画面で起動する -->
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="咲耶スクランブル" />
   <title>SAKUYA SCRAMBLE ─ RESCUE 11 CNP</title>
-  <!-- アイコンを明示しないとブラウザが /favicon.ico を自動で取りに行き、
-       置いていないので404になる。宣言すればその要求自体が起きない。
-       apple-touch-iconは「ホーム画面に追加」でiOSが使う -->
+  <meta name="description" content="クリプト忍者咲耶の宇宙船で洞窟を駆け抜け、散らばったCNP11体を救出するブラウザゲーム" />
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
-  <!-- 「ホーム画面に追加」時の既定表示(standalone/横向き)をここで決める。
-       manifestが無いと、追加してもブラウザ表示のまま(全画面にならない)ことがある -->
   <link rel="manifest" href="manifest.json" />
-  <!-- OGP / Twitter Card -->
+  <!-- OGP / Twitter Card（クローラは JavaScript を実行しないので、ここに静的に書く） -->
   <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="SAKUYA SERIES" />
   <meta property="og:title" content="SAKUYA SCRAMBLE ─ RESCUE 11 CNP" />
   <meta property="og:description" content="クリプト忍者咲耶の宇宙船で洞窟を駆け抜け、散らばったCNP11体を救出するブラウザゲーム" />
   <meta property="og:url" content="https://sakuya.naoblock.jp/" />
-  <meta property="og:image" content="https://sakuya.naoblock.jp/image01.jpg" />
-  <meta property="og:image:width" content="1672" />
-  <meta property="og:image:height" content="941" />
+  <meta property="og:image" content="https://sakuya.naoblock.jp/ogp.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
   <meta property="og:locale" content="ja_JP" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="SAKUYA SCRAMBLE ─ RESCUE 11 CNP" />
   <meta name="twitter:description" content="クリプト忍者咲耶の宇宙船で洞窟を駆け抜け、散らばったCNP11体を救出するブラウザゲーム" />
-  <meta name="twitter:image" content="https://sakuya.naoblock.jp/image01.jpg" />
-  <!-- レトロアーケード書体。display=欧文/数字、body=和文。どちらもOFLで組込み可 -->
+  <meta name="twitter:image" content="https://sakuya.naoblock.jp/ogp.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&display=swap" rel="stylesheet" />
-  <style>
-    :root {
-      color-scheme: dark;
-
-      /* --- レトロアーケード トークン（方向宣言の正典。ここ以外に色を書かない） --- */
-      /* --- パレットはキービジュアル(image01.jpg)から採色する ---
-         咲耶の船は「漆黒の機体・金のライン・マゼンタの発光」。
-         この3色以外を画面に足さない。青と緑は世界観に存在しないので持たない */
-      --bg: #06070C;        /* 地 */
-      --panel: #120E1F;     /* 面（地をわずかに紫へ寄せる） */
-      /* 面の透過版。canvasに重なる操作ボタンにだけ使い、下の自機・地形・敵が
-         透けて見えるようにする。--panel と同じ色相なので筐体の質感は崩さない */
-      --panel-ghost: rgba(18, 14, 31, 0.5);
-      --ink: #E8ECF5;       /* 文字（燐光の白） */
-      --dim: #7C8BA6;       /* 減光した補助文字 */
-      --gold: #E8C56A;      /* 二次: 枠・スコア・ランク。面に塗らない */
-      --magenta: #FF2D9B;   /* 徴: CTA・選択・自機の発光。最も希少に使う */
-      --danger: #FF4D2E;    /* 橙赤。徴のマゼンタと弁別できる位置まで離す */
-      --hp: #E8C56A;        /* HP満杯。減ると橙→橙赤へ落ちる(drawHudのladder) */
-      /* 洞窟。画面の6割を占めるので、ここが世界観を決める */
-      --cave: #452066;
-      --cave-edge: #B44BE8;
-      /* 筐体のベベル: ぼかし0のハードな3色で金属の縁を作る。
-         lit=光の当たる上辺/左辺、lo=影になる下辺/右辺 */
-      --edge-hi: #2A3242;
-      --edge-lit: #39445A;
-      --edge-lo: #05060A;
-      /* ベベルの共通処方。押下時はinsetの向きを反転させて物理的に沈ませる */
-      --bevel-up: inset 2px 2px 0 var(--edge-lit), inset -2px -2px 0 var(--edge-lo);
-      --bevel-down: inset 2px 2px 0 var(--edge-lo), inset -2px -2px 0 var(--edge-lit);
-
-      /* 角丸はレトロでは立てる。7種あったものを0に統一 */
-      --radius: 0px;
-
-      /* 長押しトグルの必要保持時間。JS側の閾値と必ず同じ値にする */
-      --hold-ms: 600ms;
-
-      /* 和欧混植は欧文を先に書き、数字とラテンを欧文側へ拾わせる */
-      --font-display: "Press Start 2P", "DotGothic16", monospace;
-      --font-body: "DotGothic16", "Press Start 2P", monospace;
-    }
-    html, body {
-      overscroll-behavior: none;
-    }
-    body {
-      margin: 0;
-      font-family: var(--font-body);
-      background: var(--bg);
-      color: var(--ink);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 18px;
-      min-height: 100dvh;
-      /* ホーム画面アプリ(black-translucent)では、ページがステータスバーの下まで
-         広がる。上の逃げ幅を足さないと、縦持ちの案内画面の枠が時計や電波表示と
-         重なる(ブラウザ表示では env() は0なので見た目は変わらない) */
-      padding: calc(20px + env(safe-area-inset-top)) 12px 40px;
-      box-sizing: border-box;
-      touch-action: manipulation;
-      /* スマホでボタンや画面を長押し/ドラッグしたときに、テキストや要素が
-         選択状態(青い反転)になったり、iOSのコピー/調べる のメニューが
-         出たり、タップのたびに灰色のハイライトが乗るのを止める。
-         いずれも継承プロパティなので body に指定すれば全体に効く */
-      -webkit-user-select: none;
-      user-select: none;
-      -webkit-touch-callout: none;
-      -webkit-tap-highlight-color: transparent;
-    }
-    /* ランキング登録の入力欄だけは、文字の選択・カーソル移動ができないと
-       困るので選択を戻す */
-    input,
-    textarea {
-      -webkit-user-select: text;
-      user-select: text;
-      -webkit-touch-callout: default;
-    }
-    /* プレイ中のみ付与: スワイプでのページスクロール／pull-to-refreshを止める。
-       ゲームオーバー/クリア後はランキングを読めるよう外す */
-    body.is-playing-lock {
-      touch-action: none;
-      overflow: hidden;
-    }
-    /* 全画面表示中はアドレスバー分の余白が要らないので、盤面をより大きく使う */
-    body.is-fullscreen {
-      padding: calc(8px + env(safe-area-inset-top)) 8px calc(8px + env(safe-area-inset-bottom));
-      gap: 8px;
-    }
-    body.is-fullscreen canvas {
-      max-height: 92vh;
-    }
-    .wrap {
-      position: relative;
-      text-align: center;
-    }
-    canvas {
-      width: min(92vw, 960px);
-      height: auto;
-      max-height: 72vh;
-      /* 筐体のベゼル: ぼかし無しの2色ベベルで金属の縁を作る。
-         一律1pxグレー枠(スロップ第1兆候)は使わない */
-      border: 2px solid var(--edge-hi);
-      box-shadow:
-        inset 0 0 0 2px var(--edge-lo),
-        0 0 0 2px var(--edge-lo),
-        0 0 24px rgba(232, 197, 106, 0.10);
-      background: #02040a;
-      image-rendering: pixelated;
-      touch-action: none;
-    }
-    /* covers the canvas 1:1 (left/top/width/height set in JS from its
-       getBoundingClientRect(), matching how positionStartButton lines up
-       with the canvas) while the device is held in portrait */
-    .orientation-overlay {
-      position: absolute;
-      display: none;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      /* 完全不透過。半透明にすると背後のcanvasが描くタイトル(drawTitleScreen)が
-         透けて、このオーバーレイ自身のタイトルと二重に見える */
-      background: #050810;
-      border: 2px solid var(--gold);
-      z-index: 30;
-      text-align: center;
-      padding: 16px;
-      box-sizing: border-box;
-      pointer-events: auto;
-    }
-    .orientation-overlay.visible {
-      display: flex;
-    }
-    .orientation-overlay-icon {
-      font-size: 42px;
-    }
-    /* p.をつけて詳細度を上げる。単なる .orientation-overlay-title だと後続の
-       .orientation-overlay p に負けて、display書体の指定が捨てられる */
-    .orientation-overlay p.orientation-overlay-title {
-      margin: 0;
-      font-family: var(--font-display);
-      color: var(--gold);
-      font-size: 15px;
-      line-height: 1.6;
-      letter-spacing: 0.02em;
-    }
-    /* 副題。ここも p. で詳細度を上げないと下の .orientation-overlay p に負ける */
-    .orientation-overlay p.orientation-overlay-sub {
-      margin: 0;
-      font-family: var(--font-display);
-      color: var(--magenta);
-      font-size: 8px;
-      line-height: 1.6;
-      letter-spacing: 0.02em;
-    }
-    .orientation-overlay p {
-      margin: 0;
-      font-family: var(--font-body);
-      color: var(--gold);
-      font-size: 16px;
-      line-height: 1.5;
-    }
-    .help {
-      margin-top: 10px;
-      color: var(--dim);
-      font-size: 12px;
-    }
-    /* 権利表記。読めるが主張しない重さに留める（本文より一段落とす） */
-    .site-footer {
-      margin: 20px auto 24px;
-      max-width: 960px;
-      padding: 0 12px;
-      color: var(--dim);
-      font-size: 11px;
-      line-height: 1.6;
-      text-align: center;
-      box-sizing: border-box;
-    }
-    .mobile-controls {
-      margin-top: 16px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 8px;
-    }
-    .mobile-controls button {
-      appearance: none;
-      border: 2px solid var(--edge-hi);
-      background: var(--panel);
-      color: var(--ink);
-      border-radius: var(--radius);
-      padding: 12px 18px;
-      font-family: var(--font-display);
-      font-size: 11px;
-      /* 筐体ボタンのハードベベル。blur 0 が命——ぼかすと途端に現代のUIになる */
-      box-shadow: var(--bevel-up);
-    }
-    .mobile-controls button:disabled {
-      opacity: 0.4;
-    }
-    .hud-start {
-      /* left/top are set per-frame in JS (positionStartButton) to track the
-         canvas-space "start here" hint spot at any display scale */
-      position: absolute;
-      transform: translate(-50%, -50%);
-      z-index: 2;
-      /* UA既定のボタン外観に任せず、筐体ボタンとして明示的に組む */
-      appearance: none;
-      padding: 12px 20px;
-      font-family: var(--font-body);
-      font-size: 13px;
-      border-radius: var(--radius);
-      background: var(--panel);
-      /* 徴の琥珀は「線と文字」に置く。面に塗ると一気に安くなる */
-      color: var(--gold);
-      border: 2px solid var(--gold);
-      box-shadow: var(--bevel-up);
-      /* アーケードの「PUSH START」の明滅。steps()で矩形波にすると
-         フェードでなく本物の点滅になる */
-      animation: arcade-blink 1.1s steps(1, end) infinite;
-    }
-    .hud-start:active {
-      box-shadow: var(--bevel-down);
-      transform: translate(-50%, -50%) translateY(2px);
-    }
-    @keyframes arcade-blink {
-      /* 消灯側は0.62まで。これより落とすと琥珀×面のコントラストが
-         4.5:1を割り、点滅の谷でCTAが読めなくなる（実測: 0.35で2.29:1） */
-      0%, 60% { opacity: 1; }
-      61%, 100% { opacity: 0.62; }
-    }
-    /* 右下のボタン群の内側の端に置く。他の常設トグルと同じ44pxに揃えるが、
-       アイコン(🕹️/📱)自体が今のモードを表すので .auto-fire-toggle の減光は付けない。
-       .touch-btn(56px)が後ろに書かれているため、詳細度を上げないと寸法が負ける */
-    .touch-btn.gyro-toggle {
-      width: 44px;
-      height: 44px;
-      font-size: 17px;
-      padding: 0;
-      align-self: center;
-    }
-    .status {
-      min-height: 1.4em;
-      color: var(--dim);
-      font-size: 12px;
-      line-height: 1.6;
-    }
-    /* 移動は画面の左半分を押したまま倒すバーチャルスティック(姉妹作
-       「咲耶Nounラリー」と同じ見た目)。発射などのボタン群は右下に置く */
-    .fire-pad {
-      /* pin fire/bomb buttons to the right-bottom of the viewport, clear of
-         the iPhone home-indicator / notch via safe-area-inset.
-         row-reverse: 右端(親指の付け根側)から X → 💣 → 各トグル の順に並べる */
-      position: fixed;
-      /* キャンバスの右下の角の内側に置く(JSの positionFirePad が --fire-pad-*
-         にキャンバスの実寸から求めた値を入れる)。画面の下端基準で置くと、
-         ホームバーの逃げ幅ぶん持ち上がってキャンバスの下端をまたぎ、その下の
-         案内文に重なっていた。ノッチ/ホームバーより内側には必ず収める */
-      right: max(calc(12px + env(safe-area-inset-right)), var(--fire-pad-right, 0px));
-      bottom: max(calc(12px + env(safe-area-inset-bottom)), var(--fire-pad-bottom, 0px));
-      z-index: 6;
-      display: none;
-      pointer-events: auto;
-      flex-direction: row-reverse;
-      align-items: flex-end;
-      gap: 10px;
-    }
-
-    /* バーチャルスティック。見た目は咲耶Nounラリーと同じ(丸い輪＋つまみ)。
-       色だけこのゲームのトークン(--ink/--panel/--magenta)に置き換えている */
-    #joyring {
-      position: fixed;
-      z-index: 30;
-      pointer-events: none;
-      display: none;
-      width: 64px;
-      height: 64px;
-      /* 枠線2pxぶん外寸は68pxになる。-32pxだと中心が指から2pxずれるので-34px */
-      margin: -34px 0 0 -34px;
-      border-radius: 50%;
-      border: 2px solid rgba(232, 236, 245, 0.3);
-      background: rgba(18, 14, 31, 0.3);
-    }
-    #joyknob {
-      position: fixed;
-      z-index: 31;
-      pointer-events: none;
-      display: none;
-      width: 30px;
-      height: 30px;
-      margin: -15px 0 0 -15px;
-      border-radius: 50%;
-      background: var(--magenta);
-      opacity: 0.85;
-      box-shadow: 0 0 0 2px rgba(232, 236, 245, 0.35);
-    }
-    #joyring.on,
-    #joyknob.on {
-      display: block;
-    }
-    /* 指の置き場所を教える影。何も無い画面では押していいことが伝わらないため、
-       最初にスティックを倒すまでの間だけ出す(分かった人の視界からは消す)。
-       点線と拍動で「飾りではなく押すもの」に見せる */
-    #joyhint {
-      position: fixed;
-      z-index: 29;
-      pointer-events: none;
-      display: none;
-      width: 64px;
-      height: 64px;
-      margin: -34px 0 0 -34px;
-      border-radius: 50%;
-      border: 2px dashed rgba(232, 236, 245, 0.28);
-      background: rgba(18, 14, 31, 0.28);
-      animation: joypulse 1.8s ease-in-out infinite;
-    }
-    #joyhint::after {
-      content: "";
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      width: 28px;
-      height: 28px;
-      margin: -14px 0 0 -14px;
-      border-radius: 50%;
-      background: rgba(232, 236, 245, 0.2);
-    }
-    /* 影だけ置くと「その丸を押すもの」と誤解されるので、文字で本当の決まりを言う */
-    #joyhintcap {
-      position: fixed;
-      z-index: 29;
-      pointer-events: none;
-      display: none;
-      transform: translate(-50%, -50%);
-      white-space: nowrap;
-      font-family: var(--font-body);
-      font-size: 11px;
-      line-height: 1.3;
-      letter-spacing: 0.04em;
-      color: rgba(232, 236, 245, 0.62);
-      text-shadow: 0 1px 3px #000, 0 0 6px #000;
-    }
-    body.joyhint #joyhint,
-    body.joyhint #joyhintcap {
-      display: block;
-    }
-    @keyframes joypulse {
-      0%, 100% { opacity: 0.55; transform: scale(1); }
-      50% { opacity: 1; transform: scale(1.1); }
-    }
-    .touch-fire {
-      /* 発射ボタンだけ徴の琥珀で縁取り、押すべき場所を1つに絞る。
-         寸法は .touch-btn の56pxに揃える（筐体の同型ボタンの並び）——
-         ここで width/height を書いても後続の .touch-btn に負けるので書かない */
-      border-color: var(--gold);
-      color: var(--gold);
-      font-family: var(--font-display);
-      font-size: 14px;
-    }
-    .touch-btn {
-      width: 56px;
-      height: 56px;
-      border-radius: var(--radius);
-      border: 2px solid var(--edge-hi);
-      /* canvasの上に重なるので面を透過させる。自機は左下(初期x=130)に留まり
-         やすく、発射パッドの真下へ潜り込んで見えなくなるため。枠とベベルは
-         不透明のまま残るので、ボタンの輪郭と位置は変わらず読み取れる */
-      background: var(--panel-ghost);
-      color: var(--ink);
-      /* 面を透かした分、背後を星や弾がよぎるとグリフが負ける瞬間がある。
-         ぼかし無しの1pxの縁取りで、背景が何色でも字が読める状態を保つ
-         (ベベルと同じくblurを使わないのでレトロの質感は崩さない) */
-      text-shadow:
-        1px 1px 0 var(--edge-lo), -1px -1px 0 var(--edge-lo),
-        1px -1px 0 var(--edge-lo), -1px 1px 0 var(--edge-lo);
-      font-size: 20px;
-      font-weight: 400;
-      /* backdrop-filterは中級端末で15〜30%のFPS低下を招くため、
-         ゲーム中に常時出る操作ボタンからは外す */
-      box-shadow: var(--bevel-up);
-      pointer-events: auto;
-      touch-action: none;
-      user-select: none;
-      -webkit-user-select: none;
-    }
-    /* 長押しトグルは :active から除外する。押した瞬間に縁が徴の色になると
-       「確定した」見た目になり、閾値に到達したかどうかが区別できなくなる */
-    .touch-btn:not(.hold-toggle):active,
-    .touch-btn.active {
-      /* 押下でベベルを反転させ、物理的に沈み込ませる */
-      border-color: var(--gold);
-      color: var(--gold);
-      box-shadow: var(--bevel-down);
-      transform: translateY(2px);
-    }
-    /* 長押しトグル: 発射ボタンの隣に並んでいて、指がかすめただけで
-       作動すると誤爆になる。押している間だけ琥珀が下から満ちていき、
-       満ちてから指を離したときに初めて切り替わる */
-    .hold-toggle {
-      position: relative;
-      overflow: hidden;
-    }
-    .hold-toggle::after {
-      content: "";
-      position: absolute;
-      left: 0;
-      bottom: 0;
-      width: 100%;
-      height: 0;
-      background: rgba(232, 197, 106, 0.38);
-      pointer-events: none;
-    }
-    .hold-toggle.holding::after {
-      height: 100%;
-      transition: height var(--hold-ms) linear;
-    }
-    /* 押している間は沈ませるだけで、縁の色は変えない。ここで .active と
-       同じ「確定した見た目」にすると、閾値に達したかどうかが区別できない */
-    .hold-toggle.holding {
-      box-shadow: var(--bevel-down);
-      transform: translateY(2px);
-    }
-    /* 閾値に到達＝「離せば切り替わる」。ここで初めて縁を徴の色にする */
-    .hold-toggle.hold-ready {
-      border-color: var(--gold);
-      color: var(--gold);
-    }
-    /* X/💣より一回り小さい常設トグル。ONの間だけ徴の色で縁取る。
-       小さくしても44ptの床は割らない（モバイルのタップ目標の最小） */
-    .auto-fire-toggle {
-      width: 44px;
-      height: 44px;
-      font-size: 17px;
-      align-self: center;
-      opacity: 0.55;
-    }
-    .auto-fire-toggle.on {
-      opacity: 1;
-      border-color: var(--gold);
-    }
-    /* 画面中央、キャンバスに重ねて配置。D-pad/発射ボタンの経路から外れて
-       いるので即タップで反応させる。プレイ中はごく薄くして裏技的な存在に
-       し、一時停止したときだけはっきり見せて「再開ボタン」として機能させる */
-    .pause-button {
-      /* top/leftはJS(positionPauseButton)がcanvasの実寸中心に合わせて書き込む。
-         .wrapは下のgyroStatusテキスト分だけcanvasより背が高いので、
-         CSSだけのtop:50%ではcanvasの中心からズレてしまうため */
-      position: absolute;
-      top: 0;
-      left: 0;
-      transform: translate(-50%, -50%);
-      z-index: 7;
-      width: 56px;
-      height: 56px;
-      border-radius: var(--radius);
-      border: 2px solid var(--edge-hi);
-      background: var(--panel);
-      color: var(--ink);
-      font-size: 22px;
-      opacity: 0.1;
-      box-shadow: var(--bevel-up);
-      pointer-events: auto;
-      touch-action: manipulation;
-      user-select: none;
-      -webkit-user-select: none;
-      transition: opacity 0.15s ease;
-    }
-    .pause-button:active {
-      box-shadow: var(--bevel-down);
-      transform: translate(-50%, -50%) translateY(2px);
-    }
-    .pause-button.paused {
-      opacity: 0.95;
-    }
-    /* canvasへ描くための供給元。visibility:hidden や display:none だと
-       コマの更新が止まる環境があるので、1pxに畳んで不可視にする */
-    .clear-video {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      opacity: 0;
-      pointer-events: none;
-      left: 0;
-      top: 0;
-    }
-    .controls-bottom {
-      /* fire-pad と同じ position: fixed に統一し、画面サイズ/向きが変わっても
-         2つのボタン群の相対位置がズレないようにする */
-      position: fixed;
-      right: calc(12px + env(safe-area-inset-right));
-      bottom: calc(18px + env(safe-area-inset-bottom));
-      z-index: 3;
-      display: flex;
-      gap: 14px;
-      align-items: flex-end;
-      pointer-events: none;
-    }
-    .controls-bottom > * {
-      pointer-events: auto;
-    }
-
-    /* --- ランキング（TOP10） --- */
-    .leaderboard {
-      width: min(92vw, 960px);
-      box-sizing: border-box;
-      background: var(--panel);
-      border: 2px solid var(--edge-hi);
-      border-radius: var(--radius);
-      box-shadow: var(--bevel-up);
-      padding: 16px 18px 20px;
-      display: none;
-    }
-    .leaderboard.visible {
-      display: block;
-    }
-    .leaderboard-title {
-      margin: 0 0 16px;
-      font-family: var(--font-display);
-      font-size: 13px;
-      line-height: 1.5;
-      color: var(--gold);
-      text-align: center;
-    }
-    .leaderboard-list {
-      list-style: none;
-      margin: 0;
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-    /* columns: 順位 / ニックネーム / Xの名称 / スコア */
-    .leaderboard-row {
-      display: grid;
-      grid-template-columns: 40px 1fr auto auto;
-      align-items: center;
-      gap: 10px;
-      padding: 8px 10px;
-      background: var(--bg);
-      border-radius: var(--radius);
-      font-size: 13px;
-    }
-    .leaderboard-row .lb-rank {
-      color: var(--dim);
-      font-family: var(--font-display);
-      font-size: 11px;
-      text-align: center;
-    }
-    .leaderboard-row .lb-name {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .leaderboard-row .lb-xname {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .leaderboard-row .lb-avatar {
-      width: 22px;
-      height: 22px;
-      border-radius: var(--radius);
-      object-fit: cover;
-      background: var(--panel);
-      flex: none;
-    }
-    .leaderboard-row .lb-xlink {
-      color: var(--dim);
-      text-decoration: none;
-      font-size: 11px;
-      white-space: nowrap;
-    }
-    .leaderboard-row .lb-xlink:hover {
-      text-decoration: underline;
-    }
-    .leaderboard-row .lb-score {
-      color: var(--gold);
-      font-family: var(--font-display);
-      font-size: 11px;
-      text-align: right;
-      font-variant-numeric: tabular-nums;
-    }
-    /* 救出ロスター: 行の全幅を使う2段目に置く。1段目に並べると
-       スマホ幅でニックネームが潰れるため */
-    .leaderboard-row .lb-roster {
-      grid-column: 1 / -1;
-      display: flex;
-      align-items: center;
-      gap: 3px;
-      margin-top: 2px;
-    }
-    .leaderboard-row .lb-slot {
-      width: 16px;
-      height: 16px;
-      border-radius: 3px;
-      border: 1px solid rgba(232, 197, 106, 0.2);
-      background: rgba(0, 0, 0, 0.32);
-      overflow: hidden;
-      flex: none;
-    }
-    .leaderboard-row .lb-slot.got {
-      border-color: hsl(var(--h), 85%, 62%);
-      background: hsl(var(--h), 60%, 40%);
-    }
-    .leaderboard-row .lb-slot img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      display: block;
-    }
-    .leaderboard-row .lb-roster-count {
-      color: var(--dim);
-      font-family: var(--font-display);
-      font-size: 9px;
-      margin-left: 4px;
-      font-variant-numeric: tabular-nums;
-    }
-    .leaderboard-empty {
-      color: var(--dim);
-      font-size: 12px;
-      text-align: center;
-      padding: 10px 0;
-    }
-    .score-register {
-      margin-bottom: 16px;
-      padding-bottom: 16px;
-      border-bottom: 2px solid var(--edge-hi);
-      display: none;
-      flex-direction: column;
-      gap: 10px;
-      align-items: center;
-    }
-    .score-register.visible {
-      display: flex;
-    }
-    .score-register-msg {
-      margin: 0;
-      color: var(--gold);
-      font-size: 13px;
-      line-height: 1.6;
-      text-align: center;
-    }
-    .score-register input {
-      width: min(280px, 90%);
-      padding: 10px 12px;
-      border-radius: var(--radius);
-      border: 2px solid var(--edge-hi);
-      background: var(--bg);
-      color: var(--ink);
-      font-family: var(--font-body);
-      font-size: 16px; /* iOSの入力時ズームを防ぐ下限 */
-      box-shadow: inset 2px 2px 0 var(--edge-lo);
-    }
-    .score-register input:focus {
-      outline: 2px solid var(--gold);
-      outline-offset: 2px;
-      border-color: var(--gold);
-    }
-    .score-register button {
-      padding: 12px 22px;
-      border-radius: var(--radius);
-      border: 2px solid var(--gold);
-      background: var(--panel);
-      color: var(--gold);
-      font-family: var(--font-display);
-      font-size: 11px;
-      box-shadow: var(--bevel-up);
-    }
-    .score-register button:active:not(:disabled) {
-      box-shadow: var(--bevel-down);
-      transform: translateY(2px);
-    }
-    .score-register button:disabled {
-      opacity: 0.4;
-      border-color: var(--edge-hi);
-      color: var(--dim);
-    }
-    .rank-submit-status {
-      margin: 0;
-      font-size: 12px;
-      color: var(--dim);
-      min-height: 1.2em;
-    }
-    /* CLEAR時のみ表示。スコア登録フォームとランキング表の間に置く */
-    .share-x-block {
-      display: none;
-      flex-direction: column;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 18px;
-    }
-    .share-x-block.visible {
-      display: flex;
-    }
-    .share-x-btn {
-      padding: 12px 24px;
-      border-radius: var(--radius);
-      border: 2px solid var(--gold);
-      background: var(--panel);
-      color: var(--gold);
-      font-family: var(--font-display);
-      font-size: 12px;
-      box-shadow: var(--bevel-up);
-    }
-    .share-x-btn:active {
-      box-shadow: var(--bevel-down);
-      transform: translateY(2px);
-    }
-    .share-x-status {
-      margin: 0;
-      font-size: 12px;
-      color: var(--dim);
-      min-height: 1.2em;
-      text-align: center;
-    }
-    .xid-preview {
-      width: min(280px, 90%);
-      min-height: 1.4em;
-      font-size: 12px;
-      display: none;
-      align-items: center;
-      gap: 6px;
-    }
-    .xid-preview.visible {
-      display: flex;
-    }
-    .xid-preview.xid-loading {
-      color: var(--dim);
-    }
-    .xid-preview.xid-error {
-      color: var(--danger);
-    }
-    .xid-preview.xid-found {
-      color: var(--hp);
-    }
-    .xid-preview .xid-avatar {
-      width: 22px;
-      height: 22px;
-      border-radius: var(--radius);
-      object-fit: cover;
-      background: var(--panel);
-    }
-    .xid-preview a {
-      color: var(--dim);
-    }
-
-    /* ===== 全画面で遊ぶボタン（ホーム画面への追加を案内。F19相当）=====
-       見た目・挙動は姉妹作「咲耶Nounラリー」と揃えてある。ラリー側の色は
-       このゲームのトークン(--gold/--magenta/--panel/--dim)へ置き換えている */
-    .fsbtn {
-      font: inherit;
-      font-family: var(--font-body);
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      padding: 10px 18px;
-      border-radius: var(--radius);
-      cursor: pointer;
-      border: 2px solid var(--gold);
-      background: var(--panel);
-      color: var(--gold);
-      box-shadow: var(--bevel-up);
-    }
-    /* orientationOverlay内はgap:10pxで間隔が付くため、ここでの上マージンは
-       .wrap直下に置くタイトル画面側(#fsPlayButton)にだけ足す */
-    #fsPlayButton {
-      margin-top: 14px;
-    }
-    .fsbtn:active {
-      box-shadow: var(--bevel-down);
-      transform: translateY(2px);
-    }
-    .fsbtn[hidden] {
-      display: none;
-    }
-
-    /* ホーム画面への追加を案内する幕。iOSの共有シートは撮れないので図で描く。
-       実機のスクショはiOSの版が上がるたびに古くなるが、図なら古くならない */
-    #fsHomeModal {
-      position: fixed;
-      inset: 0;
-      z-index: 120;
-      display: none;
-      background: rgba(6, 7, 12, 0.86);
-      -webkit-backdrop-filter: blur(3px);
-      backdrop-filter: blur(3px);
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-      padding: 20px 14px;
-      box-sizing: border-box;
-    }
-    #fsHomeModal.show {
-      display: block;
-    }
-    #fsHomeBox {
-      max-width: 420px;
-      margin: 0 auto;
-      background: var(--panel);
-      color: var(--ink);
-      border: 2px solid var(--gold);
-      border-radius: var(--radius);
-      box-shadow: var(--bevel-up);
-      padding: 18px 16px 16px;
-      box-sizing: border-box;
-      text-align: center;
-      font-family: var(--font-body);
-    }
-    #fsHomeBox h3 {
-      margin: 0 0 10px;
-      font-family: var(--font-display);
-      font-size: 14px;
-      letter-spacing: 0.04em;
-      color: var(--gold);
-    }
-    .fs-home-lead {
-      margin: 0 0 16px;
-      font-size: 12.5px;
-      line-height: 1.8;
-      color: var(--dim);
-    }
-    .fs-home-lead b {
-      color: var(--magenta);
-    }
-    .fs-home-step {
-      display: flex;
-      gap: 11px;
-      align-items: flex-start;
-      text-align: left;
-      padding: 12px 0;
-      border-top: 1px solid var(--edge-hi);
-    }
-    .fs-home-step-n {
-      flex: 0 0 22px;
-      height: 22px;
-      border-radius: var(--radius);
-      background: var(--gold);
-      color: var(--bg);
-      font: 800 11px/22px ui-monospace, monospace;
-      text-align: center;
-    }
-    .fs-home-step-t {
-      flex: 1 1 auto;
-      font-size: 12.5px;
-      line-height: 1.7;
-    }
-    .fs-home-step-t em {
-      font-style: normal;
-      color: var(--gold);
-      font-weight: 800;
-    }
-    .fs-home-step-t svg {
-      display: block;
-      margin: 8px 0 0;
-      width: 100%;
-      max-width: 210px;
-      height: auto;
-    }
-    .fs-home-close {
-      margin-top: 14px;
-      font: inherit;
-      font-family: var(--font-body);
-      font-size: 13px;
-      font-weight: 800;
-      width: 100%;
-      padding: 11px;
-      border-radius: var(--radius);
-      cursor: pointer;
-      border: 2px solid var(--gold);
-      background: var(--panel);
-      color: var(--gold);
-      box-shadow: var(--bevel-up);
-      box-sizing: border-box;
-    }
-    .fs-home-close:active {
-      box-shadow: var(--bevel-down);
-      transform: translateY(2px);
-    }
-    .fs-home-foot {
-      margin: 12px 0 0;
-      font-size: 11.5px;
-      line-height: 1.7;
-      color: var(--dim);
-    }
-    .fs-home-note {
-      margin: 10px 0 0;
-      font-size: 11.5px;
-      line-height: 1.7;
-      color: var(--danger);
-    }
-    .fs-home-note[hidden] {
-      display: none;
-    }
-
-    /* 走査線と明滅は「動き」なので、reduced-motion指定時は止める */
-    @media (prefers-reduced-motion: reduce) {
-      .hud-start {
-        animation: none;
-      }
-      #joyhint {
-        animation: none;
-        opacity: 0.8;
-      }
-    }
-  </style>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/naonao1971/sakuya-kit@0.1.0/kit.css" />
 </head>
 <body>
-  <div class="wrap">
+  <!-- 共通UI（スタート・ポーズ・操作ボタン・スティック・ランキング・縦持ち案内・全画面の案内）は
+       sakuya-kit が足す。ここに置くのはゲーム画面の canvas だけ -->
+  <div class="sk-wrap">
     <canvas id="game" width="960" height="540" aria-label="Scramble tunnel game"></canvas>
-    <div id="orientationOverlay" class="orientation-overlay" role="alert" aria-live="assertive">
-      <p class="orientation-overlay-title">SAKUYA SCRAMBLE</p>
-      <p class="orientation-overlay-sub">- RESCUE 11 CNP -</p>
-      <div class="orientation-overlay-icon">📱⤾</div>
-      <p>横向きにしてね ⌐◨-◨</p>
-      <button class="fsbtn" type="button" hidden>🎮 全画面で遊ぶ</button>
-    </div>
-    <button id="pauseButton" class="pause-button" type="button" aria-label="一時停止" style="display: none;">⏸</button>
-    <!-- クリア画面の映像。canvasへ drawImage() で描くだけなので画面には出さないが、
-         display:none にすると描画が止まる環境があるため視覚的に隠すに留める。
-         preload="none": クリアまで到達しないプレイヤーに通信を強いないため、
-         実際の読み込みはスタート押下時(unlockClearVideo)まで遅らせる -->
-    <video id="clearVideo" class="clear-video" playsinline preload="none" aria-hidden="true"></video>
-    <video id="gameOverVideo" class="clear-video" playsinline preload="none" aria-hidden="true"></video>
-    <div id="gyroStatus" class="status"></div>
-    <div class="controls-bottom" aria-hidden="false">
-      <div id="firePad" class="fire-pad" aria-label="発射ボタン">
-        <button id="touchFire" class="touch-btn touch-fire" type="button" aria-label="バルカン発射">X</button>
-        <button id="touchBomb" class="touch-btn touch-bomb" type="button" aria-label="爆弾投下">💣</button>
-        <button id="autoFireToggle" class="touch-btn auto-fire-toggle hold-toggle" type="button" aria-label="自動連射:オン(長押しでオフ)">🔫</button>
-        <button id="muteToggle" class="touch-btn auto-fire-toggle hold-toggle on" type="button" aria-label="効果音:オン(長押しでオフ)">🔊</button>
-        <button id="fullscreenToggle" class="touch-btn auto-fire-toggle hold-toggle" type="button" aria-label="全画面表示:オフ(長押しでオン)" style="display: none;">⛶</button>
-      </div>
-    </div>
   </div>
 
-  <!-- 移動用バーチャルスティック。画面の左半分を押すと指の下に出る -->
-  <div id="joyhint" aria-hidden="true"></div>
-  <div id="joyhintcap" aria-hidden="true">左側を押したまま倒す</div>
-  <div id="joyring" aria-hidden="true"></div>
-  <div id="joyknob" aria-hidden="true"></div>
+  <script type="module">
+    // 共通部分は sakuya-kit（https://github.com/naonao1971/sakuya-kit）。版を上げるときは
+    // kit.css と同じ番号にそろえ、CHANGELOG を読んでから実機で確かめる
+    import { createKit } from "https://cdn.jsdelivr.net/gh/naonao1971/sakuya-kit@0.1.0/kit.js";
 
-  <section id="leaderboard" class="leaderboard" aria-label="ランキング TOP10">
-    <div id="scoreRegisterForm" class="score-register">
-      <p class="score-register-msg">TOP10入り！ニックネームを登録してください</p>
-      <input id="rankNickname" type="text" placeholder="ニックネーム（必須）" maxlength="20" autocomplete="off" />
-      <input id="rankXid" type="text" placeholder="XのユーザーID（任意・@なし）" maxlength="20" autocomplete="off" />
-      <div id="rankXidPreview" class="xid-preview"></div>
-      <button id="rankSubmitBtn" type="button">登録する</button>
-      <p id="rankSubmitStatus" class="rank-submit-status"></p>
-    </div>
-    <div id="shareXBlock" class="share-x-block">
-      <button id="shareXButton" class="share-x-btn" type="button">シェア</button>
-      <p id="shareXStatus" class="share-x-status"></p>
-    </div>
-    <h2 class="leaderboard-title">🏆 TOP10 ランキング</h2>
-    <ol id="leaderboardList" class="leaderboard-list"></ol>
-  </section>
-
-  <!-- ガイドラインの「公式を騙らない」に対応する表記。タイトルとOGPにIP名を
-       掲げているので、非公式であることは常時読める場所に置いておく -->
-  <footer class="site-footer">
-    本作は CryptoNinja / CryptoNinja Partners の非公式ファンアートです
-  </footer>
-
-  <div id="fsHomeModal" role="dialog" aria-modal="true" aria-labelledby="fsHomeTitle" hidden>
-    <div id="fsHomeBox">
-      <h3 id="fsHomeTitle">&#x1F3AE; 全画面で遊ぶ</h3>
-      <p class="fs-home-lead">iPhone では、<b>ホーム画面に追加</b>すると<br>
-        Safari のアドレスバーなしで遊べます。</p>
-
-      <div class="fs-home-step">
-        <div class="fs-home-step-n">1</div>
-        <div class="fs-home-step-t">画面の下にある <em>共有</em> ボタンをタップ
-          <svg viewBox="0 0 210 78" role="img" aria-label="画面下のツールバーにある共有ボタン">
-            <rect x="1" y="1" width="208" height="76" rx="9" fill="#120c18"
-                  stroke="rgba(242,233,239,.18)"/>
-            <rect x="12" y="14" width="186" height="30" rx="6" fill="#241b2d"/>
-            <text x="105" y="34" text-anchor="middle" font-size="11"
-                  font-family="ui-monospace,monospace" fill="rgba(242,233,239,.45)">
-              sakuya.naoblock.jp</text>
-            <rect x="12" y="52" width="186" height="16" rx="5" fill="#241b2d"/>
-            <circle cx="105" cy="60" r="13" fill="none" stroke="#ff2d9b" stroke-width="2"/>
-            <path d="M105 54 v9 M101 57 l4-4 4 4" stroke="#ff2d9b" stroke-width="1.8"
-                  fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-            <rect x="99" y="62" width="12" height="2" fill="#ff2d9b"/>
-          </svg>
-        </div>
-      </div>
-
-      <div class="fs-home-step">
-        <div class="fs-home-step-n">2</div>
-        <div class="fs-home-step-t">出てきた一覧から <em>ホーム画面に追加</em> をタップ
-          <svg viewBox="0 0 210 78" role="img" aria-label="共有シートのホーム画面に追加の項目">
-            <rect x="1" y="1" width="208" height="76" rx="9" fill="#120c18"
-                  stroke="rgba(242,233,239,.18)"/>
-            <rect x="12" y="10" width="186" height="17" rx="5" fill="#241b2d"/>
-            <rect x="22" y="16" width="72" height="5" rx="2.5" fill="rgba(242,233,239,.22)"/>
-            <rect x="12" y="31" width="186" height="20" rx="5" fill="#2e2338"
-                  stroke="#ff2d9b" stroke-width="1.6"/>
-            <rect x="21" y="36" width="10" height="10" rx="2" fill="none"
-                  stroke="#ff2d9b" stroke-width="1.5"/>
-            <path d="M26 39 v4 M24 41 h4" stroke="#ff2d9b" stroke-width="1.4"
-                  stroke-linecap="round"/>
-            <text x="39" y="45" font-size="9.5" font-family="sans-serif" fill="#f2e9ef">
-              ホーム画面に追加</text>
-            <rect x="12" y="55" width="186" height="17" rx="5" fill="#241b2d"/>
-            <rect x="22" y="61" width="58" height="5" rx="2.5" fill="rgba(242,233,239,.22)"/>
-          </svg>
-        </div>
-      </div>
-
-      <div class="fs-home-step">
-        <div class="fs-home-step-n">3</div>
-        <div class="fs-home-step-t"><em>Webアプリとして開く</em> をオンにして <em>追加</em>
-          <svg viewBox="0 0 210 78" role="img" aria-label="Webアプリとして開くをオンにして追加">
-            <rect x="1" y="1" width="208" height="76" rx="9" fill="#120c18"
-                  stroke="rgba(242,233,239,.18)"/>
-            <rect x="12" y="10" width="120" height="16" rx="5" fill="#241b2d"/>
-            <rect x="21" y="15" width="46" height="6" rx="3" fill="rgba(242,233,239,.28)"/>
-            <rect x="146" y="9" width="52" height="18" rx="9" fill="#ff2d9b"/>
-            <text x="172" y="22" text-anchor="middle" font-size="10"
-                  font-family="sans-serif" font-weight="700" fill="#150f1a">追加</text>
-            <rect x="12" y="38" width="186" height="28" rx="6" fill="#2e2338"
-                  stroke="#ff2d9b" stroke-width="1.6"/>
-            <text x="22" y="56" font-size="9.5" font-family="sans-serif" fill="#f2e9ef">
-              Webアプリとして開く</text>
-            <rect x="158" y="45" width="30" height="16" rx="8" fill="#49e0d8"/>
-            <circle cx="180" cy="53" r="6" fill="#ffffff"/>
-          </svg>
-        </div>
-      </div>
-
-      <p class="fs-home-note" id="fsHomeNote" hidden></p>
-      <p class="fs-home-foot">追加したら、<b>ホーム画面のアイコンからゲームを起動</b>してください。<br>
-        Safari から開いたままでは全画面になりません。</p>
-      <button class="fs-home-close" type="button" id="fsHomeClose">閉じる</button>
-    </div>
-  </div>
-
-  <script>
     const canvas = document.getElementById("game");
     const ctx = canvas.getContext("2d");
-    const gyroStatus = document.getElementById("gyroStatus");
-    const orientationOverlay = document.getElementById("orientationOverlay");
-    // 縦持ちだと自機の当たり判定がほぼ視認できないサイズまで縮むため、
-    // スマホ縦持ち中はオーバーレイで案内しゲームを一時停止する（PCでは出さない）
-    const portraitMQ = window.matchMedia("(orientation: portrait)");
-    let orientationBlocked = false;
 
     // --- ランキング (Google スプレッドシート連携) ---
-    // デプロイ後の Apps Script Web App URL をここに設定してください（apps-script.gs 参照）
+    // 共通 GAS（sakuya-kit/gas/apps-script.gs）の Web App URL。?game=scramble で
+    // このタイトルのシート("ranking")を読み書きする（旧版の GAS でもそのまま動く）
     const GAS_URL = "https://script.google.com/macros/s/AKfycby-UoKAfHw4eBULVb37tQzwPEhNm65B_HUktd9Sh0ZxMdOdmnRHdub0NeeXUCAqg8bG/exec";
-    const leaderboardPanel = document.getElementById("leaderboard");
-    const leaderboardList = document.getElementById("leaderboardList");
-    const scoreRegisterForm = document.getElementById("scoreRegisterForm");
-    const rankNicknameInput = document.getElementById("rankNickname");
-    const rankXidInput = document.getElementById("rankXid");
-    const rankSubmitBtn = document.getElementById("rankSubmitBtn");
-    const rankSubmitStatus = document.getElementById("rankSubmitStatus");
-    const rankXidPreview = document.getElementById("rankXidPreview");
-    const shareXBlock = document.getElementById("shareXBlock");
-    const shareXButton = document.getElementById("shareXButton");
-    const shareXStatus = document.getElementById("shareXStatus");
-    // タッチ操作対応端末をモバイルとみなし、ランキング登録時に記録する
-    const isMobileDevice = "ontouchstart" in window || navigator.maxTouchPoints > 0;
-    let leaderboardCache = [];
-    let scoreSubmitted = false;
-    // X ID の検証状態: 未入力なら常に登録可、入力中は検証が完了(found)するまで登録不可
-    let xidVerifyState = "empty"; // "empty" | "loading" | "found" | "error"
-    let xidVerifyToken = 0; // 直前の検証より新しい結果だけ反映するための連番
 
-    function escapeHTML(s) {
-      return String(s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-    }
+    const kit = createKit({
+      gameId: "scramble",
+      title: "SAKUYA SCRAMBLE",
+      subtitle: "- RESCUE 11 CNP -",
+      gasUrl: GAS_URL,
+      cnp: true,
+      // 死亡時の爆発やクリア後の演出は結果画面の裏でも動かす（update() が止まると明滅も止まる）
+      updateWhenOver: true,
+      controls: {
+        stick: true,
+        // スタート時に自動で傾き操作へ（対応端末のみ）。🕹️ の長押しでスティックに戻せる
+        gyro: true,
+        buttons: [
+          // 短く押す=バルカン、3秒押し続ける=レーザー
+          { id: "fire", label: "X", ariaLabel: "バルカン発射", keys: ["KeyX"], primary: true,
+            onPress: () => startLaserCharge(), onRelease: () => stopLaserCharge() },
+          { id: "bomb", label: "💣", ariaLabel: "爆弾投下", keys: ["KeyZ"], onPress: () => dropBomb() },
+        ],
+        // タッチでは左の親指がスティック、右の親指がXで埋まり、バルカンを連打する余裕がない。
+        // タッチ端末では既定でバルカンを自動連射し、Xはレーザーのチャージ専用として空ける
+        autoFire: { interval: 10, onFire: () => autoFireShot() },
+      },
+      cutscenes: {
+        // どちらも1回だけ流す。CLEAR は流し終えたら静止画へ戻る
+        clear: { src: "clear.mp4", image: "image02png.png" },
+        gameOver: { src: "gameover.mp4" },
+      },
+      resultScreen: {
+        // CLEAR 画面: メイン画像の左右の余白に、今回救出した11体を額縁のように並べる
+        decorate(g, { kind, rect }) {
+          if (kind === "clear" && rect) drawClearRoster(rect.x, rect.w);
+        },
+      },
+      share: {
+        when: "clear",
+        url: "https://sakuya.naoblock.jp/",
+        fileName: "sakuya-scramble-clear.png",
+        text: () => buildShareText(),
+        image: () => buildShareCardCanvas(),
+      },
+      help: {
+        mobile: "スタートを押すと、対応端末では傾き操作に切り替わります（右下のXでバルカン発射）",
+        pc: "PCはキーボード、スマホは画面左側のスティックと右下のボタンで操作できます（Pキーで一時停止）",
+        playing: "開始しました。画面の左側を押したまま倒すと移動できます",
+      },
+      onStart: () => startGame(),
+      // ポーズ・タブ切替・通知の割り込みで入力が消えたら、レーザーの溜めも解く
+      onInputReset: () => releaseLaserChargeOnHit(),
+      update: () => update(),
+      render: () => render(),
+    });
+    window.kit = kit; // デバッグ用
 
-    // ランキング1行ぶんの救出ロスター。canvas側と同じ「額縁が埋まる」見え方を
-    // DOMで再現する。救出キャラを持たない過去の記録では行ごと出さない
-    function rescueRosterHTML(rescued) {
-      const raw = String(rescued == null ? "" : rescued).trim();
-      if (!raw) return "";
-      const got = new Set(
-        raw.split(",").map((s) => Number(s)).filter((v) => Number.isInteger(v) && v >= 1 && v <= cnpChars.length)
-      );
-      if (!got.size) return "";
-      const slots = cnpChars
-        .map((ch) => {
-          const on = got.has(ch.index + 1);
-          // 画像が未配置でも救出済みかどうかが読めるよう、枠の地色もキャラ色にする。
-          // 画像が404のときは onerror で img だけ消え、色の付いた額が残る
-          // 元画像を256x256へ縮小済み(以前は2048x2048のまま16pxのアイコンに
-          // 使っていたため、モバイル回線で読み込み/デコードが重く、間に合わず
-          // シルエットの地色だけが残って見える不具合があった)。
-          // 十分小さくなったのでloading="lazy"も外し、確実に読み込ませる
-          const img = on ? `<img src="assets/cnp/${ch.id}.png" alt="" onerror="this.remove()">` : "";
-          return `<span class="lb-slot${on ? " got" : ""}" style="--h:${ch.hue}" title="${escapeHTML(ch.label)}">${img}</span>`;
-        })
-        .join("");
-      return `<span class="lb-roster">${slots}<span class="lb-roster-count">${got.size}/${cnpChars.length}</span></span>`;
-    }
-
-    function renderLeaderboard() {
-      if (!leaderboardList) return;
-      if (!leaderboardCache.length) {
-        leaderboardList.innerHTML = '<li class="leaderboard-empty">まだ記録がありません</li>';
-        return;
-      }
-      // 表示順: 順位 / ニックネーム / Xの名称 / スコア
-      leaderboardList.innerHTML = leaderboardCache
-        .slice(0, 10)
-        .map((r, i) => {
-          const rank = i + 1;
-          const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `${rank}`;
-          const xid = String(r.xid || "").replace(/^@/, "").trim();
-          const xPart =
-            xid && /^[A-Za-z0-9_]{1,15}$/.test(xid)
-              ? `<img class="lb-avatar" src="https://unavatar.io/x/${encodeURIComponent(xid)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
-                 <a class="lb-xlink" href="https://x.com/${encodeURIComponent(xid)}" target="_blank" rel="noopener noreferrer">@${escapeHTML(xid)}</a>`
-              : "";
-          const deviceIcon = r.device === "モバイル" ? "📱" : r.device === "PC" ? "💻" : "";
-          return `<li class="leaderboard-row">
-              <span class="lb-rank">${medal}</span>
-              <span class="lb-name">${deviceIcon ? `<span class="lb-device" title="${escapeHTML(r.device)}">${deviceIcon}</span> ` : ""}${escapeHTML(r.nickname)}</span>
-              <span class="lb-xname">${xPart}</span>
-              <span class="lb-score">${Math.floor(r.score)}</span>
-              ${rescueRosterHTML(r.rescued)}
-            </li>`;
-        })
-        .join("");
-    }
-
-    function loadLeaderboard() {
-      if (!GAS_URL) {
-        renderLeaderboard();
-        return;
-      }
-      fetch(GAS_URL, { cache: "no-store" })
-        .then((r) => r.json())
-        .then((d) => {
-          leaderboardCache = (d.records || []).slice().sort((a, b) => b.score - a.score);
-          renderLeaderboard();
-        })
-        .catch(() => renderLeaderboard());
-    }
-
-    function qualifiesForTop10(score) {
-      if (leaderboardCache.length < 10) return true;
-      return score > leaderboardCache[9].score;
-    }
-
-    function setLeaderboardVisible(visible) {
-      if (!leaderboardPanel) return;
-      leaderboardPanel.classList.toggle("visible", !!visible);
-    }
-
-    // モバイルだと登録フォームがcanvasより下にあり、スクロールしないと存在に
-    // 気づけない。かといって即スクロールするとcanvas上のCLEAR画像/スコアを
-    // 見る前に飛んでしまうので、クリア演出を見せてから誘導する
-    const SCORE_FORM_SCROLL_DELAY_MS = 2000;
-    let _scoreFormScrollTimer = null;
-
-    function scrollToScoreRegisterForm() {
-      if (!scoreRegisterForm || !scoreRegisterForm.classList.contains("visible")) return;
-      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      scoreRegisterForm.scrollIntoView({
-        behavior: reduceMotion ? "auto" : "smooth",
-        block: "center"
-      });
-      // preventScroll: フォーカスによる瞬間スクロールが上のスムーズ移動と
-      // 競合しないように。iOSはユーザー操作を伴わないfocus()ではキーボードを
-      // 開かない仕様なので、あくまで開けば得という位置づけ
-      if (rankNicknameInput) {
-        try {
-          rankNicknameInput.focus({ preventScroll: true });
-        } catch (e) {
-          /* preventScroll未対応ブラウザなどは無視 */
-        }
-      }
-    }
-
-    function showScoreRegisterForm() {
-      if (!scoreRegisterForm) return;
-      scoreRegisterForm.classList.add("visible");
-      rankNicknameInput.value = "";
-      rankXidInput.value = "";
-      rankSubmitStatus.textContent = "";
-      xidVerifyState = "empty";
-      setXidPreview(null, "");
-      updateSubmitAvailability();
-      clearTimeout(_scoreFormScrollTimer);
-      _scoreFormScrollTimer = setTimeout(scrollToScoreRegisterForm, SCORE_FORM_SCROLL_DELAY_MS);
-    }
-
-    function hideScoreRegisterForm() {
-      if (!scoreRegisterForm) return;
-      // 2秒待たずに再スタートされた場合、ゲーム中に誘導スクロールが
-      // 割り込まないよう必ず取り消す(resetGame()からも呼ばれる)
-      clearTimeout(_scoreFormScrollTimer);
-      _scoreFormScrollTimer = null;
-      scoreRegisterForm.classList.remove("visible");
-    }
-
-    // ニックネーム入力済み、かつ(X IDが空 または 検証済みfound)のときだけ登録可能にする
-    function updateSubmitAvailability() {
-      if (!rankSubmitBtn) return;
-      const nickname = rankNicknameInput.value.trim();
-      const xidOk = xidVerifyState === "empty" || xidVerifyState === "found";
-      rankSubmitBtn.disabled = !nickname || !xidOk;
-    }
-
-    function setXidPreview(mode, html) {
-      if (!rankXidPreview) return;
-      rankXidPreview.className = "xid-preview" + (mode ? " visible xid-" + mode : "");
-      rankXidPreview.innerHTML = html || "";
-    }
-
-    // unavatar.io へのアバター読み込み成否で、Xアカウントが実在するかを簡易検証する
-    function verifyXid(rawXid) {
-      const username = String(rawXid || "").replace(/^@/, "").trim();
-      xidVerifyToken++;
-      const token = xidVerifyToken;
-
-      if (!username) {
-        xidVerifyState = "empty";
-        setXidPreview(null, "");
-        updateSubmitAvailability();
-        return;
-      }
-      if (!/^[A-Za-z0-9_]{1,15}$/.test(username)) {
-        xidVerifyState = "error";
-        setXidPreview("error", "形式エラー：半角英数字・アンダースコアのみ、最大15文字で入力してください");
-        updateSubmitAvailability();
-        return;
-      }
-
-      xidVerifyState = "loading";
-      setXidPreview("loading", "確認中...");
-      updateSubmitAvailability();
-
-      const img = new Image();
-      img.onload = () => {
-        if (token !== xidVerifyToken) return; // 途中で入力が変わっていたら無視
-        xidVerifyState = "found";
-        setXidPreview(
-          "found",
-          `<img src="https://unavatar.io/x/${encodeURIComponent(username)}" alt="" class="xid-avatar">` +
-            `<a href="https://x.com/${encodeURIComponent(username)}" target="_blank" rel="noopener noreferrer">@${escapeHTML(username)}</a>` +
-            `<span>を確認しました</span>`
-        );
-        updateSubmitAvailability();
-      };
-      img.onerror = () => {
-        if (token !== xidVerifyToken) return;
-        xidVerifyState = "error";
-        setXidPreview("error", "このXアカウントの名称を取得できませんでした。IDを確認してください");
-        updateSubmitAvailability();
-      };
-      img.src = "https://unavatar.io/x/" + encodeURIComponent(username);
-    }
-
-    if (rankXidInput) {
-      // 入力中は再検証されるまで登録不可にする（値を空にした場合のみ即座に登録可へ戻す）
-      rankXidInput.addEventListener("input", () => {
-        const username = rankXidInput.value.trim();
-        if (!username) {
-          xidVerifyState = "empty";
-          setXidPreview(null, "");
-        } else {
-          xidVerifyState = "loading";
-          setXidPreview(null, "");
-        }
-        updateSubmitAvailability();
-      });
-      rankXidInput.addEventListener("blur", () => verifyXid(rankXidInput.value));
-    }
-    if (rankNicknameInput) {
-      rankNicknameInput.addEventListener("input", updateSubmitAvailability);
-    }
-
-    if (rankSubmitBtn) {
-      rankSubmitBtn.addEventListener("click", () => {
-        const nickname = rankNicknameInput.value.trim();
-        if (!nickname) {
-          rankSubmitStatus.textContent = "ニックネームを入力してください";
-          rankNicknameInput.focus();
-          return;
-        }
-        if (xidVerifyState !== "empty" && xidVerifyState !== "found") {
-          rankSubmitStatus.textContent = "XのIDを確認できるまで登録できません";
-          rankXidInput.focus();
-          return;
-        }
-        const xid = rankXidInput.value.trim().replace(/^@/, "");
-        rankSubmitBtn.disabled = true;
-        rankSubmitStatus.textContent = "登録中...";
-        // 救出キャラは「このプレイで救出した」1始まりのID。通算の収集状況ではなく
-        // その記録のプレイで取った顔ぶれを残す（スコアと同じ単位に揃える）
-        const rescuedIds = [];
-        for (let i = 0; i < state.rescuedChars.length; i++) if (state.rescuedChars[i]) rescuedIds.push(i + 1);
-        const record = {
-          nickname,
-          xid,
-          score: Math.floor(state.score),
-          created: Date.now(),
-          device: isMobileDevice ? "モバイル" : "PC",
-          rescued: rescuedIds.join(",")
-        };
-        if (!GAS_URL) {
-          rankSubmitStatus.textContent = "ランキング機能が未設定です（GAS_URL 未設定）";
-          rankSubmitBtn.disabled = false;
-          return;
-        }
-        fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "add", record }) })
-          .then((r) => r.json())
-          .then((d) => {
-            if (d.success) {
-              rankSubmitStatus.textContent = "登録しました！";
-              hideScoreRegisterForm();
-              loadLeaderboard();
-            } else {
-              rankSubmitStatus.textContent = "登録に失敗しました: " + (d.error || "");
-              updateSubmitAvailability();
-            }
-          })
-          .catch((e) => {
-            rankSubmitStatus.textContent = "通信エラー: " + e.message;
-            updateSubmitAvailability();
-          });
-      });
-    }
-
-    if (shareXButton) {
-      shareXButton.addEventListener("click", async () => {
-        shareXButton.disabled = true;
-        shareXStatus.textContent = "";
-        const text = buildShareText();
-        try {
-          const card = buildShareCardCanvas();
-          const blob = await new Promise((resolve) => card.toBlob(resolve, "image/png"));
-          const file = blob ? new File([blob], "sakuya-scramble-clear.png", { type: "image/png" }) : null;
-          if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
-            // 対応端末はOS標準の共有シートへ画像とテキストをそのまま渡す。
-            // Xを選べばそのまま画像付きで投稿できる
-            await navigator.share({ text, files: [file] });
-          } else if (file) {
-            // Xの投稿画面はURL経由での画像自動添付に対応していない(X側の仕様)。
-            // 画像をダウンロードしつつ投稿画面を開き、手動で添付してもらう
-            const url = URL.createObjectURL(file);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = "sakuya-scramble-clear.png";
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            setTimeout(() => URL.revokeObjectURL(url), 30000);
-            openXIntent(text);
-            shareXStatus.textContent = "画像を保存しました。投稿画面に添付してください";
-          } else {
-            openXIntent(text);
-          }
-        } catch (e) {
-          // ユーザーが共有シートをキャンセルした場合もAbortErrorでrejectされるので、
-          // それはエラー扱いにしない
-          if (e && e.name !== "AbortError") {
-            shareXStatus.textContent = "画像の作成に失敗しました。テキストのみ投稿します";
-            openXIntent(text);
-          }
-        } finally {
-          shareXButton.disabled = false;
-        }
-      });
-    }
-
-    const firePad = document.getElementById("firePad");
-    const pauseButton = document.getElementById("pauseButton");
-    const controlsBottom = document.querySelector(".controls-bottom");
-    const touchFire = document.getElementById("touchFire");
-    const touchBomb = document.getElementById("touchBomb");
-    const autoFireToggle = document.getElementById("autoFireToggle");
-    const muteToggle = document.getElementById("muteToggle");
-    const fullscreenToggle = document.getElementById("fullscreenToggle");
-
-    // タッチでは左の親指がスティック、右の親指がXで埋まり、バルカンを連打する
-    // 余裕がない。タッチデバイスでは既定でバルカンを自動連射し、Xボタンはレーザーのチャージ専用として
-    // 空ける。チャージ中/ビーム発射中は自動連射を止め、競合しないようにする
-    let autoFireEnabled = isMobileDevice;
-    let autoFireTimer = 0;
-    const AUTO_FIRE_INTERVAL = 10; // frames (60fpsで約6発/秒)
-
-    // gyro tilt controls: when available, replace the on-screen d-pad with device tilt.
-    // baseline is calibrated to however the phone is being held right when the game starts.
-    const gyro = {
-      supported: false,   // real orientation data has been observed at least once
-      listening: false,   // the deviceorientation listener has been attached (permission granted)
-      active: false,      // currently driving ship movement (toggle-able)
-      calibrated: false,
-      baseline: { x: 0, y: 0 },
-      deadzoneDeg: 4,     // degrees of tilt ignored around the baseline (dead zone)
-      maxDeg: 28,         // degrees of tilt for full deflection
-      sensitivity: 0.55,  // scales the analog thrust vs. a full digital key-press, for finer control
-      userChoiceMade: false // once the player uses the toggle button, スタート stops auto-switching modes
-    };
-
-    // current screen rotation (0/90/180/270) so tilt axes can be remapped to how the phone is actually held
-    function getScreenAngle() {
-      if (window.screen && window.screen.orientation && typeof window.screen.orientation.angle === "number") {
-        return window.screen.orientation.angle;
-      }
-      if (typeof window.orientation === "number") return window.orientation;
-      return 0;
-    }
-
-    // rotates the device's tilt into screen-relative x (left/right) and y (forward/back)
-    //
-    // beta/gamma をそのまま軸の入れ替えで使うと、横持ちで画面を立てて構える
-    // ＝実際のプレイ姿勢がちょうど gamma の定義域(-90〜90)の端に当たり、
-    // オイラー角の特異点(ジンバルロック)に入ってしまう。この姿勢では
-    //   ・上下入力が端に張り付いて効かない
-    //   ・垂直をわずか1°跨いだだけで beta が180°反転する
-    // ため、機体が最大推力で暴走したり勝手に上へ飛んでいく。
-    //
-    // そこで重力ベクトル(端末座標系から見た世界の鉛直上方向)を求めてから
-    // 画面の向きに合わせて回す方式にする。これは特異点を持たず連続で、
-    // 通常の傾き範囲では従来と同じ値になるので操作感は変わらない。
-    // なお重力の向きは方位(alpha)には依存しないため alpha は不要。
-    function computeScreenTilt(beta, gamma) {
-      const rad = Math.PI / 180;
-      const b = (beta || 0) * rad;
-      const g = (gamma || 0) * rad;
-      const cB = Math.cos(b), sB = Math.sin(b);
-      const cG = Math.cos(g), sG = Math.sin(g);
-      // ZXY回転行列の第3行 = 端末座標系で見た鉛直上方向
-      const gx = -cB * sG;
-      const gy = sB;
-      const gz = cB * cG;
-      // 端末座標 -> 画面座標（画面の回転角ぶん回す）
-      const th = ((((getScreenAngle() % 360) + 360) % 360)) * rad;
-      const cT = Math.cos(th), sT = Math.sin(th);
-      const sx = gx * cT - gy * sT;
-      const sy = gx * sT + gy * cT;
-      return {
-        // 画面の右側を下げる向きを正にする（右に傾ける=右へ進む）
-        x: -Math.asin(Math.max(-1, Math.min(1, sx))) / rad,
-        // 画面の上端を起こす向きを正にする（トレイの上に球を乗せた感覚）
-        y: Math.atan2(sy, gz) / rad
-      };
-    }
-
-    // -180..180 をまたいだときに巨大な差分が出ないようにする
-    function shortestAngleDelta(a, b) {
-      let d = (a - b) % 360;
-      if (d > 180) d -= 360;
-      if (d < -180) d += 360;
-      return d;
-    }
-
-    // maps a tilt offset (in degrees) to a smooth -1..1 analog value, with a dead zone near the baseline
-    function normalizeTiltAxis(deltaDeg) {
-      const abs = Math.abs(deltaDeg);
-      if (abs <= gyro.deadzoneDeg) return 0;
-      const t = Math.min(1, (abs - gyro.deadzoneDeg) / (gyro.maxDeg - gyro.deadzoneDeg));
-      return (deltaDeg < 0 ? -1 : 1) * t;
-    }
-
-    function applyGyroTilt(x, y) {
-      if (!gyro.calibrated) {
-        gyro.baseline.x = x;
-        gyro.baseline.y = y;
-        gyro.calibrated = true;
-        return;
-      }
-      state.input.gyroX = normalizeTiltAxis(shortestAngleDelta(x, gyro.baseline.x));
-      state.input.gyroY = normalizeTiltAxis(shortestAngleDelta(y, gyro.baseline.y));
-    }
-
-    // 傾き操作が実際に効いている間は、移動用スティックを受け付けない
-    // (両方の入力が足し合わさると、左側に触れただけで自機が流れるため)
-    let stickEnabled = true;
-    function setStickEnabled(enabled) {
-      stickEnabled = enabled;
-      if (!enabled) releaseStick();
-    }
-
-    // Disabling the stick must wait for a *real* deviceorientation event — granting
-    // permission does not mean the device actually reports tilt data (many Android
-    // devices without a gyroscope, or desktop "mobile mode", grant permission
-    // instantly but never fire the event). Disabling on activation alone left players
-    // with neither the stick nor working tilt controls.
-    let _gyroFallbackTimer = null;
-
-    function activateGyroControls() {
-      gyro.active = true;
-      state.input.gyroX = 0;
-      state.input.gyroY = 0;
-      recalibrateGyro();
-      updateGyroToggleLabel();
-      if (gyro.supported) {
-        // we've already confirmed real tilt data arrives (e.g. re-enabled via the toggle)
-        setStickEnabled(false);
-        updateGyroStatus("ジャイロ操作中：端末を傾けて移動します（現在の向きが基準）");
-      } else {
-        // keep the d-pad visible until the first real event confirms tilt actually works
-        setStickEnabled(true);
-        updateGyroStatus("ジャイロを確認中...端末を傾けてみてください（反応がなければ画面の左側を押したまま倒して移動してください）");
-        clearTimeout(_gyroFallbackTimer);
-        _gyroFallbackTimer = setTimeout(() => {
-          if (gyro.active && !gyro.supported) {
-            updateGyroStatus("ジャイロが検出できませんでした。画面の左側を押したまま倒して移動してください");
-            deactivateGyroControls();
-          }
-        }, 1500);
-      }
-    }
-
-    function deactivateGyroControls() {
-      clearTimeout(_gyroFallbackTimer);
-      gyro.active = false;
-      state.input.gyroX = 0;
-      state.input.gyroY = 0;
-      setStickEnabled(true);
-      updateGyroStatus("キー/タッチ操作に切り替えました");
-      updateGyroToggleLabel();
-    }
-
-    function handleOrientation(e) {
-      if (e.beta == null || e.gamma == null) return;
-      const justConfirmed = !gyro.supported;
-      gyro.supported = true;
-      if (!gyro.active) return;
-      if (justConfirmed) {
-        // first real tilt data while active: now it's safe to hide the d-pad
-        clearTimeout(_gyroFallbackTimer);
-        setStickEnabled(false);
-        updateGyroStatus("ジャイロ操作中：端末を傾けて移動します（現在の向きが基準）");
-      }
-      const tilt = computeScreenTilt(e.beta, e.gamma);
-      applyGyroTilt(tilt.x, tilt.y);
-    }
-
-    function recalibrateGyro() {
-      gyro.calibrated = false;
-    }
-
-    async function requestGyroPermission() {
-      if (typeof window.DeviceOrientationEvent === "undefined") return false;
-      if (typeof DeviceOrientationEvent.requestPermission === "function") {
-        try {
-          const result = await DeviceOrientationEvent.requestPermission();
-          return result === "granted";
-        } catch (e) {
-          return false;
-        }
-      }
-      return true; // no explicit permission needed (Android, older iOS)
-    }
-
-    // requests permission (first time only) and attaches the listener; does not itself toggle control
-    async function ensureGyroListening() {
-      if (gyro.listening) return true;
-      const granted = await requestGyroPermission();
-      if (!granted) return false;
-      gyro.listening = true;
-      window.addEventListener("deviceorientation", handleOrientation);
-      // rotating the phone mid-game changes what "neutral" tilt means, so recalibrate on rotation
-      window.addEventListener("orientationchange", recalibrateGyro);
-      if (window.screen && window.screen.orientation) {
-        window.screen.orientation.addEventListener("change", recalibrateGyro);
-      }
-      return true;
-    }
-
-    async function enableGyroIfAvailable() {
-      const ok = await ensureGyroListening();
-      if (ok) activateGyroControls();
-    }
-
-    async function toggleGyroControls() {
-      gyro.userChoiceMade = true;
-      if (gyro.active) {
-        deactivateGyroControls();
-        return;
-      }
-      const ok = await ensureGyroListening();
-      if (ok) {
-        activateGyroControls();
-      } else {
-        updateGyroStatus("ジャイロを有効化できませんでした。キー/タッチで操作してください");
-      }
-    }
-
-    function updateGyroToggleLabel() {
-      if (!gyroToggleButton) return;
-      // icon-only: 🕹️ = tap to switch to key/touch, 📱 = tap to switch to tilt.
-      // スタート初回はジャイロが既定モードで自動的に有効化されるため、ユーザーが
-      // まだ切替操作をしていない間(userChoiceMade === false)はジャイロ中と
-      // 同じ🕹️を出しておく。実際に有効化される前のスタート画面がいきなり
-      // 「タップでジャイロに切替」(📱)を出すのはこの前提と矛盾するため
-      const showAsGyroMode = gyro.active || !gyro.userChoiceMade;
-      gyroToggleButton.textContent = showAsGyroMode ? "🕹️" : "📱";
-      gyroToggleButton.setAttribute(
-        "aria-label",
-        showAsGyroMode ? "キー/タッチ操作に切り替え" : "傾き操作に切り替え"
-      );
-    }
-
-    const startButton = document.createElement("button");
-    startButton.id = "startButton";
-    startButton.type = "button";
-    startButton.className = "start hud-start";
-    startButton.textContent = "スタート";
-    document.querySelector(".wrap").appendChild(startButton);
-
-    // 全画面で遊ぶボタン(F19相当。姉妹作「咲耶Nounラリー」と見た目・挙動を揃える)。
-    // startButtonと違いcanvas上の座標には追従させず、キャンバスの下に通常のフローで置く
-    const fsPlayButton = document.createElement("button");
-    fsPlayButton.id = "fsPlayButton";
-    fsPlayButton.type = "button";
-    fsPlayButton.className = "fsbtn";
-    fsPlayButton.textContent = "🎮 全画面で遊ぶ";
-    fsPlayButton.hidden = true;
-    document.querySelector(".wrap").appendChild(fsPlayButton);
-
-    // switches between gyro tilt control and key/touch control, without re-prompting for permission.
-    // sits at the inner end of the right-bottom button group, icon-only so it doesn't crowd it.
-    const gyroToggleButton = document.createElement("button");
-    gyroToggleButton.id = "gyroToggleButton";
-    gyroToggleButton.type = "button";
-    gyroToggleButton.className = "touch-btn gyro-toggle hold-toggle";
-    gyroToggleButton.textContent = "🕹️"; // ジャイロが既定モードのため。実際の表示は updateGyroToggleLabel() が上書きする
-    gyroToggleButton.setAttribute("aria-label", "傾き操作とキー/タッチ操作を切り替え");
-    gyroToggleButton.style.display = "none"; // only shown once we know the device might support it
-    firePad.appendChild(gyroToggleButton);
+    // X ボタン（レーザーの溜め具合をボタンの縁の光で見せる）
+    const touchFire = kit.buttonEl("fire");
+    const SFX = createGameSfx(kit.sfx);
 
     // pilot portrait sprite sheet: 5 expressions (①通常 ②被弾 ③怒り ④苦痛 ⑤決意), drawn onto the game canvas
     const pilotImg = new Image();
@@ -1694,114 +138,6 @@
     // 読み込み前・再生失敗時のフォールバックとして残す
     const clearImg = new Image();
     clearImg.src = "image02png.png";
-
-    // CLEAR / GAME OVER の演出動画。どちらも扱いは同じなので生成関数にまとめる。
-    //  - preload="none" にしてあり、読み込みはスタート押下(unlock)まで遅らせる
-    //  - iOSはユーザー操作を経ていない動画の音声再生を拒むので、スタートの
-    //    タップで一度再生→即停止して解錠しておく(SFX.unlock()と同じ理屈)
-    //  - 音は動画側のものを使い、再生できたときはゲーム内ジングルを鳴らさない
-    //  - 読み込めない/再生できない場合は従来の表示にフォールバックする
-    function createCutsceneVideo(el, src, loop, fallbackSfx) {
-      let failed = false;
-      let unlocked = false;
-      let playing = false;
-      if (el) {
-        el.loop = !!loop;
-        el.addEventListener("error", () => { failed = true; playing = false; });
-        el.addEventListener("ended", () => { playing = false; });
-      }
-      return {
-        el,
-        unlock() {
-          if (!el || unlocked) return;
-          unlocked = true;
-          if (!el.src) el.src = src;
-          el.muted = true; // 解錠のための再生は無音で通す
-          const p = el.play();
-          if (p && p.then) {
-            p.then(() => { el.pause(); el.currentTime = 0; }).catch(() => {});
-          }
-        },
-        // 音付きで再生し、拒否されたら無音で映像だけ出して音はジングルで補う
-        // (iOSの低電力モード等で起こりうる)。
-        // 効果音オフの間は動画の音も鳴らさない
-        play() {
-          if (!el || failed || !el.src) { playing = false; fallbackSfx(); return; }
-          try { el.currentTime = 0; } catch (e) { /* 未読み込みなら無視 */ }
-          el.muted = SFX.muted;
-          playing = true;
-          const p = el.play();
-          if (p && p.catch) {
-            p.catch(() => {
-              el.muted = true;
-              const q = el.play();
-              if (q && q.catch) q.catch(() => { failed = true; playing = false; });
-              fallbackSfx();
-            });
-          }
-        },
-        stop() {
-          if (!el) return;
-          playing = false;
-          el.pause();
-          try { el.currentTime = 0; } catch (e) { /* 未読み込みなら無視 */ }
-        },
-        // 描画に使えるコマを持っているか(HAVE_CURRENT_DATA以上)
-        hasFrame() { return !!el && !failed && el.readyState >= 2 && el.videoWidth > 0; },
-        // 途切れずに流し切れる見込みがあるか(HAVE_FUTURE_DATA以上)。
-        // 1回きりの演出は、間に合っていないなら挟まず従来表示にしたいので使う
-        canPlayThrough() { return !!el && !failed && el.readyState >= 3 && el.videoWidth > 0; },
-        isPlaying() { return playing; },
-        // 再生の途中で効果音トグルが切り替わったときに追従させる
-        syncMuted() { if (el) el.muted = SFX.muted; },
-      };
-    }
-
-    // どちらも1回だけ流し、流し終えたら従来の表示(CLEARは静止画、
-    // GAME OVERは文字)に戻る
-    const clearVideo = createCutsceneVideo(
-      document.getElementById("clearVideo"), "clear.mp4", false, () => SFX.clear());
-    const gameOverVideo = createCutsceneVideo(
-      document.getElementById("gameOverVideo"), "gameover.mp4", false, () => SFX.gameOver());
-
-    function unlockCutsceneVideos() {
-      clearVideo.unlock();
-      gameOverVideo.unlock();
-    }
-
-    // 効果音オフの間は動画の音も鳴らさない。再生中に切り替えられた場合も追従させる
-    function syncCutsceneVideoMute() {
-      clearVideo.syncMuted();
-      gameOverVideo.syncMuted();
-    }
-
-    // CLEAR演出: 動画を1回だけ流し、流し終えたら元の静止画へ戻す。
-    // 読み込みが間に合っていなければ動画は挟まず、従来どおり静止画を出す
-    function beginClearCutscene() {
-      if (!clearVideo.canPlayThrough()) { SFX.clear(); return; }
-      clearVideo.play();
-    }
-
-    // ゲームオーバー演出: 動画を1回だけ流し、終わったら従来のGAME OVER表示に戻る。
-    // 死ぬたびに6秒待たされるのは苦痛なので、タップ/キー操作でいつでも飛ばせる。
-    // 読み込みが間に合っていなければ演出を挟まず、従来どおり即GAME OVERを出す
-    let gameOverCutsceneActive = false;
-    function beginGameOverCutscene() {
-      if (!gameOverVideo.canPlayThrough()) { SFX.gameOver(); return; }
-      gameOverCutsceneActive = true;
-      gameOverVideo.play();
-    }
-    function endGameOverCutscene() {
-      if (!gameOverCutsceneActive) return;
-      gameOverCutsceneActive = false;
-      gameOverVideo.stop();
-    }
-    function isGameOverCutscenePlaying() {
-      return gameOverCutsceneActive && gameOverVideo.isPlaying() && gameOverVideo.hasFrame();
-    }
-    if (gameOverVideo.el) {
-      gameOverVideo.el.addEventListener("ended", endGameOverCutscene);
-    }
 
     // title illustration shown on the start screen, before the player presses スタート
     const titleImg = new Image();
@@ -1871,29 +207,17 @@
       { rank: 5, score: 1500, heal: 14, weight: 1 }
     ];
 
-    // 11体ぶんのスロット。hue はプレースホルダとオーラの色、tier は CNP_TIERS の添字。
-    // id は assets/cnp/<id>.png のファイル名(拡張子なし)、label は救出時の
+    // 11体ぶんのスロット。キャラの絵・名前・色は sakuya-kit の正典（kit.cnp.chars）を使い、
+    // このゲームではレア度（tier = CNP_TIERS の添字）だけを足す。label は救出時の
     // ボーナス表示とランキングロスターのツールチップに出るキャラ名
-    const cnpChars = [
-      { hue: 196, tier: 0, id: "cnp_sotai_leelee",   label: "リーリー" },
-      { hue: 150, tier: 0, id: "cnp_sotai_mitama",   label: "ミタマ" },
-      { hue: 46,  tier: 0, id: "cnp_sotai_narukami", label: "ナルカミ" },
-      { hue: 24,  tier: 0, id: "cnp_sotai_orochi",   label: "オロチ" },
-      { hue: 220, tier: 1, id: "cnp_sotai_luna",     label: "ルナ" },
-      { hue: 92,  tier: 1, id: "cnp_sotai_yama",     label: "ヤマ" },
-      { hue: 322, tier: 1, id: "cnp_sotai_makami",   label: "マカミ" },
-      { hue: 262, tier: 2, id: "cnp_sotai_towa",     label: "トワ" },
-      { hue: 174, tier: 2, id: "cnp_sotai_setsuna",  label: "セツナ" },
-      { hue: 292, tier: 3, id: "cnp_sotai_ema",      label: "エマ" },
-      { hue: 352, tier: 4, id: "cnp_sotai_taruto",   label: "タルト" }
-    ].map((def, i) => {
-      const ch = { id: def.id, index: i, label: def.label, hue: def.hue, tier: CNP_TIERS[def.tier], img: new Image(), ready: false };
-      // 画像が無い場合は onerror が飛ぶだけで、ready:false のままプレースホルダに落ちる
-      ch.img.onload = () => { ch.ready = ch.img.naturalWidth > 0; };
-      ch.img.onerror = () => { ch.ready = false; };
-      ch.img.src = "assets/cnp/" + ch.id + ".png";
-      return ch;
-    });
+    const CNP_TIER_OF = {
+      cnp_sotai_leelee: 0, cnp_sotai_mitama: 0, cnp_sotai_narukami: 0, cnp_sotai_orochi: 0,
+      cnp_sotai_luna: 1, cnp_sotai_yama: 1, cnp_sotai_makami: 1,
+      cnp_sotai_towa: 2, cnp_sotai_setsuna: 2,
+      cnp_sotai_ema: 3,
+      cnp_sotai_taruto: 4
+    };
+    const cnpChars = kit.cnp.chars.map((ch) => Object.assign(ch, { tier: CNP_TIERS[CNP_TIER_OF[ch.id] || 0] }));
 
     // 未収集のキャラを優遇する倍率。レア度の重みをそのまま使うと最上位が0.57%で、
     // 同じキャラばかり出て収集が進まない。5倍優遇でも「レアほど出にくい」関係
@@ -2194,20 +518,8 @@
 
     function resetGame() {
       state.running = true;
-      state.paused = false;
-      pauseButton.classList.remove("paused");
-      pauseButton.textContent = "⏸";
-      pauseButton.setAttribute("aria-label", "一時停止");
       state.score = 0;
       state.speed = 2.6;
-      // 再スタート時に演出動画を止めて先頭へ戻す
-      clearVideo.stop();
-      endGameOverCutscene();
-      gameOverVideo.stop();
-      autoFireTimer = 0;
-      scoreSubmitted = false;
-      hideScoreRegisterForm();
-      if (shareXStatus) shareXStatus.textContent = "";
       state.frame = 0;
       state.ship.x = 130;
       state.ship.y = canvas.height / 2;
@@ -2268,10 +580,6 @@
       state.portrait.hitTimer = 0;
       state.dying.active = false;
       state.dying.timer = 0;
-      state.input.gyroX = 0;
-      state.input.gyroY = 0;
-      releaseStick();
-      joyTaught = false; // 新しいプレイでは、倒すまで指の置き場所の影を出し直す
       // ここが抜けていると、パート2(バルカン回避)中に力尽きた直後の再スタートが
       // ステージ1のトンネルへ戻らず、古い goalHold 状態のまま再開してしまう
       state.goalHold.active = false;
@@ -2283,187 +591,71 @@
       seedColumns();
     }
 
+    // スタート（kit のスタートボタン・Enter/Space から kit が呼ぶ）
     function startGame() {
       resetGame();
       state.started = true;
-      updateGyroStatus("開始しました。画面の左側を押したまま倒すと移動できます");
       // begin stage with wide intro
       beginStage();
     }
 
-    function updateGyroStatus(message) {
-      gyroStatus.textContent = message;
+    // 1プレイの終わり。結果画面・演出動画・ジングル・ランキング登録は kit が受け持つ
+    function finishRun(cleared) {
+      const rescued = [];
+      for (let i = 0; i < state.rescuedChars.length; i++) if (state.rescuedChars[i]) rescued.push(i + 1);
+      kit.gameOver({ score: Math.floor(state.score), cleared, rescued });
     }
 
-    // ── 効果音 ────────────────────────────────────────────────────────────
-    // 音声ファイルは持たず、Web Audio で矩形波とノイズを合成する。80年代
-    // アーケードのチップチューンそのものの音になり、配信容量もライセンスの
-    // 制約も増えない。音色は下の数値を変えるだけで調整できる。
+    // 効果音。音源（矩形波とノイズの合成・ミュート・解錠）は kit.sfx が持ち、
+    // ここではこのゲーム固有の音だけを足す。クリア/ゲームオーバーのジングルは kit が鳴らす
     //
     // 演出は3階層（頻度と強度は逆相関。全部を鳴らすと何も特別でなくなる）:
     //   弱 毎秒        バルカン        極小音・ピッチを散らす
     //   中 ときどき    被弾/取得/開始   中音量
     //   強 まれ        レーザー/終了    専用の音
-    const SFX = {
-      ctx: null,
-      master: null,
-      muted: false,
-      _noiseBuf: null,
-
-      // AudioContext はユーザー操作を経ないと鳴らせない(特にiOS)。
-      // スタートボタンのタップから呼んで起こす。
-      // resume()は非同期なので、Promiseを返して呼び出し側でawaitさせる。
-      // 呼びっぱなしで直後にstartGame()を実行すると、初回だけ再開が間に合わず
-      // ステージ開始のジングルが無音のまま終わる(2回目以降は既にrunning状態
-      // なのでこの分岐を通らず、問題なく鳴る)
-      unlock() {
-        if (!SFX.ctx) {
-          const AC = window.AudioContext || window.webkitAudioContext;
-          if (!AC) return Promise.resolve();
-          SFX.ctx = new AC();
-          SFX.master = SFX.ctx.createGain();
-          SFX.master.gain.value = SFX.muted ? 0 : 0.5;
-          SFX.master.connect(SFX.ctx.destination);
-        }
-        if (SFX.ctx.state === "suspended") {
-          return SFX.ctx.resume().catch(() => {});
-        }
-        return Promise.resolve();
-      },
-
-      setMuted(m) {
-        SFX.muted = m;
-        if (SFX.master) SFX.master.gain.value = m ? 0 : 0.5;
-      },
-
-      // 単発のトーン。type は square/sawtooth/triangle など
-      tone({ freq = 440, to = null, dur = 0.12, type = "square", gain = 0.2, delay = 0 }) {
-        if (!SFX.ctx || SFX.muted) return;
-        const t0 = SFX.ctx.currentTime + delay;
-        const osc = SFX.ctx.createOscillator();
-        const g = SFX.ctx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, t0);
-        if (to !== null) osc.frequency.exponentialRampToValueAtTime(Math.max(1, to), t0 + dur);
-        // 立ち上がりを一瞬で、減衰を指数で。矩形波の「カチッ」とした質感が出る
-        g.gain.setValueAtTime(0.0001, t0);
-        g.gain.exponentialRampToValueAtTime(gain, t0 + 0.005);
-        g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-        osc.connect(g).connect(SFX.master);
-        osc.start(t0);
-        osc.stop(t0 + dur + 0.02);
-      },
-
-      // 爆発・ヒット用のホワイトノイズ。バッファは一度だけ作って使い回す
-      noise({ dur = 0.2, gain = 0.2, delay = 0, filterFrom = 1800, filterTo = 200 }) {
-        if (!SFX.ctx || SFX.muted) return;
-        if (!SFX._noiseBuf) {
-          const len = SFX.ctx.sampleRate * 1.0;
-          const buf = SFX.ctx.createBuffer(1, len, SFX.ctx.sampleRate);
-          const d = buf.getChannelData(0);
-          for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-          SFX._noiseBuf = buf;
-        }
-        const t0 = SFX.ctx.currentTime + delay;
-        const src = SFX.ctx.createBufferSource();
-        src.buffer = SFX._noiseBuf;
-        src.loop = true;
-        const lp = SFX.ctx.createBiquadFilter();
-        lp.type = "lowpass";
-        lp.frequency.setValueAtTime(filterFrom, t0);
-        lp.frequency.exponentialRampToValueAtTime(Math.max(40, filterTo), t0 + dur);
-        const g = SFX.ctx.createGain();
-        g.gain.setValueAtTime(gain, t0);
-        g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-        src.connect(lp).connect(g).connect(SFX.master);
-        src.start(t0);
-        src.stop(t0 + dur + 0.02);
-      },
-
-      // --- 弱: 毎秒鳴る音 -------------------------------------------------
-      // 自動連射は10フレーム間隔＝毎秒6発。同じ音を6回/秒鳴らすと必ず耳障りに
-      // なるので、音量を絞りピッチを散らして「機関砲の連なり」に溶かす
-      vulcan() {
-        const f = 820 + Math.random() * 140;
-        SFX.tone({ freq: f, to: f * 0.45, dur: 0.05, type: "square", gain: 0.045 });
-      },
-
-      // --- 中: ときどき鳴る音 ---------------------------------------------
-      hit() {
-        SFX.noise({ dur: 0.22, gain: 0.28, filterFrom: 1400, filterTo: 120 });
-        SFX.tone({ freq: 180, to: 60, dur: 0.2, type: "square", gain: 0.16 });
-      },
-      pickup() {
-        // 上昇する2音＝取得の定番。短く歯切れよく
-        SFX.tone({ freq: 660, dur: 0.07, type: "square", gain: 0.15 });
-        SFX.tone({ freq: 990, dur: 0.09, type: "square", gain: 0.15, delay: 0.07 });
-      },
-      bonus() {
-        SFX.tone({ freq: 523, dur: 0.08, type: "square", gain: 0.14 });
-        SFX.tone({ freq: 659, dur: 0.08, type: "square", gain: 0.14, delay: 0.08 });
-        SFX.tone({ freq: 784, dur: 0.14, type: "square", gain: 0.14, delay: 0.16 });
-      },
-      bomb() {
-        SFX.noise({ dur: 0.3, gain: 0.22, filterFrom: 900, filterTo: 80 });
-      },
-      stage() {
-        SFX.tone({ freq: 392, dur: 0.1, type: "square", gain: 0.16 });
-        SFX.tone({ freq: 523, dur: 0.1, type: "square", gain: 0.16, delay: 0.1 });
-        SFX.tone({ freq: 784, dur: 0.22, type: "square", gain: 0.16, delay: 0.2 });
-      },
-
-      // --- 強: まれにしか鳴らない音 ---------------------------------------
-      _chargeNodes: null,
-      charge() {
-        // 溜め: 低音から上昇していく。3秒のチャージ時間に合わせる。
-        // 途中で指を離した場合(＝バルカン)に鳴り続けないよう、停止できる形で持つ
-        SFX.stopCharge();
-        if (!SFX.ctx || SFX.muted) return;
-        const t0 = SFX.ctx.currentTime;
+    function createGameSfx(base) {
+      const S = base;
+      S.vulcan = () => base.shot();
+      S.bomb = () => base.explode();
+      S._chargeNodes = null;
+      // 溜め: 低音から上昇していく。3秒のチャージ時間に合わせる。
+      // 途中で指を離した場合(＝バルカン)に鳴り続けないよう、停止できる形で持つ
+      S.charge = () => {
+        S.stopCharge();
+        if (!S.ctx || S.muted) return;
+        const t0 = S.ctx.currentTime;
         const dur = 3.0;
-        const osc = SFX.ctx.createOscillator();
-        const g = SFX.ctx.createGain();
+        const osc = S.ctx.createOscillator();
+        const g = S.ctx.createGain();
         osc.type = "sawtooth";
         osc.frequency.setValueAtTime(110, t0);
         osc.frequency.exponentialRampToValueAtTime(880, t0 + dur);
         g.gain.setValueAtTime(0.0001, t0);
         g.gain.exponentialRampToValueAtTime(0.06, t0 + 0.08);
-        osc.connect(g).connect(SFX.master);
+        osc.connect(g).connect(S.master);
         osc.start(t0);
         osc.stop(t0 + dur + 0.05);
-        SFX._chargeNodes = { osc, g };
-      },
-      stopCharge() {
-        const n = SFX._chargeNodes;
-        SFX._chargeNodes = null;
-        if (!n || !SFX.ctx) return;
+        S._chargeNodes = { osc, g };
+      };
+      S.stopCharge = () => {
+        const n = S._chargeNodes;
+        S._chargeNodes = null;
+        if (!n || !S.ctx) return;
         try {
-          const t = SFX.ctx.currentTime;
+          const t = S.ctx.currentTime;
           // 急に切るとプツッと鳴るので、ごく短いフェードで落とす
           n.g.gain.cancelScheduledValues(t);
           n.g.gain.setValueAtTime(Math.max(0.0001, n.g.gain.value), t);
           n.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
           n.osc.stop(t + 0.06);
         } catch (e) { /* すでに停止済みなら無視 */ }
-      },
-      laser() {
-        SFX.tone({ freq: 1200, to: 180, dur: 0.5, type: "sawtooth", gain: 0.3 });
-        SFX.noise({ dur: 0.4, gain: 0.16, filterFrom: 3000, filterTo: 300 });
-      },
-      gameOver() {
-        // 下降する4音。アーケードの敗北ジングル
-        [392, 330, 262, 196].forEach((f, i) =>
-          SFX.tone({ freq: f, dur: 0.3, type: "square", gain: 0.2, delay: i * 0.18 })
-        );
-      },
-      clear() {
-        // 上昇するファンファーレ。最も稀なので一番派手にする
-        [523, 659, 784, 1047].forEach((f, i) =>
-          SFX.tone({ freq: f, dur: 0.24, type: "square", gain: 0.2, delay: i * 0.13 })
-        );
-        SFX.tone({ freq: 1319, dur: 0.5, type: "square", gain: 0.22, delay: 0.52 });
-      }
-    };
+      };
+      S.laser = () => {
+        S.tone({ freq: 1200, to: 180, dur: 0.5, type: "sawtooth", gain: 0.3 });
+        S.noise({ dur: 0.4, gain: 0.16, filterFrom: 3000, filterTo: 300 });
+      };
+      return S;
+    }
 
     function grantBaseBonus(color, x, y) {
       if (color === "red") {
@@ -2643,16 +835,10 @@
       const verticalThrust = 0.34;
       const horizontalThrust = 0.28;
       const drag = 0.985;
-      if (state.input.up) state.ship.vy -= verticalThrust;
-      if (state.input.down) state.ship.vy += verticalThrust;
-      if (state.input.left) state.ship.vx -= horizontalThrust;
-      if (state.input.right) state.ship.vx += horizontalThrust;
-      // gyro tilt: proportional (analog) thrust instead of full digital thrust, for finer control
-      state.ship.vx += horizontalThrust * gyro.sensitivity * state.input.gyroX;
-      state.ship.vy += verticalThrust * gyro.sensitivity * state.input.gyroY;
-      // バーチャルスティック: 倒した量に比例(最大でキー入力の STICK_SENSITIVITY 倍)
-      state.ship.vx += horizontalThrust * STICK_SENSITIVITY * state.input.stickX;
-      state.ship.vy += verticalThrust * STICK_SENSITIVITY * state.input.stickY;
+      // キー・スティック・傾きを合成した移動量（kit が効き具合をそろえている）
+      const axis = kit.input.axis();
+      state.ship.vx += horizontalThrust * axis.x;
+      state.ship.vy += verticalThrust * axis.y;
       state.ship.vx *= drag;
       state.ship.vy *= drag;
       state.ship.x += state.ship.vx;
@@ -3345,10 +1531,6 @@
       return `咲耶スクランブルをクリア！\nスコア ${score.toLocaleString()}\n救出 ${rescuedCount}/${cnpChars.length}\n#咲耶スクランブル`;
     }
 
-    function openXIntent(text) {
-      const params = new URLSearchParams({ text, url: "https://sakuya.naoblock.jp/" });
-      window.open(`https://twitter.com/intent/tweet?${params.toString()}`, "_blank", "noopener");
-    }
 
     // --- Mega HP (stage-once, full heal) ---
     function spawnMegaHp() {
@@ -3534,20 +1716,17 @@
     // レーザーのチャージ/ビーム発射中は自動連射を止める。stopLaserCharge()の
     // 「タップならバルカン」判定と競合しないよう、あくまで手動発射(startLaserCharge/
     // stopLaserCharge)とは別経路でfireVulcan()を呼ぶだけに留める
-    function updateAutoFire() {
-      if (!autoFireEnabled || !state.running || state.dying.active) return;
+    // 自動連射の間隔とオン/オフは kit（controls.autoFire）が持ち、撃つ瞬間にここが呼ばれる
+    function autoFireShot() {
+      if (!state.running || state.dying.active) return;
       if (state.fall.active && state.fall.landing.active) return; // 着陸チャレンジ中はバルカン停止
       if (state.laser.charging || state.laser.beam) return;
-      autoFireTimer++;
-      if (autoFireTimer < AUTO_FIRE_INTERVAL) return;
-      autoFireTimer = 0;
       fireVulcan();
     }
 
     function update() {
       // always advance global frame (keeps animations consistent) and caption timer
       state.frame++;
-      updateAutoFire();
       if (state.captionTimer > 0) state.captionTimer--;
       if (state.portrait.hitTimer > 0) state.portrait.hitTimer--;
 
@@ -3560,8 +1739,8 @@
         if (state.dying.timer >= state.dying.duration) {
           state.dying.active = false;
           state.gameOver = true;
-          // 音は動画側を使う。間に合わない/再生できない場合だけSFXに切り替わる
-          beginGameOverCutscene();
+          // 演出動画・ジングル・結果画面は kit が出す
+          finishRun(false);
         }
         return;
       }
@@ -3670,10 +1849,7 @@
             L.hoverTimer++;
             const horizontalThrust = 0.28;
             const drag = 0.985;
-            if (state.input.left) state.ship.vx -= horizontalThrust;
-            if (state.input.right) state.ship.vx += horizontalThrust;
-            state.ship.vx += horizontalThrust * gyro.sensitivity * state.input.gyroX;
-            state.ship.vx += horizontalThrust * STICK_SENSITIVITY * state.input.stickX;
+            state.ship.vx += horizontalThrust * kit.input.axis().x;
             state.ship.vx *= drag;
             state.ship.x += state.ship.vx;
             const row = state.fall.rows[Math.floor(state.ship.y)] || state.fall.rows[state.fall.rows.length - 1];
@@ -3695,10 +1871,7 @@
             // 横方向: 通常飛行と同じ操作感で、左右キー(ジャイロ含む)のみ反映
             const horizontalThrust = 0.28;
             const drag = 0.985;
-            if (state.input.left) state.ship.vx -= horizontalThrust;
-            if (state.input.right) state.ship.vx += horizontalThrust;
-            state.ship.vx += horizontalThrust * gyro.sensitivity * state.input.gyroX;
-            state.ship.vx += horizontalThrust * STICK_SENSITIVITY * state.input.stickX;
+            state.ship.vx += horizontalThrust * kit.input.axis().x;
             state.ship.vx *= drag;
             state.ship.x += state.ship.vx;
             const row = state.fall.rows[Math.floor(state.ship.y)] || state.fall.rows[state.fall.rows.length - 1];
@@ -3770,10 +1943,10 @@
             state.fall.active = false;
             state.running = false;
             state.cleared = true;
-            // 音は動画側を使う。再生できなかった場合だけ内部でSFX.clear()に切り替わる
-            beginClearCutscene();
             // クリアボーナス：残りHP x10 ポイント加算
             state.score += Math.max(0, state.ship.hp) * 10;
+            // 演出動画・ジングル・結果画面は kit が出す（ボーナス込みのスコアで）
+            finishRun(true);
           }
           return;
         }
@@ -4316,85 +2489,7 @@
         ctx.fillText(state.bonusText, 20, 104);
       }
 
-      if (state.gameOver) {
-        ctx.fillStyle = "rgba(0, 0, 0, 0.72)";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        if (isGameOverCutscenePlaying()) {
-          // 演出中は動画だけを見せ、GAME OVERの文字は流し終えてから出す。
-          // 枠の扱いはCLEAR画面と揃える(縦横比は動画の実寸から決める)
-          const v = gameOverVideo.el;
-          const vidW = 560;
-          const vidH = vidW * (v.videoHeight / v.videoWidth);
-          const vidX = (canvas.width - vidW) / 2;
-          const vidY = (canvas.height - vidH) / 2;
-          ctx.save();
-          ctx.shadowColor = "rgba(0,0,0,0.5)";
-          ctx.shadowBlur = 20;
-          ctx.drawImage(v, vidX, vidY, vidW, vidH);
-          ctx.restore();
-          ctx.strokeStyle = RETRO.gold;
-          ctx.lineWidth = 2;
-          ctx.strokeRect(vidX + 1, vidY + 1, vidW - 2, vidH - 2);
-          ctx.textAlign = "left";
-          return;
-        }
-        ctx.textAlign = "center";
-        ctx.fillStyle = RETRO.danger;
-        ctx.font = RETRO.font(34);
-        ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 16);
-        // 再スタートの導線は矩形波で明滅させる（アーケードのコンティニュー表示）
-        if (RETRO.blinkOn()) {
-          ctx.fillStyle = RETRO.ink;
-          ctx.font = RETRO.font(12);
-          ctx.fillText("PUSH START", canvas.width / 2, canvas.height / 2 + 32);
-        }
-        ctx.textAlign = "left";
-      }
-
-      if (state.cleared) {
-        ctx.fillStyle = "rgba(6, 20, 16, 0.75)";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        let textTop = canvas.height / 2 - 30;
-        // 動画が再生できていればそれを、無理なら従来の静止画を同じ枠で描く。
-        // drawImage()はHTMLVideoElementも画像と同じ引数で受け取れ、render()は
-        // 毎フレーム走るのでコマは自然に更新される
-        // 再生中だけ動画を描く。1回流し終えるとisPlaying()がfalseになり静止画へ戻る
-        const useVideo = clearVideo.isPlaying() && clearVideo.hasFrame();
-        const media = useVideo ? clearVideo.el
-                    : ((clearImg.complete && clearImg.naturalWidth) ? clearImg : null);
-        if (media) {
-          const natW = useVideo ? clearVideo.el.videoWidth  : clearImg.naturalWidth;
-          const natH = useVideo ? clearVideo.el.videoHeight : clearImg.naturalHeight;
-          const imgW = 560;
-          const imgH = imgW * (natH / natW);
-          const imgX = (canvas.width - imgW) / 2;
-          const imgY = 20;
-          ctx.save();
-          ctx.shadowColor = "rgba(0,0,0,0.5)";
-          ctx.shadowBlur = 20;
-          ctx.drawImage(media, imgX, imgY, imgW, imgH);
-          ctx.restore();
-          ctx.strokeStyle = RETRO.gold;
-          ctx.lineWidth = 2;
-          ctx.strokeRect(imgX + 1, imgY + 1, imgW - 2, imgH - 2);
-          textTop = imgY + imgH + 42;
-
-          // メイン画像の左右の余白に、今回救出した11体を額縁のように並べる
-          drawClearRoster(imgX, imgW);
-        }
-
-        ctx.textAlign = "center";
-        ctx.fillStyle = RETRO.gold;
-        ctx.font = RETRO.font(30);
-        ctx.fillText("CLEAR", canvas.width / 2, textTop);
-        ctx.fillStyle = RETRO.ink;
-        ctx.font = RETRO.font(14);
-        ctx.fillText(`SCORE ${String(Math.floor(state.score)).padStart(7, "0")}`, canvas.width / 2, textTop + 36);
-        // ここに "PUSH START" は描かない。真下に明滅するスタートボタン(DOM)が
-        // 出るため、CTAが2つ並んで衝突する。CLEAR画面の主役はスコア
-        ctx.textAlign = "left";
-      }
+      // GAME OVER / CLEAR の画面（演出動画・静止画・文字）は kit が共通の見た目で上に描く
 
       // arena countdown display (during stage intro countdown, before the floor opens)
       if (state.stageIntro && state.stageIntro.active && state.stageIntro.phase === 'countdown') {
@@ -4518,7 +2613,7 @@
       // クリア画面は image02png.png(メイン画像)が主役。コックピット窓が
       // 隣に残っていると視線が割れるので、クリア中は描かない。
       // ゲームオーバーの演出動画も同じ理由で主役なので、その間は描かない
-      if (state.cleared || isGameOverCutscenePlaying()) return;
+      if (state.cleared || (kit.cutscene.playing && kit.cutscene.kind === "gameOver")) return;
       if (!pilotImg.complete || !pilotImg.naturalWidth) return;
       const w = 156; // 120 * 1.3
       const h = 117; // 90 * 1.3
@@ -4577,196 +2672,8 @@
       }
     }
 
-    // maps a canvas-internal coordinate to CSS pixels within .wrap (canvas sits at
-    // its top-left corner), so the DOM button lines up with the drawn hint spot
-    // regardless of how much the canvas is scaled down on smaller screens
-    function positionStartButton() {
-      const rect = canvas.getBoundingClientRect();
-      const scaleX = rect.width / canvas.width;
-      const scaleY = rect.height / canvas.height;
-      let left = TITLE_HINT_X * scaleX;
-      let top = TITLE_HINT_Y * scaleY;
-      // ボタンは transform: translate(-50%, -50%) で中心合わせなので、
-      // アンカーが縁に近いと半分がキャンバスの外へ出る。表示倍率によって
-      // 縮尺が変わるぶん、座標を決め打ちで上げるのではなく実寸で内側へ
-      // クランプする（将来ボタンの大きさを変えても破綻しない）
-      const halfW = startButton.offsetWidth / 2;
-      const halfH = startButton.offsetHeight / 2;
-      const inset = 6; // 筐体ベゼルに食い込ませないための余白
-      left = Math.max(halfW + inset, Math.min(rect.width - halfW - inset, left));
-      top = Math.max(halfH + inset, Math.min(rect.height - halfH - inset, top));
-      startButton.style.left = `${left}px`;
-      startButton.style.top = `${top}px`;
-    }
-
-    // start button only shows while waiting to start: before the first スタート press,
-    // or after GAME OVER / CLEAR (where it doubles as the restart trigger)
-    let _startButtonWasShown = false;
-    // ホーム画面アプリとして起動中はfsPlayButton自体を出さない(setupFsButtons()がfalseにする)
-    let fsPlayButtonAvailable = true;
-    function updateStartButtonVisibility() {
-      // ゲームオーバー演出の再生中は出さない。流し終えてから従来どおり見せる
-      const shouldShow = (!state.started || state.gameOver || state.cleared) && !isGameOverCutscenePlaying();
-      startButton.style.display = shouldShow ? "" : "none";
-      // 縦持ち中はorientationOverlay側に同じボタンが出ているため、二重に見えないよう隠す
-      fsPlayButton.hidden = !(shouldShow && fsPlayButtonAvailable) || orientationBlocked;
-      // getBoundingClientRect() forces a layout reflow — only pay that cost on the
-      // rising edge (button just appeared), not every single frame it stays visible.
-      // window resize/orientationchange (below) keep it correctly positioned otherwise.
-      if (shouldShow && !_startButtonWasShown) positionStartButton();
-      _startButtonWasShown = shouldShow;
-    }
-
-    // 操作ボタン(ジャイロトグル/X/💣等)とスティックはプレイ中だけ出す。スタートボタンが
-    // 出ている間(タイトル・ゲームオーバー・クリア)は、押しても update() が動かず
-    // 反応しないうえ、タイトルイラストやクリア時のランキング登録フォームに
-    // position: fixed のまま重なってしまうため隠す。
-    // PCでは touchControlsEnabled が false のままなので従来通り常に非表示。
-    let touchControlsEnabled = false;
-    let _gameControlsWereShown = null;
-    function updateGameControlsVisibility() {
-      if (!touchControlsEnabled) return;
-      // 縦持ちの案内画面(orientationOverlay)が出ている間はゲームが止まっていて
-      // 押しても反応しないので、画面の下に取り残さないよう隠す
-      const shouldShow = state.started && !state.gameOver && !state.cleared && !orientationBlocked;
-      if (shouldShow === _gameControlsWereShown) return;
-      firePad.style.display = shouldShow ? "flex" : "none";
-      controlsBottom.style.display = shouldShow ? "flex" : "none";
-      if (shouldShow) positionFirePad();
-      // 押したままゲームオーバー/クリアになったら、スティックの輪を残さない
-      if (!shouldShow) releaseStick();
-      _gameControlsWereShown = shouldShow;
-    }
-
-    // ボタン群をキャンバスの右下の角の内側に合わせる(CSS側でノッチ/ホームバーの
-    // 逃げ幅より内側に来るよう max() で下限を掛けている)
-    const FIRE_PAD_INSET = 8;
-    function positionFirePad() {
-      const rect = canvas.getBoundingClientRect();
-      firePad.style.setProperty("--fire-pad-right", `${window.innerWidth - rect.right + FIRE_PAD_INSET}px`);
-      firePad.style.setProperty("--fire-pad-bottom", `${window.innerHeight - rect.bottom + FIRE_PAD_INSET}px`);
-    }
-
-    // canvasの実寸中心にtransform: translate(-50%,-50%)の基準点を合わせる。
-    // .wrap は下のgyroStatusテキスト分だけcanvasより背が高いため、CSSのtop:50%
-    // だけではcanvas自体の中心からズレる(startButtonと同じ理由でJS計算にしている)
-    function positionPauseButton() {
-      const rect = canvas.getBoundingClientRect();
-      pauseButton.style.left = `${rect.width / 2}px`;
-      pauseButton.style.top = `${rect.height / 2}px`;
-    }
-
-    // ポーズボタンはPC/スマホ問わずプレイ中だけ出す(操作ボタン等と違いPCでも使う)
-    let _pauseButtonWasShown = null;
-    function updatePauseButtonVisibility() {
-      const shouldShow = state.started && !state.gameOver && !state.cleared;
-      if (shouldShow === _pauseButtonWasShown) return;
-      pauseButton.style.display = shouldShow ? "" : "none";
-      if (shouldShow) positionPauseButton();
-      _pauseButtonWasShown = shouldShow;
-    }
-
-    function setPaused(p) {
-      if (!state.started || state.gameOver || state.cleared) return;
-      state.paused = p;
-      pauseButton.textContent = p ? "▶" : "⏸";
-      pauseButton.classList.toggle("paused", p);
-      pauseButton.setAttribute("aria-label", p ? "再開" : "一時停止");
-      if (p) resetAllInputs(); // 入力を離さずポーズすると、再開直後に押しっぱなし扱いになるのを防ぐ
-      updateGyroStatus(p ? "一時停止中" : "");
-    }
-    pauseButton.addEventListener("click", () => setPaused(!state.paused));
-
-    window.addEventListener("resize", () => {
-      if (_startButtonWasShown) positionStartButton();
-      if (orientationBlocked) positionOrientationOverlay();
-      if (_pauseButtonWasShown) positionPauseButton();
-      if (_gameControlsWereShown) positionFirePad();
-    });
-
-    // same left/top-at-canvas-origin mapping as positionStartButton, sized to
-    // the canvas's current rendered box so the overlay covers it exactly.
-    // heightではなくmin-heightにしているのは、実機のSafariはアドレスバー分
-    // ビューポートが縮み、canvasの高さ(=max-height:72vhで頭打ち)が中身
-    // (タイトル・案内文・全画面ボタン等)より低くなることがあるため。
-    // heightで固定すると中身が枠の外へはみ出して縁と重なって見える不具合が
-    // あった。min-heightなら中身に合わせて枠自体が伸びるので重ならない
-    function positionOrientationOverlay() {
-      const rect = canvas.getBoundingClientRect();
-      orientationOverlay.style.left = "0px";
-      orientationOverlay.style.top = "0px";
-      orientationOverlay.style.width = `${rect.width}px`;
-      orientationOverlay.style.height = "auto";
-      orientationOverlay.style.minHeight = `${rect.height}px`;
-    }
-
-    // PC (isMobileDevice === false) は縦長ウィンドウでも絶対に出さない。
-    // 表示中は loop() 内の update() をスキップしてゲームを一時停止し、
-    // 横向きに戻ったら自動的に再開する。
-    //
-    // 判定はイベント任せにせず loop() から毎フレーム呼び直す。iOS Safari の
-    // orientationchange はビューポート(=メディアクエリ)の更新より先に発火する
-    // ことがあり、その時点の古い値で orientationBlocked = true を書くと、実際は
-    // 横向きなのに二度と再評価されず、ゲームが一時停止のまま固まってしまう
-    // （ジャイロの傾き値は正常に届いているのに宇宙船が動かせない状態になる）。
-    let _orientationBlockedApplied = null;
-    function updateOrientationOverlay() {
-      const shouldBlock = isMobileDevice && portraitMQ.matches;
-      orientationBlocked = shouldBlock;
-      // DOM操作は状態が変わった時だけ。positionOrientationOverlay() は
-      // getBoundingClientRect() でリフローを起こすので毎フレームは走らせない
-      if (shouldBlock === _orientationBlockedApplied) return;
-      if (shouldBlock) positionOrientationOverlay();
-      orientationOverlay.classList.toggle("visible", shouldBlock);
-      _orientationBlockedApplied = shouldBlock;
-    }
-    // 即応性のためイベントも購読する（毎フレームの再評価が最終的な保険）。
-    // addEventListener 未対応の古い Safari では addListener にフォールバック
-    if (typeof portraitMQ.addEventListener === "function") {
-      portraitMQ.addEventListener("change", updateOrientationOverlay);
-    } else if (typeof portraitMQ.addListener === "function") {
-      portraitMQ.addListener(updateOrientationOverlay);
-    }
-    window.addEventListener("orientationchange", updateOrientationOverlay);
-    updateOrientationOverlay();
-
-    // ランキングパネルはタイトル画面・クリア画面・ゲームオーバー画面の下段に表示。
-    // クリア/ゲームオーバー直後、TOP10入りしていれば一度だけ登録フォームを開く。
-    function updateLeaderboardVisibility() {
-      // 演出中に出すと、登録フォームの2秒後の自動スクロールが動画に割り込む。
-      // 流し終えてから(あるいは飛ばされてから)出す
-      const cutscene = isGameOverCutscenePlaying();
-      const shouldShow = (!state.started || state.cleared || state.gameOver) && !cutscene;
-      setLeaderboardVisible(shouldShow);
-      if ((state.cleared || state.gameOver) && !cutscene && !scoreSubmitted) {
-        scoreSubmitted = true;
-        if (qualifiesForTop10(state.score)) {
-          showScoreRegisterForm();
-        } else {
-          hideScoreRegisterForm();
-        }
-      }
-      if (!shouldShow) {
-        hideScoreRegisterForm();
-      }
-    }
-
-    // Xシェアボタンは11体コンプリートの有無に関わらずCLEAR画面でのみ出す。
-    // GAME OVERは「救出したキャラクターの画像」の主役が無いため対象外
-    function updateShareXVisibility() {
-      if (!shareXBlock) return;
-      const cutscene = isGameOverCutscenePlaying();
-      shareXBlock.classList.toggle("visible", state.cleared && !cutscene);
-    }
-
     function render() {
-      updateStartButtonVisibility();
-      updateGameControlsVisibility();
-      updateJoyHint();
-      updatePauseButtonVisibility();
-      updateLeaderboardVisibility();
-      updateShareXVisibility();
-      if (!state.started) {
+      if (kit.phase === "title") {
         drawTitleScreen(); // 走査線は関数内で星空にだけ敷く
         return;
       }
@@ -4788,8 +2695,7 @@
       }
       // 走査線とビネットは「背景と洞窟」にだけ敷く。ここより後に描くものは
       // 一切削らない——アイテム画像やイラストの上に走査線が乗ると、
-      // レトロではなく単に低解像度に見えるため（既定の描画順は変えていないので
-      // 自機とアイテムの重なり順は従来どおり）
+      // レトロではなく単に低解像度に見えるため
       drawCrtOverlay();
       drawMegaHp();
       drawArenaBullets();
@@ -4803,30 +2709,7 @@
       drawLaser();
       drawHud();
       drawPilotPortrait();
-      // その回のHUD/ポートレートすべての上に被せる。最後に描くことで完全に覆う
-      if (state.paused) drawPauseOverlay();
-    }
-
-    function drawPauseOverlay() {
-      ctx.save();
-      ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.textAlign = "center";
-      ctx.fillStyle = RETRO.amber;
-      ctx.font = RETRO.font(28);
-      // 中央には再開ボタン(DOM要素)がこの上に重なって表示されるので、
-      // テキストはボタンの上下に離して配置し、隠れないようにする
-      ctx.fillText("PAUSED", canvas.width / 2, canvas.height / 2 - 50);
-      if (RETRO.blinkOn()) {
-        ctx.fillStyle = RETRO.ink;
-        ctx.font = RETRO.font(11);
-        ctx.fillText(
-          isMobileDevice ? "中央のボタンをタップして再開" : "Pキーまたは中央のボタンで再開",
-          canvas.width / 2,
-          canvas.height / 2 + 50
-        );
-      }
-      ctx.restore();
+      // 一時停止の幕と結果画面は kit がこの上に描く
     }
 
     function showCaption(text, frames) {
@@ -5023,629 +2906,11 @@
     }
     // ── End laser ──────────────────────────────────────────────────────────────
 
-    // Fixed-timestep loop with catch-up: runs one 60Hz update() per 16.67ms of real
-    // time elapsed, running extra update() calls (bounded) when the browser can't
-    // sustain 60fps. Without this, a device stuck at e.g. 30fps only advances game
-    // time at half speed — every timer (frames assume 60/sec) then takes ~2x as
-    // long in real seconds, which is exactly the "1秒が1秒以上かかる" symptom.
-    const TARGET_FRAME_MS = 1000 / 60;
-    const MAX_CATCHUP_STEPS = 5; // avoid a death-spiral on very slow devices/tab switches
-    let _accumulatedMs = 0;
-    let _lastFrameTime = 0;
-    // プレイ中(スタート後〜ゲームオーバー/クリア前)かつタッチデバイスの間だけ、
-    // ページ全体のスクロール/pull-to-refreshを止める。終了後はランキングを
-    // 読めるようロックを外す
-    function isActivelyPlaying() {
-      return isMobileDevice && state.started && !state.gameOver && !state.cleared;
-    }
-    function updatePlayLock() {
-      document.body.classList.toggle("is-playing-lock", isActivelyPlaying());
-    }
-
-    // iOSのピンチズームは touch-action だけでは塞ぎきれないことがある
-    // (gesturestart/gesturechange という WebKit独自イベント経由で発生するため)。
-    // プレイ中だけ明示的に打ち消す。タイトル/ランキング閲覧時はズームできる
-    // ままにして、アクセシビリティ(文字を拡大して読みたい場合)を残す
-    ["gesturestart", "gesturechange", "gestureend"].forEach((type) => {
-      document.addEventListener(type, (e) => {
-        if (isActivelyPlaying()) e.preventDefault();
-      });
-    });
-    // 上記に対応しないブラウザ(Android Chrome等)向けの保険。touch-action: none
-    // で通常は止まるはずだが、2本指の動きそのものも念のため打ち消しておく
-    document.addEventListener("touchmove", (e) => {
-      if (isActivelyPlaying() && e.touches.length > 1) e.preventDefault();
-    }, { passive: false });
-
-    function loop(timestamp) {
-      requestAnimationFrame(loop);
-      // the very first call (from the direct loop() invocation at the bottom of this
-      // script, not from rAF) has no timestamp — treat that, or any other non-finite
-      // value, as "no time has passed yet". Without this guard, undefined - undefined
-      // produces NaN, which poisons _accumulatedMs forever (NaN + anything is NaN),
-      // permanently failing the while-loop condition below and freezing the game.
-      if (!Number.isFinite(timestamp)) timestamp = _lastFrameTime || 0;
-      if (!_lastFrameTime) _lastFrameTime = timestamp;
-      let elapsed = timestamp - _lastFrameTime;
-      _lastFrameTime = timestamp;
-      if (elapsed > 1000) elapsed = TARGET_FRAME_MS; // tab was backgrounded — don't try to catch up on that gap
-      _accumulatedMs += elapsed;
-      // 毎フレーム、実際の画面の向きから orientationBlocked を引き直す。
-      // イベントの取りこぼしや発火順序に関係なく必ず現状に追従させるため
-      updateOrientationOverlay();
-      let steps = 0;
-      while (_accumulatedMs >= TARGET_FRAME_MS && steps < MAX_CATCHUP_STEPS) {
-        if (state.started && !orientationBlocked && !state.paused) update();
-        _accumulatedMs -= TARGET_FRAME_MS;
-        steps++;
-      }
-      if (steps === MAX_CATCHUP_STEPS) _accumulatedMs = 0; // device can't keep up — drop the debt instead of spiraling
-      updatePlayLock();
-      render();
-    }
-
-    // ランキング登録フォームなどの入力欄にフォーカスがある間は、ゲーム操作キー
-    // （WASD/矢印/X/Z/Space）を奪わない。スマホの仮想キーボードで "a" などの
-    // 半角文字が入力できなくなっていたのはこれが原因。
-    function isTypingInFormField(e) {
-      const el = e.target;
-      return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
-    }
-
-    // ゲームオーバー演出は死ぬたびに流れるので、いつでも飛ばせるようにする。
-    // 飛ばした場合も流し終えた場合と同じく、従来のGAME OVER画面へ進む
-    canvas.addEventListener("pointerdown", () => { endGameOverCutscene(); });
-
-    window.addEventListener("keydown", (e) => {
-      if (isGameOverCutscenePlaying()) { endGameOverCutscene(); return; }
-      if (isTypingInFormField(e)) return;
-      if (e.code === "ArrowUp" || e.code === "KeyW") {
-        state.input.up = true;
-        e.preventDefault();
-      } else if (e.code === "ArrowDown" || e.code === "KeyS") {
-        state.input.down = true;
-        e.preventDefault();
-      } else if (e.code === "ArrowLeft" || e.code === "KeyA") {
-        state.input.left = true;
-        e.preventDefault();
-      } else if (e.code === "ArrowRight" || e.code === "KeyD") {
-        state.input.right = true;
-        e.preventDefault();
-      } else if (e.code === "KeyX" && !e.repeat) {
-        startLaserCharge();
-        e.preventDefault();
-      } else if (e.code === "KeyZ" && !e.repeat) {
-        dropBomb();
-        e.preventDefault();
-      } else if (e.code === "Space" && !state.running) {
-        if (gyro.active) recalibrateGyro();
-        startGame();
-        e.preventDefault();
-      } else if ((e.code === "KeyP" || e.code === "Escape") && !e.repeat) {
-        setPaused(!state.paused);
-        e.preventDefault();
-      }
-    });
-
-    window.addEventListener("keyup", (e) => {
-      if (isTypingInFormField(e)) return;
-      if (e.code === "ArrowUp" || e.code === "KeyW") {
-        state.input.up = false;
-      } else if (e.code === "ArrowDown" || e.code === "KeyS") {
-        state.input.down = false;
-      } else if (e.code === "ArrowLeft" || e.code === "KeyA") {
-        state.input.left = false;
-      } else if (e.code === "ArrowRight" || e.code === "KeyD") {
-        state.input.right = false;
-      } else if (e.code === "KeyX") {
-        stopLaserCharge();
-      }
-    });
-
-    // restart button removed for mobile UI; use in-game controls to restart
-
-    startButton.addEventListener("click", async () => {
-      // AudioContextの再開(resume)もジャイロの許可ダイアログ(iOS)も、どちらも
-      // 「ユーザー操作の延長」として扱われないと機能しない。resume()の完了を
-      // 先にawaitしてしまうと、その待ち時間の間にユーザー操作由来の許可が
-      // 切れてしまい、後続のDeviceOrientationEvent.requestPermission()が
-      // ダイアログを一切出さずに失敗することがある(ジャイロ確認が出ない不具合)。
-      // そのため呼び出し自体はここで同期的に発行し、完了待ち(await)は後回しにする。
-      const audioUnlockPromise = SFX.unlock();
-      // 動画も同じ理由(ユーザー操作が必要)でここが唯一の解錠点。
-      // preload="none" にしてあるので、読み込みが始まるのもここから
-      unlockCutsceneVideos();
-      // スマホでは自動で全画面化してアドレスバー分の画面を使い切る
-      // (対応端末のみ。iOS Safariのようにページ全体の全画面化に非対応の
-      // 端末では何も起きないので、失敗しても無視して進める)
-      if (isMobileDevice) requestFullscreen().then(updateFullscreenToggleUI);
-      // first start: try to enable gyro automatically. after that, respect the toggle button's choice.
-      if (!gyro.userChoiceMade) {
-        await enableGyroIfAvailable();
-        // iOSのジャイロ許可ダイアログはネイティブのシステムシートとして
-        // 覆いかぶさるため、表示中はページが一時的に非表示扱いになり、
-        // 直前に起こしたはずのAudioContextが裏で再びsuspendedへ戻ることがある。
-        // (このダイアログは初回のスタート時にしか出ないため、「初回だけ
-        // 音が鳴らず、2回目以降は鳴る」という症状に一致する。)
-        // ダイアログを閉じた直後にもう一度確実に起こしておく
-        await SFX.unlock();
-      } else if (gyro.active) {
-        recalibrateGyro();
-      }
-      // 最初に発行しておいたresume()の完了をここで待つ
-      await audioUnlockPromise;
-      startGame();
-    });
-
-    // 発射ボタンの隣に並ぶトグル(🔫🔊⛶🕹️)は、X/💣を押そうとする親指が
-    // かすめやすいため、タップ即作動だと誤爆する。
-    // 長押ししてから指を離したときだけ切り替える。
-    //
-    // 閾値に到達した瞬間ではなく pointerup で実行するのは、iOSのジャイロ
-    // 許可ダイアログ(DeviceOrientationEvent.requestPermission)がユーザー操作
-    // 起点でないと出せないため。setTimeout から呼ぶと許可を求められなくなる。
-    const HOLD_TOGGLE_MS = 600; // CSSの --hold-ms と一致させること
-    function bindHoldToggle(button, action, onShortTap) {
-      if (!button) return;
-      let startedAt = 0;
-      let readyTimer = null;
-      const clearHold = () => {
-        clearTimeout(readyTimer);
-        readyTimer = null;
-        startedAt = 0;
-        button.classList.remove("holding", "hold-ready", "active");
-      };
-      button.addEventListener("pointerdown", (e) => {
-        e.preventDefault();
-        capture(button, e);
-        startedAt = performance.now();
-        // .active は付けない——一瞬かすめただけで「押して確定した」見た目に
-        // なってしまい、長押しにした意味が視覚的に消えるため
-        button.classList.add("holding");
-        readyTimer = setTimeout(() => button.classList.add("hold-ready"), HOLD_TOGGLE_MS);
-      }, { passive: false });
-      button.addEventListener("pointerup", (e) => {
-        e.preventDefault();
-        const heldLongEnough = startedAt > 0 && (performance.now() - startedAt) >= HOLD_TOGGLE_MS;
-        clearHold();
-        // 短いタップは切り替えず、代わりに操作方法を伝える（誤爆を防ぎつつ
-        // 「押しても効かない」と誤解させない）
-        if (heldLongEnough) action();
-        else if (onShortTap) onShortTap();
-      }, { passive: false });
-      button.addEventListener("pointercancel", clearHold, { passive: false });
-      button.addEventListener("lostpointercapture", clearHold, { passive: false });
-      button._clearHold = clearHold; // resetAllInputs から呼べるように
-    }
-
-    bindHoldToggle(
-      gyroToggleButton,
-      toggleGyroControls,
-      () => updateGyroStatus("長押しで傾き操作とキー/タッチを切り替えます")
-    );
-
-    // Pointer Events だけで統一して管理する。setPointerCapture() したポインタは
-    // 指が要素の外に滑り出ても pointerup/pointercancel が必ずこの要素に届くため、
-    // 従来 pointerleave に頼っていた「指がボタン外に出たら離したとみなす」判定
-    // (ブラウザによっては touch 由来のポインタで信頼できない) が不要になる。
-    // Pointer Events はマウス/タッチ/ペンを一本化しているので touchstart や
-    // mousedown の別系統リスナーは重複となり削除。各ボタン・各指(pointerId)は
-    // 独立して捕捉されるため、スティックとXの同時押しもそのまま効く
-    function capture(button, e) {
-      if (button.setPointerCapture) {
-        try { button.setPointerCapture(e.pointerId); } catch (err) { /* すでに解放済み等は無視 */ }
-      }
-    }
-
-    // ===== 移動用バーチャルスティック =====
-    // 見た目と「触れた場所に出る浮動式」は姉妹作「咲耶Nounラリー」と同じ。
-    // 右下に発射ボタンがあるため、出せるのは画面の左半分に限る。
-    //
-    // ラリーは迷路なので4方向に丸めているが、こちらは斜め移動が要るので丸めない。
-    // 倒した量に応じたアナログ入力(stickX/stickY, -1〜1)にして、ジャイロと同じく
-    // 細かい操作を効かせる
-    const JOY_DEAD = 6; // 中心からこれ未満は無入力(置いただけで動き出さない)
-    // いっぱいに倒したときの推力(キー入力=1)。実機で「効きすぎる」という感想があり、
-    // 1 → 0.7 → 0.6 → 0.5 と下げた
-    const STICK_SENSITIVITY = 0.5;
-    const JOY_R = 24; // 原点が指を追う半径。ここまで倒すと最大入力
-    const joyRing = document.getElementById("joyring");
-    const joyKnob = document.getElementById("joyknob");
-    const joyHint = document.getElementById("joyhint");
-    const joyHintCap = document.getElementById("joyhintcap");
-    let joy = null; // { id, ox, oy }
-    // 一度でも倒したら、その回のプレイではもう影を出さない(分かった人の視界から消す)
-    let joyTaught = false;
-
-    function isStickPlayable() {
-      return (
-        touchControlsEnabled &&
-        stickEnabled &&
-        state.started &&
-        !state.gameOver &&
-        !state.cleared &&
-        !state.paused &&
-        !orientationBlocked
-      );
-    }
-
-    function joyShow(ox, oy, kx, ky) {
-      joyRing.style.left = `${ox}px`;
-      joyRing.style.top = `${oy}px`;
-      joyKnob.style.left = `${kx}px`;
-      joyKnob.style.top = `${ky}px`;
-      joyRing.classList.add("on");
-      joyKnob.classList.add("on");
-    }
-
-    function releaseStick() {
-      joy = null;
-      state.input.stickX = 0;
-      state.input.stickY = 0;
-      joyRing.classList.remove("on");
-      joyKnob.classList.remove("on");
-    }
-
-    // 影は左下(親指が自然に来る位置)に出すが、文字では「左側のどこでも」と言う。
-    // 影だけ置くと「その丸を押すもの」と誤解され、どこを押しても指の下に
-    // スティックが出るという、この操作のいちばん良いところが伝わらない
-    let _joyHintShown = false;
-    // ボタン群と同じくキャンバスの実寸を基準にし、左下の角の内側に置く
-    // (画面の下端基準だと、ホームバーの逃げ幅ぶんキャンバスの外へはみ出していた)
-    function positionJoyHint() {
-      const rect = canvas.getBoundingClientRect();
-      const x = rect.left + 72;
-      const y = rect.bottom - 60;
-      joyHint.style.left = `${x}px`;
-      joyHint.style.top = `${y}px`;
-      // 文字は中央揃えなので、そのまま x に置くとキャンバスの左端からはみ出す
-      const cw = joyHintCap.offsetWidth || 130;
-      joyHintCap.style.left = `${Math.max(x, rect.left + cw / 2 + 8)}px`;
-      joyHintCap.style.top = `${y - 52}px`;
-    }
-    // 毎フレーム render() から呼ばれるので、DOMに触るのは表示が切り替わる時だけ
-    function updateJoyHint() {
-      const show = isStickPlayable() && !joyTaught && !joy;
-      if (show === _joyHintShown) return;
-      document.body.classList.toggle("joyhint", show);
-      if (show) positionJoyHint();
-      _joyHintShown = show;
-    }
-    window.addEventListener("resize", () => {
-      if (_joyHintShown) positionJoyHint();
-    });
-
-    document.addEventListener(
-      "pointerdown",
-      (e) => {
-        if (joy || !isStickPlayable()) return;
-        if (e.clientX >= window.innerWidth / 2) return;
-        // ボタン(ポーズ等)の上では出さない。ボタン自身の操作を優先する
-        if (e.target && e.target.closest && e.target.closest("button")) return;
-        e.preventDefault();
-        joy = { id: e.pointerId, ox: e.clientX, oy: e.clientY };
-        joyShow(joy.ox, joy.oy, joy.ox, joy.oy);
-        updateJoyHint();
-      },
-      { passive: false }
-    );
-    window.addEventListener("pointermove", (e) => {
-      if (!joy || e.pointerId !== joy.id) return;
-      let dx = e.clientX - joy.ox;
-      let dy = e.clientY - joy.oy;
-      // 原点を指から半径 JOY_R 以内へ引きずる。固定にすると倒した方向のズレが
-      // 残り続け、逆方向へ切り返すのに指を大きく戻す必要がある(ラリーで実測済み)
-      let len = Math.hypot(dx, dy);
-      if (len > JOY_R) {
-        joy.ox = e.clientX - (dx / len) * JOY_R;
-        joy.oy = e.clientY - (dy / len) * JOY_R;
-        dx = (dx / len) * JOY_R;
-        dy = (dy / len) * JOY_R;
-        len = JOY_R;
-      }
-      joyShow(joy.ox, joy.oy, joy.ox + dx, joy.oy + dy);
-      if (len < JOY_DEAD) {
-        state.input.stickX = 0;
-        state.input.stickY = 0;
-        return;
-      }
-      const mag = (len - JOY_DEAD) / (JOY_R - JOY_DEAD);
-      // 円の中で斜めいっぱいに倒すと各軸は0.71にしかならず、旧十字キーの斜め
-      // (両軸とも全開)より遅くなる。√2倍して各軸1で頭打ちにし、斜めも揃える
-      const ux = dx / len;
-      const uy = dy / len;
-      state.input.stickX = Math.max(-1, Math.min(1, ux * mag * Math.SQRT2));
-      state.input.stickY = Math.max(-1, Math.min(1, uy * mag * Math.SQRT2));
-      if (!joyTaught) {
-        joyTaught = true;
-        updateJoyHint();
-      }
-    });
-    const joyEnd = (e) => {
-      if (!joy || e.pointerId !== joy.id) return;
-      releaseStick();
-      updateJoyHint();
-    };
-    window.addEventListener("pointerup", joyEnd);
-    window.addEventListener("pointercancel", joyEnd);
-
-    // Fire and Bomb buttons: single tap only, no repeat
-    function makeTapButton(button, action) {
-      if (!button) return;
-      const press   = (e) => { e.preventDefault(); capture(button, e); action(); button.classList.add('active'); };
-      const release = () => button.classList.remove('active');
-      button.addEventListener('pointerdown', press,   { passive: false });
-      button.addEventListener('pointerup',   release, { passive: false });
-      button.addEventListener('pointercancel', release, { passive: false });
-      button.addEventListener('lostpointercapture', release, { passive: false });
-    }
-
-    // X button: short tap = vulcan, hold 3s = laser beam
-    if (touchFire) {
-      const firePress   = (e) => { e.preventDefault(); capture(touchFire, e); startLaserCharge(); touchFire.classList.add('active'); };
-      const fireRelease = (e) => { e.preventDefault(); stopLaserCharge();  touchFire.classList.remove('active'); };
-      touchFire.addEventListener('pointerdown', firePress, { passive: false });
-      touchFire.addEventListener('pointerup',   fireRelease, { passive: false });
-      touchFire.addEventListener('pointercancel', fireRelease, { passive: false });
-      touchFire.addEventListener('lostpointercapture', fireRelease, { passive: false });
-    }
-    makeTapButton(touchBomb, () => dropBomb());
-
-    // 自動連射のオン/オフ。X/💣のすぐ隣にあるので、🕹️と同じく長押しで切り替える
-    function updateAutoFireToggleUI() {
-      if (!autoFireToggle) return;
-      autoFireToggle.classList.toggle("on", autoFireEnabled);
-      autoFireToggle.setAttribute(
-        "aria-label",
-        autoFireEnabled ? "自動連射:オン(長押しでオフ)" : "自動連射:オフ(長押しでオン)"
-      );
-    }
-    bindHoldToggle(
-      autoFireToggle,
-      () => {
-        autoFireEnabled = !autoFireEnabled;
-        autoFireTimer = 0;
-        updateAutoFireToggleUI();
-        updateGyroStatus(autoFireEnabled ? "自動連射: オン" : "自動連射: オフ");
-      },
-      () => updateGyroStatus("長押しで自動連射を切り替えます")
-    );
-    updateAutoFireToggleUI();
-
-    // 効果音のオン/オフ。音が出るゲームには必須の逃げ道で、特にモバイルでは
-    // 「音を出せない場所で開いてしまった」を即座に解消できる必要がある
-    function updateMuteToggleUI() {
-      if (!muteToggle) return;
-      muteToggle.classList.toggle("on", !SFX.muted);
-      muteToggle.textContent = SFX.muted ? "🔇" : "🔊";
-      muteToggle.setAttribute(
-        "aria-label",
-        SFX.muted ? "効果音:オフ(長押しでオン)" : "効果音:オン(長押しでオフ)"
-      );
-    }
-    bindHoldToggle(
-      muteToggle,
-      async () => {
-        await SFX.unlock(); // オンに戻した直後から鳴るように、ここでも起こしておく(再開を待ってから確認音を鳴らす)
-        SFX.setMuted(!SFX.muted);
-        syncCutsceneVideoMute(); // 再生中の演出動画にも即座に反映する
-        updateMuteToggleUI();
-        updateGyroStatus(SFX.muted ? "効果音: オフ" : "効果音: オン");
-        if (!SFX.muted) SFX.pickup(); // 音量の確認用に一発鳴らす
-      },
-      () => updateGyroStatus("長押しで効果音を切り替えます")
-    );
-    updateMuteToggleUI();
-
-    // 全画面表示のオン/オフ。Fullscreen APIはユーザー操作を経ないと呼べない
-    // ため、スタートボタン押下時とこのトグルの2箇所から呼ぶ。iOS Safariは
-    // ページ全体の全画面化に対応していないため、非対応端末ではボタン自体を隠す
-    const fsEl = document.documentElement;
-    const supportsFullscreen = !!(
-      fsEl.requestFullscreen || fsEl.webkitRequestFullscreen
-    );
-    function requestFullscreen() {
-      const req = fsEl.requestFullscreen || fsEl.webkitRequestFullscreen;
-      if (!req) return Promise.resolve();
-      try {
-        const result = req.call(fsEl);
-        return result && result.catch ? result.catch(() => {}) : Promise.resolve();
-      } catch (e) {
-        return Promise.resolve();
-      }
-    }
-    function exitFullscreen() {
-      const exit = document.exitFullscreen || document.webkitExitFullscreen;
-      if (!exit) return Promise.resolve();
-      try {
-        const result = exit.call(document);
-        return result && result.catch ? result.catch(() => {}) : Promise.resolve();
-      } catch (e) {
-        return Promise.resolve();
-      }
-    }
-    function isFullscreenActive() {
-      return !!(document.fullscreenElement || document.webkitFullscreenElement);
-    }
-    function updateFullscreenToggleUI() {
-      if (!fullscreenToggle) return;
-      const active = isFullscreenActive();
-      document.body.classList.toggle("is-fullscreen", active);
-      fullscreenToggle.classList.toggle("on", active);
-      fullscreenToggle.setAttribute(
-        "aria-label",
-        active ? "全画面表示:オン(長押しでオフ)" : "全画面表示:オフ(長押しでオン)"
-      );
-      // is-fullscreen の付け外しでcanvasのmax-heightが変わり実寸が変化するため、
-      // canvas基準で位置決めしている要素をここで座標を計算し直す
-      if (_startButtonWasShown) positionStartButton();
-      if (_pauseButtonWasShown) positionPauseButton();
-      if (orientationBlocked) positionOrientationOverlay();
-      if (_gameControlsWereShown) positionFirePad();
-      if (_joyHintShown) positionJoyHint();
-    }
-    if (fullscreenToggle) {
-      if (supportsFullscreen && isMobileDevice) {
-        fullscreenToggle.style.display = "";
-        bindHoldToggle(
-          fullscreenToggle,
-          () => {
-            if (isFullscreenActive()) {
-              exitFullscreen().then(updateFullscreenToggleUI);
-            } else {
-              requestFullscreen().then(updateFullscreenToggleUI);
-            }
-          },
-          () => updateGyroStatus("長押しで全画面表示を切り替えます")
-        );
-      }
-      document.addEventListener("fullscreenchange", updateFullscreenToggleUI);
-      document.addEventListener("webkitfullscreenchange", updateFullscreenToggleUI);
-    }
-
-    // ===== 全画面で遊ぶボタン（ホーム画面への追加を案内。F19相当）=====
-    // 姉妹作「咲耶Nounラリー」と見た目・挙動を揃えるための機能。
-    // iPhoneにはFullscreen APIが無い(supportsFullscreenがfalseになる)ため、
-    // 「ホーム画面に追加」しか全画面にする道がない。iPad/Android/PCでは
-    // supportsFullscreenが実際のAPI有無で決まるので、機種のUA文字列に
-    // 頼らずそのまま本物の全画面を試せる(iPadOSがUAをMac名乗りする問題が起きない)。
-    //
-    // 効かないボタンを出さないこと。すでにホーム画面アプリで動いているなら
-    // 用が済んでいるので出さない。全画面APIが断られたときも黙って終わらせず、
-    // ホーム画面への案内幕に切り替える
-    const fsHomeModal = document.getElementById("fsHomeModal");
-    const fsHomeNote = document.getElementById("fsHomeNote");
-    const fsHomeCloseButton = document.getElementById("fsHomeClose");
-    // iOSのChrome/Firefox/Edge/Operaは中身がSafariと同じWebKitだが、
-    // 共有シートからの追加に失敗することがあるためSafariで開くよう案内を添える
-    const IOS_OTHER_BROWSER =
-      /iP(hone|od)/.test(navigator.userAgent) && /CriOS|FxiOS|EdgiOS|OPiOS/.test(navigator.userAgent);
-    function isStandaloneApp() {
-      try {
-        return !!(
-          navigator.standalone ||
-          (window.matchMedia && matchMedia("(display-mode: standalone)").matches)
-        );
-      } catch (e) {
-        return false;
-      }
-    }
-    function openFsHomeModal() {
-      if (IOS_OTHER_BROWSER) {
-        fsHomeNote.textContent =
-          "このブラウザでは追加できないことがあります。うまくいかないときは Safari で開いてください。";
-        fsHomeNote.hidden = false;
-      }
-      fsHomeModal.hidden = false;
-      fsHomeModal.classList.add("show");
-      fsHomeModal.scrollTop = 0;
-    }
-    function closeFsHomeModal() {
-      fsHomeModal.classList.remove("show");
-      fsHomeModal.hidden = true;
-    }
-    function setupFsButtons() {
-      // すでにホーム画面アプリとして起動中なら、案内する用が無いので出さない
-      if (isStandaloneApp()) {
-        fsPlayButtonAvailable = false;
-        fsPlayButton.hidden = true;
-        return;
-      }
-      const orientationFsButton = orientationOverlay.querySelector(".fsbtn");
-      if (orientationFsButton) orientationFsButton.hidden = false;
-      for (const b of document.querySelectorAll(".fsbtn")) {
-        b.addEventListener("click", (e) => {
-          e.stopPropagation();
-          if (supportsFullscreen) {
-            // 本物の全画面(iPad/Android/PC)。断られたときも黙って終わらせず幕へ切り替える
-            requestFullscreen().then(() => {
-              updateFullscreenToggleUI();
-              if (!isFullscreenActive()) openFsHomeModal();
-            });
-            return;
-          }
-          openFsHomeModal();
-        });
-      }
-    }
-    setupFsButtons();
-    if (fsHomeCloseButton) {
-      fsHomeCloseButton.addEventListener("click", (e) => {
-        e.stopPropagation();
-        closeFsHomeModal();
-      });
-    }
-    if (fsHomeModal) {
-      fsHomeModal.addEventListener("click", (e) => {
-        if (e.target === fsHomeModal) closeFsHomeModal();
-      });
-    }
-
-    // タッチ操作の途中でアプリがバックグラウンドに回った/タブが非表示になった
-    // 場合、pointerup/pointercancel が届かないことがある(通知バナーやOSの
-    // ジェスチャーに割り込まれる等)。その場合に方向入力が押しっぱなしのまま
-    // 残って自機が動き続けないよう、blur/visibilitychangeで全入力を強制リセット
-    function resetAllInputs() {
-      state.input.up = false;
-      state.input.down = false;
-      state.input.left = false;
-      state.input.right = false;
-      state.input.gyroX = 0;
-      state.input.gyroY = 0;
-      releaseStick();
-      [touchFire, touchBomb, autoFireToggle, muteToggle, fullscreenToggle, gyroToggleButton].forEach((btn) => {
-        if (!btn) return;
-        btn.classList.remove("active");
-        // 長押し中に割り込まれた場合、進捗と計測をここで確実に捨てる
-        // （復帰後に古い開始時刻が残っていると一瞬のタップで作動してしまう）
-        if (btn._clearHold) btn._clearHold();
-      });
-      releaseLaserChargeOnHit();
-    }
-    window.addEventListener("blur", resetAllInputs);
-    document.addEventListener("visibilitychange", () => {
-      if (document.hidden) resetAllInputs();
-    });
-
-    if ("ontouchstart" in window || navigator.maxTouchPoints > 0) {
-      firePad.style.display = "flex";
-      // ここから先は updateGameControlsVisibility() がプレイ中だけ出すよう制御する
-      touchControlsEnabled = true;
-      if (window.DeviceOrientationEvent) {
-        gyroToggleButton.style.display = "inline-block";
-        updateGyroToggleLabel();
-        updateGyroStatus("スタートを押すと、対応端末では傾き操作に切り替わります（右下のXでバルカン発射）");
-      } else {
-        updateGyroStatus("画面の左側を押したまま倒すと移動、右下のXでバルカン発射できます");
-      }
-    } else {
-      updateGyroStatus("PCはキーボード、スマホは画面左側のスティックと右下のボタンで操作できます（Pキーで一時停止）");
-    }
-
     // reduced-motion なら明滅を止める（走査線は静止画なのでそのまま残す）
-    const _reduceMotionMQ = window.matchMedia("(prefers-reduced-motion: reduce)");
-    RETRO.reduceMotion = _reduceMotionMQ.matches;
-    if (typeof _reduceMotionMQ.addEventListener === "function") {
-      _reduceMotionMQ.addEventListener("change", (e) => { RETRO.reduceMotion = e.matches; });
-    }
-
-    // canvasのテキストはCSSのfont-familyを見ないので、描画前にレトロ書体を
-    // 明示ロードする。未ロードのままだと最初の数フレームだけ既定書体で描かれる
-    if (document.fonts && document.fonts.load) {
-      Promise.all([
-        document.fonts.load('16px "Press Start 2P"'),
-        document.fonts.load('16px "DotGothic16"')
-      ])
-        // 書体が変わるとスタートボタンの実寸も変わる。読み込み前に測った
-        // 寸法でクランプしたままだと位置がずれるので、確定後に測り直す
-        .then(() => { if (_startButtonWasShown) positionStartButton(); })
-        .catch(() => { /* 取得失敗時は monospace にフォールバックする */ });
-    }
+    RETRO.reduceMotion = kit.retro.reduceMotion;
 
     // populate an idle scene (columns/ship/stars) before the player presses スタート
     resetGame();
-    loadLeaderboard();
-    loop();
   </script>
 </body>
 </html>

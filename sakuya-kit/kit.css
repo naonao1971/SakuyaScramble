@@ -175,6 +175,8 @@ body.sk-fullscreen .sk-wrap canvas {
 .sk-start {
   position: absolute;
   transform: translate(-50%, -50%);
+  /* 位置を決める前は左端の狭い場所に置かれていて、折り返すと高さを誤って測る */
+  white-space: nowrap;
   z-index: 2;
   appearance: none;
   padding: 12px 20px;

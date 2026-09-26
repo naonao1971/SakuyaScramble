@@ -103,6 +103,7 @@
 | `cutscenes.clear` / `cutscenes.gameOver` | なし | `{ src, image?, skippable?, blockResults?, loop? }`。下の「結果の演出」を参照 |
 | `resultScreen` | 標準の結果画面 | `{ clearTitle, gameOverTitle, mediaWidth, decorate(ctx, info) }`。`false` にすると kit は描かない |
 | `jingle` | `true` | 動画が無い、または再生できないときに `sfx.clear()` / `sfx.gameOver()` を鳴らす |
+| `updateWhenOver` | `false` | `true` にすると、結果画面の間も `update` を呼び続ける（爆発の余韻などを動かすとき） |
 | `resultsBlocked()` | | `true` を返す間は結果画面（ランキング・スタート）を出さない。演出動画の再生中などに使う |
 
 ### フック
@@ -124,6 +125,7 @@
 | `kit.sfx` | `tone()`、`noise()`、定番音 `shot` `hit` `pickup` `bonus` `explode` `stage` `gameOver` `clear` |
 | `kit.retro` | `colors`、`font(px)`、`blinkOn()`、`panel()`、`frame()`、`titleText()`、`caption()`、`crt()` |
 | `kit.cnp` | `chars`（`id` `label` `hue` `no` `img` `ready`）、`draw(ctx, ch, x, y, size)`、`byNo(no)` |
+| `kit.buttonEl(id)` | 画面のボタン要素（溜め表示などで見た目を変えるとき） |
 | `kit.status(msg)` | canvas の下の案内文 |
 | `kit.gameOver(result)` / `kit.setPaused(bool)` / `kit.start()` | |
 | `kit.gyro` | ジャイロ無効なら `null`。`active`、`recalibrate()`、`toggle()` |

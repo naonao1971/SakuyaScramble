@@ -522,6 +522,12 @@ export function createKit(cfg) {
     if (stick) stick.reposition();
   }
   window.addEventListener("resize", repositionAll);
+  // 書体の読み込み・全画面の切り替えなどで、ボタンや canvas の大きさが変わったら置き直す
+  if (typeof ResizeObserver === "function") {
+    const ro = new ResizeObserver(() => repositionAll());
+    ro.observe(canvas);
+    ro.observe(dom.start);
+  }
 
   // ---- 縦持ち案内（スマホのみ。毎フレーム引き直す） ----
   // iOS の orientationchange はメディアクエリ更新より先に発火することがあるので、
@@ -870,7 +876,10 @@ export function createKit(cfg) {
     let steps = 0;
     while (acc >= TARGET_FRAME_MS && steps < MAX_CATCHUP_STEPS) {
       frame++;
-      if (phase === "playing" && !paused && !orientationBlocked) {
+      if (phase === "over" && cfg.updateWhenOver && cfg.update) {
+        // 結果画面の裏でも演出（爆発の余韻・明滅など）を動かしたいタイトル向け
+        cfg.update(kit);
+      } else if (phase === "playing" && !paused && !orientationBlocked) {
         if (cnpRun) cnpRun.tick();
         if (af && autoFireOn && af.onFire && ++autoFireTimer >= af.interval) {
           autoFireTimer = 0;
@@ -927,6 +936,11 @@ export function createKit(cfg) {
     start: requestStart,
     resetInputs,
     toggle: (id) => toggleState[id],
+    // 画面のボタン要素（溜め表示など、見た目をゲーム側で変えたいとき用）
+    buttonEl: (id) => {
+      const d = buttonDefs.find((x) => x.id === id);
+      return d ? d.el : null;
+    },
     score,
     lives,
     checkpoint,
