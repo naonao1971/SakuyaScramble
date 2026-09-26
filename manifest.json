@@ -2,15 +2,36 @@
   "name": "咲耶スクランブル",
   "short_name": "咲耶スクランブル",
   "description": "クリプト忍者咲耶の宇宙船で洞窟を駆け抜け、散らばったCNP11体を救出するブラウザゲーム。",
-  "start_url": "/",
-  "scope": "/",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "orientation": "landscape",
   "background_color": "#06070C",
   "theme_color": "#06070C",
   "lang": "ja",
   "icons": [
-    { "src": "favicon-32.png", "sizes": "32x32", "type": "image/png" },
-    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+    {
+      "src": "favicon-32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
   ]
 }
