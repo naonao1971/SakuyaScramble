@@ -38,7 +38,8 @@
 <body>
   <header>
     <h1>OGP / HEAD MAKER</h1>
-    <p class="lead">咲耶シリーズ共通のタイトル表記・OGP画像・アイコン・&lt;head&gt;・manifest.json を作ります。
+    <p class="lead">タイトル名・OGP画像・アイコンを、全タイトル同じ手順で差し替えるためのツールです。
+      中身はタイトルごとに自由で、ファイル名・サイズ・&lt;head&gt; の書き方だけをそろえます。
       書き出したファイルはゲームのリポジトリの直下に置き、&lt;head&gt; は index.html にそのまま貼ってください。</p>
   </header>
 
@@ -56,8 +57,14 @@
         <label><span>kit のバージョン</span><input id="kitVersion" type="text" value="0.1.0" /></label>
       </div>
 
-      <h2>2. キービジュアル</h2>
-      <label><span>画像（横長推奨。ページの外へは送信しません）</span><input id="file" type="file" accept="image/*" /></label>
+      <h2>2. OGP 画像</h2>
+      <label><span>キービジュアル（横長推奨。ページの外へは送信しません）</span><input id="file" type="file" accept="image/*" /></label>
+      <label><span>仕上げ</span>
+        <select id="ogStyle">
+          <option value="plain">絵をそのまま使う（1200×630 に切り抜くだけ）</option>
+          <option value="series">タイトル文字と金の枠を重ねる</option>
+        </select>
+      </label>
       <div class="row">
         <label><span>OGPの横位置</span><input id="ogFocusX" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
         <label><span>OGPの縦位置</span><input id="ogFocusY" type="range" min="0" max="1" step="0.01" value="0.5" /></label>
@@ -81,7 +88,7 @@
     <section class="card" aria-label="プレビューと書き出し">
       <h2>OGP 画像（1200×630）</h2>
       <canvas id="ogp" class="preview" width="1200" height="630"></canvas>
-      <p class="hint">X・LINE・Discord でリンクを貼ったときのカードです。文字は左下に固定、絵は全面に敷きます。</p>
+      <p class="hint">X・LINE・Discord でリンクを貼ったときのカードです。絵柄はタイトルごとに自由で、サイズとファイル名だけを全タイトルでそろえます。</p>
       <div class="icons">
         <figure><canvas id="ic180" width="180" height="180" style="width:90px"></canvas>180（apple-touch-icon）</figure>
         <figure><canvas id="ic512" width="512" height="512" style="width:90px"></canvas>512 / 192（manifest）</figure>
@@ -135,7 +142,7 @@
     const ic192 = document.createElement("canvas");
     function redraw() {
       const m = meta();
-      drawOgp($("ogp"), m, image, { focusX: +$("ogFocusX").value, focusY: +$("ogFocusY").value });
+      drawOgp($("ogp"), m, image, { focusX: +$("ogFocusX").value, focusY: +$("ogFocusY").value, style: $("ogStyle").value });
       const mo = motif();
       drawIcon($("ic180"), 180, mo, image);
       drawIcon($("ic512"), 512, mo, image);

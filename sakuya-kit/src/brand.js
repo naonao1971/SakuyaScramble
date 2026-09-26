@@ -66,11 +66,12 @@ function bezel(ctx, w, h, inset, line) {
   ctx.restore();
 }
 
-// OGP画像 1200x630。
-//   キービジュアルを全面に敷き、左下に「主題(金)／副題(マゼンタ)」、左上にシリーズ名、
-//   右下にドメイン。文字の下だけ暗くして、どんな絵でも読めるようにする。
+// OGP画像 1200x630。絵柄はタイトルごとに違ってよく、そろえるのはサイズと作り方だけ。
+//   style = "plain" : キービジュアルを 1200x630 に切り抜くだけ（既定。絵をそのまま見せる）
+//   style = "series": さらに左下に「主題(金)／副題(マゼンタ)」、左上にシリーズ名、
+//                     右下にドメイン、外周に金の枠を重ねる
 export function drawOgp(canvas, meta, image, opts = {}) {
-  const { focusX = 0.5, focusY = 0.5 } = opts;
+  const { focusX = 0.5, focusY = 0.5, style = "plain" } = opts;
   canvas.width = OGP_W;
   canvas.height = OGP_H;
   const ctx = canvas.getContext("2d");
@@ -85,6 +86,7 @@ export function drawOgp(canvas, meta, image, opts = {}) {
   } else {
     scanlines(ctx, 0, 0, OGP_W, OGP_H, 0.35);
   }
+  if (style !== "series") return canvas;
 
   // 文字の下敷き: 下からの暗幕＋左上の角
   let g = ctx.createLinearGradient(0, OGP_H * 0.45, 0, OGP_H);

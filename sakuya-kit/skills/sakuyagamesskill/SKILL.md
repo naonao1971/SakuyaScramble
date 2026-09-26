@@ -30,9 +30,10 @@ description: 咲耶シリーズのブラウザゲーム（レトロアーケー�
    - 結果画面と演出動画は kit に任せる。動画は `cutscenes: { clear: {src, image}, gameOver: {src} }` に渡すだけで、
      再生、飛ばす処理、ジングルへの切り替え、結果画面の描画は書かない。独自の飾りは `resultScreen.decorate` で足す
    - 定番の効果音は `kit.sfx.pickup()` などを使い、同じ意味の音はタイトル間でそろえる
-5. `tools/ogp.html`（sakuya-kit）でタイトル表記・OGP画像・アイコン・`<head>`・`manifest.json` を作る
-   - `<head>` は書き出したものをそのまま index.html に貼る。OGP やアイコンのタグを手で書かない
-   - 画像（ogp.png / apple-touch-icon.png / icon-192.png / icon-512.png / favicon-32.png）と manifest.json はリポジトリ直下に置く
+5. タイトル名・OGP画像・アイコンは、sakuya-kit の `tools/ogp.html` で作って差し替える（手順は全タイトル共通。中身はタイトルごとに自由）
+   - 書き出した ogp.png / apple-touch-icon.png / icon-192.png / icon-512.png / favicon-32.png / manifest.json をリポジトリ直下に上書きで置く
+   - 書き出した `<head>` の中身で index.html の `<head>` を丸ごと入れ替える。OGP やアイコンのタグを手で書かない
+   - `createKit` の `title` / `subtitle` も同じ値にする
    - `CNAME` だけはタイトル用に手で書く
 6. 共通 GAS の URL を `gasUrl` に入れる（新しい GAS は作らない）
 7. 公開するときに、スプレッドシートの `_games` シートでそのタイトルの「総合に含める」を TRUE にし、
@@ -41,9 +42,10 @@ description: 咲耶シリーズのブラウザゲーム（レトロアーケー�
 
 ## 表記の約束（全タイトル共通）
 
+- タイトル名と絵柄はタイトルごとに自由。そろえるのはファイル名・サイズ・書き方
 - 主題は英字の大文字（例：`SAKUYA SCRAMBLE`）、副題は `- 〜 -` の形（例：`- RESCUE 11 CNP -`）
 - `<title>` / `og:title` は「主題 ─ 副題」。`createKit` の `title` / `subtitle` と同じ値を使う（ずれると kit が警告する）
-- OGP 画像とアイコンのデザインはツールの型のまま。独自に作り直さない
+- タイトル名や画像を変えるときも、必ずツールで作り直して同じ手順で差し替える
 
 ## 画面の約束（全タイトル共通）
 
