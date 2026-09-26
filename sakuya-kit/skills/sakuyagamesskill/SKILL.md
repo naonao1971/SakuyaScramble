@@ -1,5 +1,5 @@
 ---
-name: sakuya-game
+name: sakuyagamesskill
 description: 咲耶シリーズのブラウザゲーム（レトロアーケード風・canvas）を新しく作る、または既存タイトルを直すときに使う。共通UI（コントローラー／ポーズ／スコア登録／ランキング／CNP／CLEAR・GAME OVERの演出動画と結果画面／全画面／効果音）は必ず sakuya-kit を使い、タイトル側で作り直さない。
 ---
 

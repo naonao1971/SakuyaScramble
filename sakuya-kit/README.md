@@ -211,5 +211,6 @@ src/               部品ごとのモジュール
 assets/cnp/        CNP 画像（256x256・透過 PNG）
 gas/               共通ランキング用 Apps Script
 demo/              最小の動作例（テンプレートの元）
-skill/SKILL.md     新作を作るときに Claude が従うルール（テンプレートに同梱する）
+skills/sakuyagamesskill/SKILL.md
+                   新作を作るときに Claude が従うルール（テンプレートの .claude/skills/sakuyagamesskill/ に置く）
 ```
