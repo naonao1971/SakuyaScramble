@@ -1,0 +1,1181 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <!-- sk:head ここから: scripts/make-assets.mjs（または tools/ogp.html）が書き出す共通の形。手で書き換えない -->
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#06070C" />
+  <!-- ホーム画面に追加したとき、Safari のバーなしの全画面で起動する -->
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="咲耶ディグ" />
+  <title>SAKUYA DIG ─ DIG OUT 11 CNP</title>
+  <meta name="description" content="城下町の地下を掘り進め、忍具と落石で忍者や妖怪をかわしながら、埋まった CNP 11体を掘り出して地上へ戻るレトロアーケード風ブラウザゲーム。" />
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <link rel="manifest" href="manifest.json" />
+  <!-- OGP / Twitter Card（クローラは JavaScript を実行しないので、ここに静的に書く） -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="SAKUYA SERIES" />
+  <meta property="og:title" content="SAKUYA DIG ─ DIG OUT 11 CNP" />
+  <meta property="og:description" content="城下町の地下を掘り進め、忍具と落石で忍者や妖怪をかわしながら、埋まった CNP 11体を掘り出して地上へ戻るレトロアーケード風ブラウザゲーム。" />
+  <meta property="og:url" content="https://dig.naoblock.jp/" />
+  <meta property="og:image" content="https://dig.naoblock.jp/ogp.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:locale" content="ja_JP" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="SAKUYA DIG ─ DIG OUT 11 CNP" />
+  <meta name="twitter:description" content="城下町の地下を掘り進め、忍具と落石で忍者や妖怪をかわしながら、埋まった CNP 11体を掘り出して地上へ戻るレトロアーケード風ブラウザゲーム。" />
+  <meta name="twitter:image" content="https://dig.naoblock.jp/ogp.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/naonao1971/sakuya-kit@0.2.0/kit.css" />
+  <!-- sk:head ここまで -->
+  <style>
+    /* 遊び方。canvas の下、ランキングの前に置く */
+    .sk-how { width: min(92vw, 720px); box-sizing: border-box; color: var(--ink); font-size: 12.5px; line-height: 1.8; opacity: 0.85; }
+    .sk-how summary { cursor: pointer; color: var(--gold); font-family: var(--font-display); font-size: 11px; text-align: center; list-style: none; }
+    .sk-how ul { margin: 8px 0 0; padding-left: 1.2em; }
+    .sk-how a { color: var(--gold); }
+  </style>
+</head>
+<body>
+  <div class="sk-wrap">
+    <canvas id="game" width="960" height="540" aria-label="ゲーム画面"></canvas>
+  </div>
+  <details class="sk-how" id="how">
+    <summary>遊び方</summary>
+    <ul>
+      <li>地面を掘ると、その跡が通路になります。うっすら見えている CNP を掘り当てると救出</li>
+      <li>敵は忍具（長押し）で縛りきって倒すか、真下を掘って岩を落としてつぶします。縛られている敵には触れても平気</li>
+      <li>時間がたつと、30秒ごとに敵が少しずつ速くなります（5段まで。左上の SPEED の目盛り）</li>
+      <li>忍者は、縦か横に並ぶと0.3秒止まってから手裏剣を投げてきます（3マス飛び、土も抜ける）。列をずらすか、忍具の縄で叩き落とそう</li>
+      <li>その層の CNP をそろえると下への穴が開きます。3層で 11体そろえたら、地上の出口へ</li>
+      <li>スマホ: 左半分を押したまま倒して移動（掘る） ・ 右下の X を長押しで忍具</li>
+      <li>PC: 矢印 / WASD で移動（掘る） ・ X（長押し）で忍具 ・ P 一時停止 ・ M 音</li>
+      <li>姉妹作: <a href="https://sakuya.naoblock.jp/">咲耶スクランブル</a> / <a href="https://rally.naoblock.jp/">咲耶Nounラリー</a> / <a href="https://jumpbug.naoblock.jp/">咲耶ジャンプバグ</a></li>
+    </ul>
+  </details>
+
+  <script type="module">
+    // 共通部分は sakuya-kit（https://github.com/naonao1971/sakuya-kit）。版を上げるときは
+    // kit.css と同じ番号にそろえ、CHANGELOG を読んでから実機で確かめる
+    import { createKit } from "https://cdn.jsdelivr.net/gh/naonao1971/sakuya-kit@0.2.0/kit.js";
+
+    // ===== 盤面 =====
+    // 1マス 32px の 30x14。いちばん上の段は地上（最初から通れる）。
+    // 掘った跡は 4px の細かい升目で持ち、咲耶の体の幅（24px）だけ削る。
+    // 平行に掘った2本の通路のあいだには 8px の壁が残るので、つながっているかは升目で判定できる
+    const W = 960, H = 540;
+    const T = 32, COLS = 30, ROWS = 14;
+    const FY = 76; // 盤面の上端（上は HUD）
+    const S = 4, SC = (COLS * T) / S, SR = (ROWS * T) / S;
+    const DIG_HALF = 12; // 掘る幅の半分
+    const CORNER = 12; // 升目の線からこの距離（px。約1/3マス）以内なら、角を斜めに切って曲がれる
+    const TOOL_REACH = 112; // 忍具の届く長さ（3.5マス）
+    const BIND_MAX = 4; // この段まで縛ると倒せる
+    const START = { c: 15, r: 0 };
+
+    // 層ごとの設定。深いほど敵が速く・多く、すぐ土の中を抜けてくる
+    const LAYERS = [
+      { name: "城下町の地下", en: "LAYER 1", cnp: [0, 1, 2], enemies: 4, rocks: 4, speed: 0.9, ghostAfter: [720, 1080], kill: 200, throwers: 1, throwCd: [240, 420],
+        bands: [["gold", 0.34], ["gold", 0.27], ["gold", 0.21], ["dim", 0.28]] },
+      { name: "金山の坑道", en: "LAYER 2", cnp: [3, 4, 5, 6], enemies: 5, rocks: 5, speed: 1.1, ghostAfter: [540, 840], kill: 300, throwers: 2, throwCd: [180, 330],
+        bands: [["gold", 0.3], ["danger", 0.24], ["gold", 0.2], ["danger", 0.17]] },
+      { name: "天守の地下蔵", en: "LAYER 3", cnp: [7, 8, 9, 10], enemies: 6, rocks: 6, speed: 1.3, ghostAfter: [360, 600], kill: 400, throwers: 3, throwCd: [120, 240],
+        bands: [["magenta", 0.2], ["danger", 0.2], ["magenta", 0.15], ["dim", 0.22]] },
+    ];
+
+    // 手裏剣: 忍者だけが投げる。縦か横に並ぶと 0.3秒止まって構えてから投げ、3マス飛ぶ（土も抜ける）。
+    // 忍具の縄に当たると止められる
+    const SHURIKEN = { reach: T * 3, speed: 3.5, windup: 18, sight: T * 4.5, blockPts: 50 };
+
+    // 時間とともに敵が速くなる: 30秒ごとに1段、5段まで（1段で1割ずつ）。層が変わると最初に戻る
+    const HURRY = { every: 30 * 60, max: 5, step: 0.1 };
+    const hurryMul = () => 1 + game.speedLv * HURRY.step;
+
+    const PTS = { dig: 10, cnp: 300, crush: [0, 500, 1500, 3000], allCnp: 5000, perLife: 1000 };
+
+    const cellOpen = new Uint8Array(SC * SR);
+    const tileScored = new Uint8Array(COLS * ROWS);
+    const terrain = document.createElement("canvas");
+    terrain.width = COLS * T;
+    terrain.height = ROWS * T;
+    const tctx = terrain.getContext("2d");
+
+    const game = {
+      layer: 0, state: "intro", t: 0, p: null, enemies: [], shots: [], hurry: 0, speedLv: 0, speedUpT: 0, rocks: [], cnps: [], exit: null, pops: [], bonus: null,
+    };
+
+    const rnd = (a, b) => a + Math.random() * (b - a);
+    const rint = (a, b) => Math.floor(rnd(a, b + 1));
+    const cx = (c) => c * T + T / 2; // マスの中心（盤面の座標）
+    const cy = (r) => r * T + T / 2;
+    const DIRS = [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }];
+
+    // ===== 掘った跡 =====
+    function isOpen(x, y) {
+      const i = Math.floor(x / S), j = Math.floor(y / S);
+      if (i < 0 || j < 0 || i >= SC || j >= SR) return false;
+      return cellOpen[j * SC + i] === 1;
+    }
+    function tileOpen(c, r) {
+      return c >= 0 && r >= 0 && c < COLS && r < ROWS && isOpen(cx(c), cy(r));
+    }
+    // 隣のマスへ通路がつながっているか（境目の升目が両側とも掘れている）
+    function connected(c, r, d) {
+      const nc = c + d.x, nr = r + d.y;
+      if (!tileOpen(c, r) || !tileOpen(nc, nr)) return false;
+      const mx = (cx(c) + cx(nc)) / 2, my = (cy(r) + cy(nr)) / 2;
+      return isOpen(mx - d.x * 2, my - d.y * 2) && isOpen(mx + d.x * 2, my + d.y * 2);
+    }
+    // (x, y) を中心に幅 2*half の四角を掘る。新しく掘れた升目の数を返す
+    function carve(x, y, half = DIG_HALF) {
+      let n = 0;
+      const i0 = Math.max(0, Math.ceil((x - half - S / 2) / S)), i1 = Math.min(SC - 1, Math.floor((x + half - S / 2) / S));
+      const j0 = Math.max(0, Math.ceil((y - half - S / 2) / S)), j1 = Math.min(SR - 1, Math.floor((y + half - S / 2) / S));
+      for (let j = j0; j <= j1; j++) {
+        for (let i = i0; i <= i1; i++) {
+          const k = j * SC + i;
+          if (!cellOpen[k]) {
+            cellOpen[k] = 1;
+            tctx.clearRect(i * S, j * S, S, S);
+            n++;
+          }
+        }
+      }
+      return n;
+    }
+    function carveTile(c, r) {
+      carve(cx(c), cy(r));
+      tileScored[r * COLS + c] = 1;
+    }
+
+    // ===== 層を作る =====
+    function paintTerrain(L) {
+      const c = kit.retro.colors;
+      tctx.clearRect(0, 0, terrain.width, terrain.height);
+      const bandH = (ROWS - 1) / L.bands.length;
+      for (let r = 1; r < ROWS; r++) {
+        const [tok, a] = L.bands[Math.min(L.bands.length - 1, Math.floor((r - 1) / bandH))];
+        tctx.fillStyle = c.panel;
+        tctx.fillRect(0, r * T, terrain.width, T);
+        tctx.fillStyle = kit.retro.alpha(c[tok], a);
+        tctx.fillRect(0, r * T, terrain.width, T);
+      }
+      // 土の粒
+      tctx.fillStyle = kit.retro.alpha(c.ink, 0.09);
+      for (let k = 0; k < 900; k++) tctx.fillRect(rint(0, terrain.width - 4), rint(T, terrain.height - 4), 2, 2);
+      tctx.fillStyle = kit.retro.alpha(c.bg, 0.35);
+      for (let k = 0; k < 500; k++) tctx.fillRect(rint(0, terrain.width - 4), rint(T, terrain.height - 4), 3, 2);
+      cellOpen.fill(0);
+      tileScored.fill(0);
+      // 地上の段は最初から通れる
+      for (let cc = 0; cc < COLS; cc++) carveTile(cc, 0);
+      tctx.clearRect(0, 0, terrain.width, T);
+      for (let i = 0; i < SC * (T / S); i++) cellOpen[i] = 1;
+    }
+
+    function buildLayer(idx) {
+      const L = LAYERS[idx];
+      paintTerrain(L);
+      const used = new Set();
+      const key = (c, r) => r * COLS + c;
+      const nearStart = (c, r) => Math.abs(c - START.c) + r < 7;
+      // スマホでは右下にボタンが重なるので、CNP と出口はそこに置かない
+      const underButtons = (c, r) => c >= 19 && r >= 9;
+
+      // 敵の巣（掘ってある短い通路）
+      game.enemies = [];
+      for (let n = 0; n < L.enemies; n++) {
+        for (let tries = 0; tries < 200; tries++) {
+          const horiz = Math.random() < 0.5;
+          const len = rint(3, 4);
+          const c = rint(1, COLS - 2 - (horiz ? len : 0)), r = rint(3, ROWS - 2 - (horiz ? 0 : len));
+          const cells = [];
+          for (let k = 0; k < len; k++) cells.push(horiz ? [c + k, r] : [c, r + k]);
+          // 巣どうしがくっつかないよう、まわり1マスも空けておく
+          const bad = cells.some(([a, b]) => nearStart(a, b) || [-1, 0, 1].some((dx) => [-1, 0, 1].some((dy) => used.has(key(a + dx, b + dy)))));
+          if (bad) continue;
+          cells.forEach(([a, b]) => { carveTile(a, b); used.add(key(a, b)); });
+          // つなぎ目も掘る
+          for (let k = 0; k < len - 1; k++) {
+            const [a, b] = cells[k], [a2, b2] = cells[k + 1];
+            carve((cx(a) + cx(a2)) / 2, (cy(b) + cy(b2)) / 2);
+          }
+          const [hc, hr] = cells[rint(0, len - 1)];
+          game.enemies.push(newEnemy(hc, hr, L, game.enemies.length < L.throwers ? 1 : 0));
+          break;
+        }
+      }
+
+      // 岩: 下が土のマスに置く
+      game.rocks = [];
+      for (let n = 0; n < L.rocks; n++) {
+        for (let tries = 0; tries < 200; tries++) {
+          const c = rint(1, COLS - 2), r = rint(1, ROWS - 5);
+          if (nearStart(c, r) && r < 2) continue;
+          if (used.has(key(c, r)) || used.has(key(c, r + 1)) || used.has(key(c, r + 2))) continue;
+          if (game.rocks.some((k) => Math.abs(k.c - c) <= 1 && Math.abs(k.r - r) <= 2)) continue;
+          used.add(key(c, r));
+          used.add(key(c, r + 1));
+          game.rocks.push({ c, r, x: cx(c), y: cy(r), state: "idle", t: 0, caught: [] });
+          break;
+        }
+      }
+
+      // CNP: 土の中に埋める。少し見えているので、どこを掘ればよいかは分かる
+      game.cnps = [];
+      for (const ci of L.cnp) {
+        for (let tries = 0; tries < 300; tries++) {
+          const c = rint(1, COLS - 2), r = rint(2, ROWS - 1);
+          if (used.has(key(c, r)) || nearStart(c, r) || underButtons(c, r)) continue;
+          if (game.cnps.some((k) => Math.abs(k.c - c) + Math.abs(k.r - r) < 6)) continue;
+          if ([-1, 0, 1].some((dx) => [-1, 0, 1].some((dy) => used.has(key(c + dx, r + dy))))) continue;
+          used.add(key(c, r));
+          game.cnps.push({ ch: kit.cnp.chars[ci], c, r, got: false, t: Math.random() * 6 });
+          break;
+        }
+      }
+      game.exit = null;
+      game.pops = [];
+      game.shots = [];
+      game.hurry = 0;
+      game.speedLv = 0;
+      game.speedUpT = 0;
+      game.p = newPlayer();
+    }
+
+    function newPlayer() {
+      return { x: cx(START.c), y: cy(START.r), face: { x: 1, y: 0 }, acc: 0, inv: 90, state: "alive", t: 0, tool: null, walk: 0 };
+    }
+    function newEnemy(c, r, L, kind) {
+      return {
+        home: { c, r }, x: cx(c), y: cy(r), dir: DIRS[rint(0, 3)], acc: 0, speed: L.speed * rnd(0.9, 1.1),
+        mode: "walk", ghostT: rint(...L.ghostAfter), ghostMin: 0, bind: 0, alive: true, crushed: null, kind,
+        throwCd: rint(...L.throwCd), windup: 0,
+      };
+    }
+    function resetEnemy(e) {
+      const L = LAYERS[game.layer];
+      Object.assign(e, { x: cx(e.home.c), y: cy(e.home.r), mode: "walk", ghostT: rint(...L.ghostAfter), bind: 0, acc: 0, windup: 0, throwCd: rint(...L.throwCd) });
+    }
+
+    // ===== 咲耶 =====
+    // 入力の向き。キー2つ同時や、スティックを斜め（約27°〜63°）に倒しているときは斜め {x, y} を返す
+    function wantDir() {
+      const i = kit.input;
+      let x = (i.right ? 1 : 0) - (i.left ? 1 : 0);
+      let y = (i.down ? 1 : 0) - (i.up ? 1 : 0);
+      if (!x && !y) {
+        const sx = i.stickX, sy = i.stickY, ax = Math.abs(sx), ay = Math.abs(sy);
+        if (Math.max(ax, ay) < 0.15) return null;
+        if (Math.min(ax, ay) >= Math.max(ax, ay) * 0.5) { x = Math.sign(sx); y = Math.sign(sy); }
+        else if (ax > ay) x = Math.sign(sx);
+        else y = Math.sign(sy);
+      }
+      return x || y ? { x, y } : null;
+    }
+    function rockBlocks(x, y) {
+      return game.rocks.some((k) => k.state !== "gone" && k.state !== "land" && Math.abs(k.x - x) < T && Math.abs(k.y - y) < T);
+    }
+    // 岩は隣のマスの中心までは近づける（升目の線の上で止まるので、そこから左右・上下へ曲がれる）
+    // 1px 進む。曲がりたいのに升目の線に乗っていなければ、乗るまで今の向きで進む（ディグダグと同じ）。
+    // その向きがふさがっていたら、逆向きに戻って線に乗る（岩や壁の手前で動けなくならないように）
+    function stepPlayer(d) {
+      const p = game.p;
+      const offX = (p.x - T / 2) % T, offY = (p.y - T / 2) % T;
+      let m = d;
+      let turning = false;
+      if (d.x && d.y) {
+        // 斜め: 升目の交点に来るたびに進む軸を入れ替える（1マスずつのきれいな階段になる）。
+        // 交点の間は、乗っている線に沿って斜めの向きの成分へ進む
+        if (offX === 0 && offY === 0) {
+          m = p.face.x ? { x: 0, y: d.y } : { x: d.x, y: 0 };
+          if (!canStep(m)) m = m.x ? { x: 0, y: d.y } : { x: d.x, y: 0 };
+        } else if (offY === 0) m = { x: d.x, y: 0 };
+        else if (offX === 0) m = { x: 0, y: d.y };
+        // 角を曲がっている途中（どちらの線にも乗っていない）: 横へ進みつつ近い方の横線へ寄せる
+        else m = { x: d.x, y: offY < T / 2 ? -1 : 1 };
+      } else {
+        // 曲がりたい向きと直角に進んでいて、まだ升目の線に乗っていないとき:
+        // 線まで CORNER 以内なら（手前でも、少し通り過ぎていても）角を斜めに切って曲がる（パックマン式）。
+        // 後ろへ戻る動きが出ないので、階段状に歩いてもなめらかに見える。それより遠ければ今の向きのまま次の線まで進む
+        const off = d.x ? offY : offX;
+        if (off !== 0) {
+          const f = (d.x ? p.face.y : p.face.x) || (off < T / 2 ? -1 : 1);
+          const passed = f > 0 ? off : T - off; // 後ろの線からどれだけ進んだか
+          if (passed <= CORNER || T - passed <= CORNER) {
+            const toLine = passed <= T - passed ? -f : f; // 近い方の線へ
+            const cut = d.x ? { x: d.x, y: toLine } : { x: toLine, y: d.y };
+            m = canStep(cut) ? cut : d.x ? { x: 0, y: toLine } : { x: toLine, y: 0 };
+            turning = true;
+          } else m = d.x ? { x: 0, y: f } : { x: f, y: 0 };
+        }
+      }
+      if (m !== d && !turning && !canStep(m)) m = { x: -m.x, y: -m.y };
+      p.face = turning ? d : m.x && m.y ? { x: m.x, y: 0 } : m;
+      if (!canStep(m)) return false;
+      const nx = p.x + m.x, ny = p.y + m.y;
+      p.x = nx;
+      p.y = ny;
+      carve(p.x, p.y);
+      const c = Math.floor(p.x / T), r = Math.floor(p.y / T);
+      if (Math.abs(p.x - cx(c)) < 6 && Math.abs(p.y - cy(r)) < 6 && !tileScored[r * COLS + c]) {
+        tileScored[r * COLS + c] = 1;
+        kit.score.add(PTS.dig);
+      }
+      return true;
+    }
+    function canStep(m) {
+      const p = game.p;
+      const nx = p.x + m.x, ny = p.y + m.y;
+      if (nx < T / 2 || nx > COLS * T - T / 2 || ny < T / 2 || ny > ROWS * T - T / 2) return false;
+      return !(rockBlocks(nx, ny) && !rockBlocks(p.x, p.y));
+    }
+    function updatePlayer() {
+      const p = game.p;
+      if (p.inv > 0) p.inv--;
+      const held = !!kit.input.buttons.tool;
+      if (held) {
+        updateTool();
+        return; // 忍具を使っている間は動けない
+      }
+      p.tool = null;
+      const d = wantDir();
+      if (!d) return;
+      // 前が土なら少し遅い
+      const digging = !isOpen(p.x + p.face.x * 14, p.y + p.face.y * 14);
+      p.acc += digging ? 1.5 : 2;
+      while (p.acc >= 1) {
+        p.acc -= 1;
+        if (!stepPlayer(d)) { p.acc = 0; break; }
+      }
+      p.walk++;
+    }
+
+    // 忍具（縄）: 押している間、向いている方へ伸びる。敵に絡んだら押し続けるほど縛りが強くなり、縛りきると倒せる。
+    // 土には通らない。離すと縄は戻り、縛られた敵は少しずつほどける
+    function updateTool() {
+      const p = game.p;
+      if (!p.tool) p.tool = { len: 0, dir: { ...p.face }, target: null, stuck: false, done: false };
+      const tl = p.tool;
+      if (tl.done) return;
+      if (tl.target) {
+        const e = tl.target;
+        if (!e.alive || e.crushed) { tl.done = true; return; }
+        tl.len = Math.max(0, Math.hypot(e.x - p.x, e.y - p.y) - 14);
+        e.bind += 1 / 22;
+        if (Math.floor(e.bind) !== Math.floor(e.bind - 1 / 22)) kit.sfx.tone({ freq: 300 + e.bind * 90, dur: 0.06, gain: 0.12 });
+        if (e.bind >= BIND_MAX) {
+          defeatEnemy(e, LAYERS[game.layer].kill);
+          tl.done = true;
+        }
+        return;
+      }
+      if (tl.len === 0 && !tl.stuck) kit.sfx.shot();
+      if (!tl.stuck) {
+        tl.len = Math.min(TOOL_REACH, tl.len + 8);
+        const tipX = p.x + tl.dir.x * (14 + tl.len), tipY = p.y + tl.dir.y * (14 + tl.len);
+        // 土に当たるか届ききったら、そこで止めて張ったままにする（押している間は手裏剣を叩き落とせる）
+        if (!isOpen(tipX, tipY)) { tl.len = Math.max(0, tl.len - 8); tl.stuck = true; }
+        else if (tl.len >= TOOL_REACH) tl.stuck = true;
+      }
+      // 張った縄に敵が入ってきても絡む
+      const hit = game.enemies.find((e) => e.alive && !e.crushed && e.mode === "walk" && segHit(p, tl.dir, 14 + tl.len, e));
+      if (hit) {
+        tl.target = hit;
+        hit.bind = Math.max(hit.bind, 1);
+        kit.sfx.hit();
+      }
+    }
+    function segHit(p, d, reach, e, width = 14) {
+      const along = (e.x - p.x) * d.x + (e.y - p.y) * d.y;
+      const side = Math.abs((e.x - p.x) * d.y - (e.y - p.y) * d.x);
+      return along > 0 && along < reach + 12 && side < width;
+    }
+
+    function defeatEnemy(e, pts) {
+      e.alive = false;
+      game.pops.push({ x: e.x, y: e.y, t: 30, text: String(pts) });
+      kit.score.add(pts);
+      kit.sfx.explode();
+    }
+
+    // ===== 敵 =====
+    function updateEnemy(e) {
+      if (!e.alive || e.crushed) return;
+      const p = game.p;
+      // 縛られている間は動けない。縄が離れると少しずつほどける
+      const held = p.tool && p.tool.target === e && !p.tool.done;
+      if (e.bind > 0) {
+        if (!held) e.bind = Math.max(0, e.bind - 1 / 50);
+        e.windup = 0;
+        return;
+      }
+      if (e.kind === 1 && e.mode === "walk" && updateThrow(e)) return;
+      if (e.mode === "ghost") {
+        // 土の中を抜けて咲耶のほうへ（目だけの姿）
+        e.ghostMin--;
+        const dx = p.x - e.x, dy = p.y - e.y, dist = Math.hypot(dx, dy) || 1;
+        const sp = e.speed * hurryMul() * 0.7;
+        e.x += (dx / dist) * sp;
+        e.y += (dy / dist) * sp;
+        if (e.ghostMin <= 0) {
+          // 掘ってあるマスの中心近くまで来たら、そこで姿を戻す
+          const c = Math.round((e.x - T / 2) / T), r = Math.round((e.y - T / 2) / T);
+          if (Math.hypot(e.x - cx(c), e.y - cy(r)) < 6 && tileOpen(c, r)) {
+            e.x = cx(c);
+            e.y = cy(r);
+            e.mode = "walk";
+            e.ghostT = rint(...LAYERS[game.layer].ghostAfter);
+          }
+        }
+        return;
+      }
+      if (--e.ghostT <= 0 && (e.x - T / 2) % T === 0 && (e.y - T / 2) % T === 0) {
+        e.mode = "ghost";
+        e.ghostMin = 90;
+        return;
+      }
+      e.acc += e.speed * hurryMul();
+      while (e.acc >= 1) {
+        e.acc -= 1;
+        if ((e.x - T / 2) % T === 0 && (e.y - T / 2) % T === 0) chooseDir(e);
+        if (!e.dir) break;
+        e.x += e.dir.x;
+        e.y += e.dir.y;
+      }
+    }
+    // 構えている間は止まる。構え終わったら咲耶のいる向きへ投げる。投げたら true を返す間は動かない
+    function updateThrow(e) {
+      const p = game.p;
+      if (e.windup > 0) {
+        if (--e.windup === 0) {
+          game.shots.push({ x: e.x, y: e.y, dx: e.aim.x, dy: e.aim.y, left: SHURIKEN.reach, spin: 0 });
+          e.throwCd = rint(...LAYERS[game.layer].throwCd);
+          kit.sfx.tone({ freq: 1400, to: 700, dur: 0.12, type: "triangle", gain: 0.12 });
+        }
+        return true;
+      }
+      if (e.throwCd > 0) { e.throwCd--; return false; }
+      if (p.state !== "alive" || (e.x - T / 2) % T !== 0 || (e.y - T / 2) % T !== 0) return false;
+      const dx = p.x - e.x, dy = p.y - e.y;
+      let aim = null;
+      if (Math.abs(dy) < 10 && Math.abs(dx) < SHURIKEN.sight) aim = { x: Math.sign(dx), y: 0 };
+      else if (Math.abs(dx) < 10 && Math.abs(dy) < SHURIKEN.sight) aim = { x: 0, y: Math.sign(dy) };
+      if (!aim || (!aim.x && !aim.y)) return false;
+      e.aim = aim;
+      e.dir = aim;
+      e.windup = SHURIKEN.windup;
+      return true;
+    }
+    function updateShots() {
+      const p = game.p;
+      for (const s of game.shots) {
+        const step = Math.min(SHURIKEN.speed, s.left);
+        s.x += s.dx * step;
+        s.y += s.dy * step;
+        s.left -= step;
+        s.spin += 0.4;
+        if (game.rocks.some((k) => (k.state === "idle" || k.state === "wobble") && Math.abs(k.x - s.x) < 14 && Math.abs(k.y - s.y) < 14)) s.left = 0;
+        // 伸ばしている縄に当たったら叩き落とす
+        const tl = p.tool;
+        if (s.left > 0 && p.state === "alive" && tl && !tl.done && segHit(p, tl.dir, 14 + tl.len, s, 10)) {
+          s.left = 0;
+          game.pops.push({ x: s.x, y: s.y - 6, t: 30, text: String(SHURIKEN.blockPts) });
+          kit.score.add(SHURIKEN.blockPts);
+          kit.sfx.tone({ freq: 1800, dur: 0.05, type: "square", gain: 0.12 });
+          kit.sfx.tone({ freq: 1200, dur: 0.08, type: "square", gain: 0.1, delay: 0.05 });
+          continue;
+        }
+        if (p.state === "alive" && p.inv === 0 && Math.hypot(p.x - s.x, p.y - s.y) < 13) {
+          s.left = 0;
+          killPlayer();
+        }
+      }
+      game.shots = game.shots.filter((s) => s.left > 0);
+    }
+    function chooseDir(e) {
+      const c = (e.x - T / 2) / T, r = (e.y - T / 2) / T;
+      const p = game.p;
+      let opts = DIRS.filter((d) => connected(c, r, d) && !rockBlocks(cx(c + d.x), cy(r + d.y)));
+      if (!opts.length) { e.dir = null; return; }
+      const back = opts.filter((d) => e.dir && d.x === -e.dir.x && d.y === -e.dir.y);
+      if (opts.length > 1 && back.length) opts = opts.filter((d) => !back.includes(d));
+      if (Math.random() < 0.55) {
+        opts.sort((a, b) => Math.hypot(cx(c + a.x) - p.x, cy(r + a.y) - p.y) - Math.hypot(cx(c + b.x) - p.x, cy(r + b.y) - p.y));
+        e.dir = opts[0];
+      } else e.dir = opts[rint(0, opts.length - 1)];
+    }
+
+    // ===== 岩 =====
+    // 真下が掘れたら少し揺れてから落ちる。咲耶が真下にいる間は待つ。
+    // 落ちる途中の敵は巻き込んでつぶし、止まったら崩れて消える
+    function updateRock(k) {
+      const p = game.p;
+      if (k.state === "idle") {
+        const below = tileOpen(k.c, k.r + 1);
+        const under = Math.abs(p.x - k.x) < T - 4 && p.y > k.y && p.y - k.y < T * 1.5;
+        if (below && !under) { k.state = "wobble"; k.t = 40; }
+      } else if (k.state === "wobble") {
+        if (--k.t <= 0) { k.state = "fall"; kit.sfx.noise({ dur: 0.25, gain: 0.12, filterFrom: 600, filterTo: 120 }); }
+      } else if (k.state === "fall") {
+        for (let s = 0; s < 4; s++) {
+          const r = (k.y - T / 2) / T;
+          if (Number.isInteger(r) && !(r + 1 < ROWS && tileOpen(k.c, r + 1))) { land(k); return; }
+          k.y += 1;
+          carve(k.x, k.y);
+        }
+        for (const e of game.enemies) {
+          if (e.alive && !e.crushed && Math.abs(e.x - k.x) < 22 && e.y - k.y > -8 && e.y - k.y < 26) {
+            e.crushed = k;
+            k.caught.push(e);
+          }
+        }
+        for (const e of k.caught) { e.x = k.x; e.y = k.y + 14; }
+        if (p.state === "alive" && Math.abs(p.x - k.x) < 24 && p.y - k.y > -8 && p.y - k.y < 28) killPlayer();
+      } else if (k.state === "land") {
+        if (--k.t <= 0) k.state = "gone";
+      }
+    }
+    function land(k) {
+      k.state = "land";
+      k.t = 36;
+      k.r = Math.round((k.y - T / 2) / T);
+      kit.sfx.explode();
+      const n = k.caught.length;
+      if (n) {
+        const pts = PTS.crush[Math.min(3, n)];
+        for (const e of k.caught) e.alive = false;
+        game.pops.push({ x: k.x, y: k.y, t: 40, text: String(pts) });
+        kit.score.add(pts);
+      }
+    }
+
+    // ===== ミス・層の移動・クリア =====
+    function killPlayer() {
+      const p = game.p;
+      if (p.state !== "alive") return;
+      p.state = "dying";
+      p.t = 70;
+      p.tool = null;
+      kit.sfx.hit();
+    }
+    function afterDeath() {
+      if (kit.lives.lose() <= 0) {
+        game.state = "over";
+        kit.gameOver({ cleared: false, progress: (kit.cnp.run.count / 11) * 100 });
+        return;
+      }
+      game.p = newPlayer();
+      game.shots = [];
+      for (const e of game.enemies) if (e.alive && !e.crushed) resetEnemy(e);
+    }
+    function checkCnp() {
+      const p = game.p;
+      for (const k of game.cnps) {
+        if (k.got) continue;
+        if (Math.abs(p.x - cx(k.c)) < 16 && Math.abs(p.y - cy(k.r)) < 16) {
+          k.got = true;
+          kit.cnp.run.collect(k.ch.no);
+          kit.score.add(PTS.cnp);
+          kit.sfx.pickup();
+          game.pops.push({ x: cx(k.c), y: cy(k.r) - 10, t: 40, text: k.ch.label });
+        }
+      }
+      if (!game.exit && game.cnps.every((k) => k.got)) {
+        // 最後の層は地上の出口、それ以外は下への穴
+        const last = game.layer === LAYERS.length - 1;
+        game.exit = last ? { c: START.c, r: 0, up: true } : { c: rint(3, 17), r: ROWS - 1, up: false };
+        kit.sfx.bonus();
+      }
+      if (game.exit && Math.abs(p.x - cx(game.exit.c)) < 6 && Math.abs(p.y - cy(game.exit.r)) < 6) {
+        if (game.exit.up) {
+          const lives = kit.lives.value;
+          game.bonus = { all: PTS.allCnp, lives, perLife: PTS.perLife };
+          kit.score.add(PTS.allCnp + lives * PTS.perLife);
+          game.state = "clear";
+          game.t = 150;
+          kit.sfx.clear();
+        } else {
+          game.state = "down";
+          game.t = 60;
+          kit.sfx.stage();
+        }
+      }
+    }
+
+    function onStart() {
+      game.layer = 0;
+      game.bonus = null;
+      buildLayer(0);
+      game.state = "intro";
+      game.t = 120;
+    }
+
+    const kit = createKit({
+      gameId: "dig" /* 企画書の gameId。あとから変えない */,
+      title: "SAKUYA DIG",
+      subtitle: "- DIG OUT 11 CNP -",
+      // 咲耶シリーズ共通のランキング（sakuya-kit/gas/apps-script.gs）。新しい GAS は作らない
+      gasUrl: "https://script.google.com/macros/s/AKfycby-UoKAfHw4eBULVb37tQzwPEhNm65B_HUktd9Sh0ZxMdOdmnRHdub0NeeXUCAqg8bG/exec",
+      maxScore: 50000, // GAS の _games のスコア上限と同じ値にする
+      cnp: true,
+      // 縦持ち案内に出すキービジュアル（sakuya-kit 0.3.0 から。0.2.0 では無視される）
+      orientation: { image: "key-visual.jpg" },
+      lives: { start: 3 },
+      controls: {
+        stick: true,
+        stickDigital4: false, // 斜めに倒すと階段状に掘れるよう、向きはゲーム側で読む（wantDir）
+        buttons: [{ id: "tool", label: "X", ariaLabel: "忍具", keys: ["KeyX", "Space"], primary: true }],
+      },
+      share: {
+        when: "clear",
+        text: (r) => `咲耶ディグ をクリア！\nスコア ${r.score}\n救出 ${r.rescued.length}/11`,
+      },
+      help: {
+        pc: "矢印/WASDで移動（掘る）、X長押しで忍具、Mで音（Pキーで一時停止）",
+        mobile: "左半分を押したまま倒して移動（掘る）。右下の X を長押しで忍具",
+        playing: "CNP を掘り出そう ― 敵は忍具で縛るか、岩を落としてつぶす",
+      },
+      cutscenes: {},
+      onStart,
+
+      update() {
+        if (game.state === "intro") {
+          if (--game.t <= 0) game.state = "play";
+          return;
+        }
+        if (game.state === "down") {
+          if (--game.t <= 0) {
+            game.layer++;
+            buildLayer(game.layer);
+            game.state = "intro";
+            game.t = 120;
+          }
+          return;
+        }
+        if (game.state === "clear") {
+          if (--game.t <= 0) {
+            game.state = "over";
+            kit.gameOver({ cleared: true, progress: 100 });
+          }
+          return;
+        }
+        if (game.state !== "play") return;
+
+        const p = game.p;
+        if (p.state === "dying") {
+          if (--p.t <= 0) afterDeath();
+        } else {
+          updatePlayer();
+          checkCnp();
+        }
+        for (const e of game.enemies) updateEnemy(e);
+        updateShots();
+        if (game.speedUpT > 0) game.speedUpT--;
+        if (++game.hurry % HURRY.every === 0 && game.speedLv < HURRY.max) {
+          game.speedLv++;
+          game.speedUpT = 90;
+          kit.sfx.tone({ freq: 440, to: 880, dur: 0.18, type: "square", gain: 0.12 });
+          kit.sfx.tone({ freq: 660, to: 1320, dur: 0.18, type: "square", gain: 0.1, delay: 0.12 });
+        }
+        for (const k of game.rocks) updateRock(k);
+        game.rocks = game.rocks.filter((k) => k.state !== "gone");
+        for (const pp of game.pops) pp.t--;
+        game.pops = game.pops.filter((pp) => pp.t > 0);
+
+        if (p.state === "alive" && p.inv === 0) {
+          for (const e of game.enemies) {
+            if (e.alive && !e.crushed && e.bind === 0 && Math.hypot(e.x - p.x, e.y - p.y) < 20) { killPlayer(); break; }
+          }
+        }
+      },
+
+      render(ctx, k) {
+        const { colors } = k.retro;
+        ctx.fillStyle = colors.bg;
+        ctx.fillRect(0, 0, W, H);
+
+        if (k.phase === "title") {
+          drawTitle(ctx, k);
+          return;
+        }
+        drawField(ctx, k);
+        k.hud.score();
+        k.hud.roster();
+        k.hud.lives();
+        drawSpeed(ctx, k);
+        const L = LAYERS[game.layer];
+        ctx.save();
+        ctx.textAlign = "right";
+        ctx.font = k.retro.font(8);
+        ctx.fillStyle = colors.dim;
+        ctx.fillText(L.en, W - 16, 52);
+        ctx.font = k.retro.fontBody(12);
+        ctx.fillText(L.name, W - 16, 68);
+        ctx.restore();
+
+        if (game.state === "intro") k.retro.caption(L.en, L.name + " ― CNP " + L.cnp.length + "体を掘り出せ");
+        else if (game.state === "down") k.retro.caption("DIG DOWN!", "つぎの層へ");
+        else if (game.state === "clear" && game.bonus) {
+          const b = game.bonus;
+          k.retro.caption("ALL CNP RESCUED!", `全員救出 ${b.all} ＋ 残機 ${b.lives}×${b.perLife}`);
+        }
+      },
+    });
+
+    // ===== 描画 =====
+    function drawTitle(ctx, k) {
+      const { colors } = k.retro;
+      ctx.save();
+      ctx.translate(0, FY);
+      // 見本の地面
+      ctx.fillStyle = k.retro.alpha(colors.gold, 0.18);
+      ctx.fillRect(0, 150, W, H - FY - 150);
+      k.retro.crt();
+      ctx.restore();
+      k.retro.titleText("SAKUYA DIG", "- DIG OUT 11 CNP -", 110);
+      // 主役の咲耶（大きめに）
+      const step = Math.floor(k.frame / 24) % 2;
+      drawSakuya(ctx, k, 150, 118, { x: 1, y: 0 }, step, 5);
+      drawSakuya(ctx, k, W - 150, 118, { x: 0, y: 1 }, step, 5);
+      k.cnp.chars.forEach((ch, i) => k.cnp.draw(ctx, ch, 130 + i * 70, 300 + Math.sin(k.frame / 20 + i) * 4, 52));
+      ctx.save();
+      ctx.textAlign = "center";
+      ctx.fillStyle = colors.ink;
+      ctx.font = k.retro.fontBody(15);
+      ctx.fillText("土を掘って CNP 11体を掘り出し、地上へ戻ろう", W / 2, 190);
+      ctx.fillStyle = colors.dim;
+      ctx.font = k.retro.fontBody(13);
+      ctx.fillText("敵は 忍具（長押し）で縛る ・ 真下を掘って 岩を落とす", W / 2, 216);
+      ctx.restore();
+    }
+
+    function drawField(ctx, k) {
+      const { colors } = k.retro;
+      const alpha = k.retro.alpha;
+      ctx.save();
+      ctx.translate(0, FY);
+      // 地上（空）と掘った跡は暗い色、土は terrain に描いてある
+      ctx.fillStyle = colors.bg;
+      ctx.fillRect(0, 0, W, ROWS * T);
+      drawSurface(ctx, k);
+      ctx.drawImage(terrain, 0, 0);
+      k.retro.crt();
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(0, FY);
+      // 出口
+      if (game.exit) {
+        const ex = cx(game.exit.c), ey = cy(game.exit.r);
+        ctx.fillStyle = alpha(colors.gold, k.retro.blinkOn(16) ? 0.9 : 0.4);
+        ctx.strokeStyle = colors.gold;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(ex - 14, ey - 14, 28, 28);
+        ctx.font = k.retro.font(12);
+        ctx.textAlign = "center";
+        ctx.fillText(game.exit.up ? "▲" : "▼", ex, ey + 6);
+        ctx.font = k.retro.font(8);
+        ctx.fillText(game.exit.up ? "EXIT" : "DOWN", ex, game.exit.up ? ey + 30 : ey - 20);
+      }
+      // 埋まっている CNP（うっすら見える）
+      for (const c of game.cnps) {
+        if (c.got) continue;
+        c.t += 0.05;
+        const x = cx(c.c), y = cy(c.r);
+        // 土の中の小さな空洞に眠っている
+        ctx.fillStyle = k.retro.alpha(colors.bg, 0.55);
+        ctx.beginPath();
+        ctx.arc(x, y, 15, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = `hsla(${c.ch.hue},80%,60%,${0.35 + Math.sin(c.t) * 0.2})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.globalAlpha = 0.75;
+        k.cnp.draw(ctx, c.ch, x, y, 28);
+        ctx.globalAlpha = 1;
+        if (k.retro.blinkOn(20)) {
+          ctx.fillStyle = colors.gold;
+          ctx.fillRect(x + 10, y - 14, 3, 3);
+        }
+      }
+      // 岩
+      for (const r of game.rocks) {
+        let x = r.x, y = r.y;
+        if (r.state === "wobble") x += (k.frame % 6 < 3 ? -2 : 2);
+        if (r.state === "land") {
+          ctx.globalAlpha = r.t / 36;
+          ctx.fillStyle = colors.dim;
+          for (let i = 0; i < 5; i++) ctx.fillRect(x - 14 + i * 7, y + 4 - ((36 - r.t) * (i % 2 ? 0.3 : 0.5)), 6, 6);
+          ctx.globalAlpha = 1;
+          continue;
+        }
+        ctx.fillStyle = alpha(colors.ink, 0.55);
+        ctx.beginPath();
+        ctx.moveTo(x - 14, y + 13);
+        ctx.lineTo(x - 15, y - 4);
+        ctx.lineTo(x - 6, y - 14);
+        ctx.lineTo(x + 9, y - 13);
+        ctx.lineTo(x + 15, y - 2);
+        ctx.lineTo(x + 13, y + 13);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = alpha(colors.bg, 0.45);
+        ctx.fillRect(x - 6, y - 2, 10, 3);
+        ctx.fillRect(x + 2, y + 5, 7, 3);
+      }
+      // 敵
+      for (const e of game.enemies) if (e.alive) drawEnemy(ctx, k, e);
+      // 手裏剣
+      for (const s of game.shots) drawShuriken(ctx, k, s);
+      // 咲耶
+      drawPlayer(ctx, k);
+      // 点数の吹き出し
+      ctx.textAlign = "center";
+      for (const pp of game.pops) {
+        ctx.fillStyle = colors.gold;
+        ctx.font = /^\d+$/.test(pp.text) ? k.retro.font(10) : k.retro.fontBody(13);
+        ctx.fillText(pp.text, pp.x, pp.y - (40 - pp.t) * 0.6);
+      }
+      ctx.restore();
+    }
+
+    function drawSurface(ctx, k) {
+      const { colors } = k.retro;
+      // 町並みの影（瓦屋根）
+      ctx.fillStyle = k.retro.alpha(colors.dim, 0.22);
+      for (let x = 0; x < W; x += 96) {
+        if (Math.abs(x + 48 - cx(START.c)) < 60) continue;
+        ctx.beginPath();
+        ctx.moveTo(x + 8, T);
+        ctx.lineTo(x + 8, 16);
+        ctx.lineTo(x + 20, 6);
+        ctx.lineTo(x + 76, 6);
+        ctx.lineTo(x + 88, 16);
+        ctx.lineTo(x + 88, T);
+        ctx.fill();
+      }
+      ctx.fillStyle = k.retro.alpha(colors.gold, 0.5);
+      ctx.fillRect(0, T - 2, W, 2);
+    }
+
+    function drawPlayer(ctx, k) {
+      const p = game.p;
+      if (!p) return;
+      const { colors } = k.retro;
+      if (p.state === "dying") {
+        const a = p.t / 70;
+        ctx.globalAlpha = a;
+        ctx.fillStyle = colors.magenta;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 12 * (1.6 - a * 0.6), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        return;
+      }
+      if (p.inv > 0 && k.frame % 8 < 4) return;
+      // 忍具の縄
+      if (p.tool && !p.tool.done && p.tool.len > 0) {
+        const d = p.tool.dir;
+        const x0 = p.x + d.x * 12, y0 = p.y + d.y * 12;
+        const x1 = p.x + d.x * (14 + p.tool.len), y1 = p.y + d.y * (14 + p.tool.len);
+        ctx.strokeStyle = colors.gold;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x1, y1);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = colors.ink;
+        ctx.fillRect(x1 - 3, y1 - 3, 6, 6);
+      }
+      drawSakuya(ctx, k, p.x, p.y, p.face, Math.floor(p.walk / 8) % 2, 2);
+    }
+
+    // ===== 咲耶のドット絵 =====
+    // 設定画を 12x14 のドットに落としたもの（1ドット = 2px）。黒髪の高いポニーテールに赤いリボン、
+    // ピンクの着物に黒い衿と帯・金の紐、黒い籠手と短パン・ブーツ。色は kit の色から作る。
+    //   K 髪  H 髪のつや  R リボン  S 肌  E 目  P ピンク  B 黒い布  G 金の紐
+    const SAKUYA_MAPS = {
+      down: [
+        "....KKKK.RR.",
+        "..KKKKKKRRRR",
+        ".KKHHKKKKKRR",
+        ".KKKKKKKKKKR",
+        ".KKKSKKSKKKR",
+        ".KSSSSSSSSKK",
+        ".KSEESSEESKK",
+        ".KSEESSEESKK",
+        "..SSSSSSSS.K",
+        "..PBPPPPBP.K",
+        "SBPPBPPBPPBS",
+        ".BBBGBBGBBB.",
+        "..PPPPPPPP..",
+        ["..BBB..BBB..", "..BBB...BB.."],
+      ],
+      right: [
+        "...KKKK.....",
+        ".RRKKKKKK...",
+        "RRKKKKHKKK..",
+        "RKKKKKKKKKK.",
+        "KKKKKKKKKSK.",
+        "KKKKKKKSSSS.",
+        "KKKKKKKSSES.",
+        "KKKKKKKSSES.",
+        "KKK..KSSSSS.",
+        "KK....BPPS..",
+        "KK...PBPPBS.",
+        "K....BGBBP..",
+        "K....PPPPP..",
+        [".....BB.BB..", "....BB...BB."],
+      ],
+      up: [
+        "....KKKK....",
+        "..KKKRRKK...",
+        ".KRRRRRRRK..",
+        ".KKKKKKRRRR.",
+        ".KKKKKKKKRR.",
+        ".KKKHKKKKKK.",
+        ".KKKKKKKKKK.",
+        ".KKKKKKKKKK.",
+        "..KKKKKKKK..",
+        "..PKKKKKKP..",
+        "SBPKKKKKKPBS",
+        ".BBBBKKBBBB.",
+        "..PPPKKPPP..",
+        ["..BBB..BBB..", "..BBB...BB.."],
+      ],
+    };
+    let sakuyaSprites = null;
+    // ドットの地図（文字列の配列）を 1ドット = 1px の canvas にする。まわりに 1ドットのふちを付ける
+    // （暗い通路でも黒い体の形が見えるように）。pal は文字ごとに重ねて塗る色の配列
+    function makeSprite(lines, pal, outline) {
+      const w = Math.max(...lines.map((l) => l.length)), h = lines.length;
+      const cv = document.createElement("canvas");
+      cv.width = w + 2;
+      cv.height = h + 2;
+      const g = cv.getContext("2d");
+      const cells = [];
+      lines.forEach((line, y) => [...line].forEach((ch, x) => { if (ch !== ".") cells.push([x + 1, y + 1, ch]); }));
+      g.fillStyle = outline;
+      for (const [x, y] of cells) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) g.fillRect(x + dx, y + dy, 1, 1);
+      for (const [x, y, ch] of cells) {
+        for (const col of pal[ch]) {
+          g.fillStyle = col;
+          g.fillRect(x, y, 1, 1);
+        }
+      }
+      return cv;
+    }
+    // 2コマの地図（行が [0コマ目, 1コマ目] の配列になっているところだけ入れ替える）から、向きごとの絵を作る
+    function makeSprites(maps, pal, outline) {
+      const out = {};
+      for (const [dir, rows] of Object.entries(maps)) {
+        out[dir] = [0, 1].map((frame) => makeSprite(rows.map((r) => (Array.isArray(r) ? r[frame] : r)), pal, outline));
+      }
+      return out;
+    }
+    function buildSakuya(k) {
+      const c = k.retro.colors, a = k.retro.alpha;
+      // 黒は背景に沈むので、髪と黒い布は少し青みの灰色に持ち上げる。肌は白に金と桃を重ねて温かく
+      const pal = {
+        K: [c.bg, a(c.dim, 0.5)], H: [c.dim], R: [c.danger], S: [c.ink, a(c.gold, 0.35), a(c.magenta, 0.08)],
+        E: [c.bg], P: [c.magenta], B: [c.bg, a(c.dim, 0.24)], G: [c.gold],
+      };
+      return makeSprites(SAKUYA_MAPS, pal, a(c.ink, 0.4));
+    }
+    // 向き（face）から絵を選んで (x, y) を中心に描く。左向きは右向きを裏返す
+    function drawSprite(ctx, sprites, x, y, face, frame, scale) {
+      const dir = face.y < 0 ? "up" : face.y > 0 ? "down" : "right";
+      const img = sprites[dir][frame];
+      const w = img.width * scale, h = img.height * scale;
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.translate(Math.round(x), Math.round(y));
+      if (face.x < 0) ctx.scale(-1, 1);
+      ctx.drawImage(img, -w / 2, -h / 2 - scale, w, h);
+      ctx.restore();
+    }
+    // (x, y) は体の中心。scale は1ドットの大きさ（ゲーム中は 2）
+    function drawSakuya(ctx, k, x, y, face, frame, scale) {
+      if (!sakuyaSprites) sakuyaSprites = buildSakuya(k);
+      drawSprite(ctx, sakuyaSprites, x, y, face, frame, scale);
+    }
+
+    // 左上のスコアの下に、いまの速さの段（5つの目盛り）
+    function drawSpeed(ctx, k) {
+      const { colors } = k.retro;
+      ctx.save();
+      ctx.font = k.retro.font(7);
+      ctx.textAlign = "left";
+      ctx.fillStyle = colors.dim;
+      ctx.fillText("SPEED", 110, 58);
+      for (let i = 0; i < HURRY.max; i++) {
+        ctx.fillStyle = i < game.speedLv ? (i >= 3 ? colors.danger : colors.gold) : k.retro.alpha(colors.dim, 0.35);
+        ctx.fillRect(152 + i * 9, 51, 7, 7);
+      }
+      ctx.restore();
+      if (game.speedUpT > 0 && k.retro.blinkOn(8)) {
+        ctx.save();
+        ctx.textAlign = "center";
+        ctx.font = k.retro.font(14);
+        ctx.fillStyle = colors.danger;
+        ctx.fillText("SPEED UP!", W / 2, FY + 60);
+        ctx.restore();
+      }
+    }
+    function drawShuriken(ctx, k, s) {
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(s.spin);
+      ctx.fillStyle = k.retro.colors.ink;
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const r = i % 2 ? 2.5 : 8;
+        const a = (i * Math.PI) / 4;
+        ctx[i ? "lineTo" : "moveTo"](Math.cos(a) * r, Math.sin(a) * r);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = k.retro.colors.bg;
+      ctx.fillRect(-1, -1, 2, 2);
+      ctx.restore();
+    }
+    // ===== 敵のドット絵 =====
+    // 忍者（手裏剣を投げる方）: 黒装束に鉄の額当て（菱の鋲3つ）、覆面、灰色の帯と籠手。怒り目
+    //   N 黒装束  M 鉄  D 鋲  S 肌  E 目  L 帯
+    const NINJA_MAPS = {
+      down: [
+        "...NNNNNN...",
+        "..NNNNNNNN..",
+        "NNMMMMMMMMN.",
+        "N.MDMMDMMDN.",
+        "..NNNNNNNNN.",
+        ".NSSSSSSSSN.",
+        ".NSEESSEESN.",
+        ".NNNNNNNNNN.",
+        "..NNNNNNNN..",
+        ".NNNSNNSNNN.",
+        "SMNNNLLNNNMS",
+        ".MNLLLLLLNM.",
+        "..NNNNNNNN..",
+        ["..NN....NN..", "..NN...NN..."],
+      ],
+      right: [
+        "....NNNNN...",
+        "...NNNNNNN..",
+        "..NNNNMMMMN.",
+        "NNNNNNMDMMN.",
+        ".NNNNNNNNNN.",
+        "..NNNNNSSSN.",
+        "..NNNNNSESN.",
+        "..NNNNNNNNN.",
+        "...NNNNNNN..",
+        "....NNNNNN..",
+        "....MNNSNM..",
+        "....NLLLLN..",
+        "....NNNNNN..",
+        ["....NN.NN...", "...NN...NN.."],
+      ],
+      up: [
+        "...NNNNNN...",
+        "..NNNNNNNN..",
+        ".NNNNNNNNNN.",
+        ".NNNNLLNNNN.",
+        ".NNNLNNLNNN.",
+        ".NNNNNNNNNN.",
+        ".NNNNNNNNNN.",
+        "..NNNNNNNN..",
+        "..NNNNNNNN..",
+        ".NNNNNNNNNN.",
+        "SMNNNNNNNNMS",
+        ".MLLLLLLLLM.",
+        "..NNNNNNNN..",
+        ["..NN....NN..", "..NN...NN..."],
+      ],
+    };
+    // ぬばたまの妖怪: 墨のような黒い玉。頭から黒い炎がゆらぎ、赤いひびと赤い目。足もとに墨の波
+    //   O 体  X 炎と波  C ひび  R 目
+    const NUBA_BODY = [
+      [".....X......", "......X....."],
+      ["....XX.X....", "...X.XX....."],
+      "...XXXXX....",
+      "..OOOOOOOO..",
+      ".OOOOOOOCOO.",
+      "OOOOOOOCOOOO",
+      "OOOOOOOCOOOO",
+      null, // 目の行（向きで変える）
+      "OOOOOOOOCOOO",
+      "OOOOOOOOOOOO",
+      ".OOOOOOOOOO.",
+      ["X.OOOOOOOO.X", "..OOOOOOOO.."],
+      [".XXXXXXXXXX.", "X.XXXXXXXX.X"],
+    ];
+    const nubaMap = (eyes) => NUBA_BODY.map((r) => (r === null ? eyes : r));
+    const NUBA_MAPS = { down: nubaMap("OORROOOORROO"), right: nubaMap("OOOOOORROORR"), up: nubaMap("OOOOOOOOOOOO") };
+
+    let enemySprites = null;
+    function buildEnemies(k) {
+      const c = k.retro.colors, a = k.retro.alpha;
+      const skin = [c.ink, a(c.gold, 0.35), a(c.magenta, 0.08)];
+      const ninja = { N: [c.bg, a(c.dim, 0.3)], M: [c.bg, a(c.dim, 0.85)], D: [c.bg], S: skin, E: [c.bg], L: [c.bg, a(c.dim, 0.6)] };
+      const nuba = { O: [c.bg, a(c.magenta, 0.1), a(c.dim, 0.14)], X: [c.bg, a(c.magenta, 0.2), a(c.dim, 0.22)], C: [c.danger], R: [c.danger] };
+      // 咲耶と見分けやすいよう、ふちは忍者が赤、ぬばたまが紫。構えて光るとき用に白い影も作る
+      const flash = (maps) => makeSprites(maps, new Proxy({}, { get: () => [c.ink] }), c.ink);
+      return {
+        1: makeSprites(NINJA_MAPS, ninja, a(c.danger, 0.75)),
+        0: makeSprites(NUBA_MAPS, nuba, a(c.magenta, 0.55)),
+        flash1: flash(NINJA_MAPS),
+      };
+    }
+
+    function drawEnemy(ctx, k, e) {
+      const { colors } = k.retro;
+      if (!enemySprites) enemySprites = buildEnemies(k);
+      if (e.mode === "ghost") {
+        // 土の中では目だけ（忍者は白い目、ぬばたまは赤い目）
+        ctx.fillStyle = e.kind ? colors.ink : colors.danger;
+        const bl = k.frame % 20 < 10;
+        ctx.fillRect(e.x - 7, e.y - 3, 5, bl ? 4 : 2);
+        ctx.fillRect(e.x + 2, e.y - 3, 5, bl ? 4 : 2);
+        return;
+      }
+      const puff = e.bind * 2.5; // 縛るほどもがいてふくらむ
+      const r = 12 + puff;
+      const shake = e.bind > 0 ? (k.frame % 4 < 2 ? -1 : 1) : 0;
+      const x = e.x + shake, y = e.y;
+      const face = e.dir || { x: 0, y: 1 };
+      const frame = e.bind > 0 ? 0 : Math.floor((k.frame + e.home.c * 7) / 12) % 2;
+      const scale = 2 + e.bind * 0.2;
+      const flashing = e.windup > 0 && k.frame % 6 < 3;
+      drawSprite(ctx, flashing ? enemySprites.flash1 : enemySprites[e.kind], x, y, face, frame, scale);
+      // 縛りの縄
+      if (e.bind > 0) {
+        ctx.strokeStyle = colors.gold;
+        ctx.lineWidth = 2;
+        const n = Math.ceil(e.bind);
+        for (let i = 0; i < n; i++) {
+          const yy = y - r * 0.6 + (i * r * 1.3) / BIND_MAX;
+          const hw = Math.sqrt(Math.max(0, r * r - (yy - y) * (yy - y)));
+          ctx.beginPath();
+          ctx.moveTo(x - hw, yy);
+          ctx.lineTo(x + hw, yy + 2);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // 遊び方はランキングより上に出す
+    document.querySelector(".sk-leaderboard").before(document.getElementById("how"));
+    window.kit = kit; // デバッグ用・playtest が読む（消さない）
+    window.dig = game; // デバッグ用
+    window.digDebug = { carve, cx, cy, T, FY, stepPlayer, canStep }; // デバッグ用（自動テストが使う）
+  </script>
+</body>
+</html>

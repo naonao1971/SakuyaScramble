@@ -1,0 +1,37 @@
+{
+  "name": "咲耶ディグ",
+  "short_name": "咲耶ディグ",
+  "description": "城下町の地下を掘り進め、忍具と落石で忍者や妖怪をかわしながら、埋まった CNP 11体を掘り出して地上へ戻るレトロアーケード風ブラウザゲーム。",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#06070C",
+  "theme_color": "#06070C",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "favicon-32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
