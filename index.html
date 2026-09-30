@@ -31,7 +31,7 @@
   <meta name="twitter:image" content="https://sakuya.naoblock.jp/ogp.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/naonao1971/sakuya-kit@0.3.3/kit.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/naonao1971/sakuya-kit@0.4.0/kit.css" />
 </head>
 <body>
   <!-- 共通UI（スタート・ポーズ・操作ボタン・スティック・ランキング・縦持ち案内・全画面の案内）は
@@ -43,7 +43,7 @@
   <script type="module">
     // 共通部分は sakuya-kit（https://github.com/naonao1971/sakuya-kit）。版を上げるときは
     // kit.css と同じ番号にそろえ、CHANGELOG を読んでから実機で確かめる
-    import { createKit } from "https://cdn.jsdelivr.net/gh/naonao1971/sakuya-kit@0.3.3/kit.js";
+    import { createKit } from "https://cdn.jsdelivr.net/gh/naonao1971/sakuya-kit@0.4.0/kit.js";
 
     const canvas = document.getElementById("game");
     const ctx = canvas.getContext("2d");
@@ -59,6 +59,8 @@
       subtitle: "- RESCUE 11 CNP -",
       gasUrl: GAS_URL,
       cnp: true,
+      // 機内モードでも遊べるようにする（sw.js）。オフラインでは演出動画を流さず、ジングルと結果画面にする
+      offline: true,
       // 死亡時の爆発やクリア後の演出は結果画面の裏でも動かす（update() が止まると明滅も止まる）
       updateWhenOver: true,
       controls: {
