@@ -31,7 +31,7 @@
   <meta name="twitter:image" content="https://sakuya.naoblock.jp/ogp.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/naonao1971/sakuya-kit@0.4.0/kit.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/naonao1971/sakuya-kit@0.5.0/kit.css" />
 </head>
 <body>
   <!-- 共通UI（スタート・ポーズ・操作ボタン・スティック・ランキング・縦持ち案内・全画面の案内）は
@@ -43,7 +43,7 @@
   <script type="module">
     // 共通部分は sakuya-kit（https://github.com/naonao1971/sakuya-kit）。版を上げるときは
     // kit.css と同じ番号にそろえ、CHANGELOG を読んでから実機で確かめる
-    import { createKit } from "https://cdn.jsdelivr.net/gh/naonao1971/sakuya-kit@0.4.0/kit.js";
+    import { createKit } from "https://cdn.jsdelivr.net/gh/naonao1971/sakuya-kit@0.5.0/kit.js";
 
     const canvas = document.getElementById("game");
     const ctx = canvas.getContext("2d");
@@ -65,16 +65,19 @@
       updateWhenOver: true,
       controls: {
         stick: true,
-        // スタート時に自動で傾き操作へ（対応端末のみ）。🕹️ の長押しでスティックに戻せる
+        // スタート時に自動で傾き操作へ（対応端末のみ）。⚙ の「移動の操作」でスティックに戻せる
         gyro: true,
+        // シリーズ共通のボタン配置（F3）: A・B と ⚙ 設定。自動連射・音・全画面・移動の操作は ⚙ の中
+        layout: "ab",
         buttons: [
-          // 短く押す=バルカン、3秒押し続ける=レーザー
-          { id: "fire", label: "X", ariaLabel: "バルカン発射", keys: ["KeyX"], primary: true,
+          // A: 短く押す=バルカン、3秒押し続ける=レーザー
+          { id: "fire", slot: "A", hint: "SHOT", ariaLabel: "バルカン発射（長押しでレーザー）", keys: ["KeyX"],
             onPress: () => startLaserCharge(), onRelease: () => stopLaserCharge() },
-          { id: "bomb", label: "💣", ariaLabel: "爆弾投下", keys: ["KeyZ"], onPress: () => dropBomb() },
+          { id: "bomb", slot: "B", hint: "BOMB", ariaLabel: "爆弾投下", keys: ["KeyZ"], onPress: () => dropBomb() },
         ],
         // タッチでは左の親指がスティック、右の親指がXで埋まり、バルカンを連打する余裕がない。
         // タッチ端末では既定でバルカンを自動連射し、Xはレーザーのチャージ専用として空ける
+        // 自動連射の切り替えは ⚙ の設定（と V キー）。タッチ端末は最初からオン
         autoFire: { interval: 10, onFire: () => autoFireShot() },
       },
       cutscenes: {
@@ -96,7 +99,7 @@
         image: () => buildShareCardCanvas(),
       },
       help: {
-        mobile: "スタートを押すと、対応端末では傾き操作に切り替わります（右下のXでバルカン発射）",
+        mobile: "スタートを押すと、対応端末では傾き操作に切り替わります（A でバルカン・長押しでレーザー、B で爆弾、⚙ で設定）",
         pc: "PCはキーボード、スマホは画面左側のスティックと右下のボタンで操作できます（Pキーで一時停止）",
         playing: "開始しました。画面の左側を押したまま倒すと移動できます",
       },
