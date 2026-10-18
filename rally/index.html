@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>NOUN RALLY ⌐◨-◨ (proto v3)</title>
+<style>
+  :root{--bg:#12131a;--ink:#e9e6df;--road:#2a2d3c;--wall:#4b5aa8;--wall2:#2c3670;--enemy:#ff4d5a;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;}
+  body{background:var(--bg);color:var(--ink);
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    display:flex;align-items:center;justify-content:center;
+    overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;}
+  #wrap{width:min(96vw,560px);}
+  h1{font-size:clamp(15px,4vw,22px);letter-spacing:.14em;text-align:center;margin-bottom:6px;font-weight:800;}
+  h1 .g{color:var(--enemy);}
+  #stage{position:relative;width:100%;aspect-ratio:4/3;background:#000;
+    border:3px solid var(--wall);border-radius:8px;box-shadow:5px 5px 0 var(--wall2);overflow:hidden;}
+  canvas{display:block;width:100%;height:100%;image-rendering:pixelated;}
+  #ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:8px;background:rgba(18,19,26,.88);text-align:center;padding:16px;}
+  #ov.hidden{display:none;}
+  #ov h2{font-size:clamp(18px,5vw,30px);letter-spacing:.06em;}
+  #ov p{font-size:13px;opacity:.85;line-height:1.65;}
+  #btn{margin-top:4px;font:inherit;font-weight:800;letter-spacing:.1em;padding:9px 20px;
+    background:var(--ink);color:var(--bg);border:none;border-radius:7px;box-shadow:3px 3px 0 var(--enemy);}
+  #btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--enemy);}
+  #pad{margin-top:10px;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-width:230px;margin:10px auto 0;}
+  #pad button{font:inherit;font-weight:800;font-size:16px;padding:12px 0;border:2px solid var(--wall);
+    background:var(--road);color:var(--ink);border-radius:8px;}
+  #pad button:active{background:var(--wall2);}
+  #pad .sp{visibility:hidden;}
+  #smk{grid-column:1/4;background:#5a2130;border-color:var(--enemy);}
+  #hint{text-align:center;margin-top:8px;font-size:11px;opacity:.55;}
+  @media(hover:hover) and (pointer:fine){ #pad{display:none;} }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <h1>NOUN RALLY <span class="g">&#x2310;&#x25E8;-&#x25E8;</span> <span style="opacity:.4;font-size:.7em">proto v3</span></h1>
+  <div id="stage">
+    <canvas id="c" width="512" height="384"></canvas>
+    <div id="ov">
+      <h2 id="ovt">NOUN RALLY</h2>
+      <p id="ovp">CNP11体をぜんぶ回収せよ。<br>車は止まらない ― 曲がる方向だけ決める。<br>壁に当たると自動で右へ曲がる ― 行き止まりだけ跳ね返る。<br>赤い車に触れるとアウト。<br>SMOKE で敵はスピンするが、燃料を多く食う。<br>燃料が尽きたら終わり。<br><br>PC: 矢印/WASD で曲がる ・ Space で煙</p>
+      <button id="btn">START</button>
+    </div>
+  </div>
+  <div id="pad">
+    <button class="sp"></button><button data-d="up">▲</button><button class="sp"></button>
+    <button data-d="left">◀</button><button data-d="down">▼</button><button data-d="right">▶</button>
+    <button id="smk">SMOKE</button>
+  </div>
+  <div id="hint">proto v3 ・ CNP11体は咲耶スクランブルと同じ正式アート＋正式名 ・ 自機は ⌐◨-◨ カー</div>
+</div>
+<script>
+(() => {
+  const cv=document.getElementById('c'), ctx=cv.getContext('2d');
+  const VW=cv.width, VH=cv.height;
+  const ov=document.getElementById('ov'), ovt=document.getElementById('ovt'), ovp=document.getElementById('ovp'), btn=document.getElementById('btn');
+  const TILE=24, COLS=33, ROWS=25;
+  const WW=COLS*TILE, WH=ROWS*TILE;
+
+  // CNP 11体。id / 名前 / hue は咲耶スクランブル(../index.html の cnpChars)と同一の正式データ。
+  // 絵は同じリポジトリの ../assets/cnp/<id>.png をそのまま共有するので、
+  // 本編で画像を差し替えればこのラリー側にも自動で反映される。
+  const CNP = [
+    { id:'cnp_sotai_leelee',   n:'リーリー', hue:196 },
+    { id:'cnp_sotai_mitama',   n:'ミタマ',   hue:150 },
+    { id:'cnp_sotai_narukami', n:'ナルカミ', hue:46  },
+    { id:'cnp_sotai_orochi',   n:'オロチ',   hue:24  },
+    { id:'cnp_sotai_luna',     n:'ルナ',     hue:220 },
+    { id:'cnp_sotai_yama',     n:'ヤマ',     hue:92  },
+    { id:'cnp_sotai_makami',   n:'マカミ',   hue:322 },
+    { id:'cnp_sotai_towa',     n:'トワ',     hue:262 },
+    { id:'cnp_sotai_setsuna',  n:'セツナ',   hue:174 },
+    { id:'cnp_sotai_ema',      n:'エマ',     hue:292 },
+    { id:'cnp_sotai_taruto',   n:'タルト',   hue:352 }
+  ].map(def => {
+    // 画像が無い場合は onerror が飛ぶだけで、ready:false のままプレースホルダに落ちる。
+    // 1枚も無くても回収・当たり判定・レーダーはすべて動く(本編と同じ方針)
+    const ch = { ...def, c:`hsl(${def.hue},70%,62%)`, img:new Image(), ready:false };
+    ch.img.onload  = () => { ch.ready = ch.img.naturalWidth > 0; };
+    ch.img.onerror = () => { ch.ready = false; };
+    ch.img.src = '../assets/cnp/' + def.id + '.png';
+    return ch;
+  });
+  const NTARGET=CNP.length;
+
+  const CHAR_SIZE=22;   // キャラの描画サイズ(px四方)。TILE=24に収まる寸法
+  const CHAR_HIT=14;    // 回収の当たり判定。v2から据え置き
+
+  const C={ road:'#2a2d3c', wall:'#4b5aa8', wall2:'#2c3670', ink:'#e9e6df',
+           player:'#3fa9ff', enemy:'#ff4d5a', smoke:'#c9d2ff', rock:'#7a6b53', rock2:'#5a4d3a', radarBg:'#0c0d13' };
+
+  let grid, player, enemies, targets, smoke, cam, state, score, got, fuel, emitting, t, best;
+  best = +(localStorage.getItem('nounrally_best')||0);
+
+  function genMaze(){
+    const g = Array.from({length:ROWS},()=>Array(COLS).fill(1));
+    (function carve(cx,cy){
+      g[cy][cx]=0;
+      for(const [dx,dy] of [[0,-2],[0,2],[-2,0],[2,0]].sort(()=>Math.random()-.5)){
+        const nx=cx+dx, ny=cy+dy;
+        if(nx>0&&nx<COLS-1&&ny>0&&ny<ROWS-1&&g[ny][nx]===1){ g[cy+dy/2][cx+dx/2]=0; carve(nx,ny); }
+      }
+    })(1,1);
+    for(let y=1;y<ROWS-1;y++)for(let x=1;x<COLS-1;x++){
+      if(g[y][x]===1 && Math.random()<0.26){
+        if((g[y][x-1]===0&&g[y][x+1]===0)||(g[y-1][x]===0&&g[y+1][x]===0)) g[y][x]=0;
+      }
+    }
+    let rocks=8;
+    for(let tr=0;tr<500&&rocks>0;tr++){
+      const x=2+((Math.random()*(COLS-4))|0), y=2+((Math.random()*(ROWS-4))|0);
+      if(g[y][x]===0 && !(x<5&&y<5)){ g[y][x]=2; rocks--; }
+    }
+    return g;
+  }
+  const isWall=(cx,cy)=> cx<0||cy<0||cx>=COLS||cy>=ROWS|| grid[cy][cx]!==0;
+  function openCells(){
+    const l=[]; for(let y=1;y<ROWS-1;y++)for(let x=1;x<COLS-1;x++) if(grid[y][x]===0) l.push([x,y]); return l;
+  }
+
+  // キーを離してから予約が消えるまでの猶予(秒)。押している間は消えない。
+  // 曲がり角の手前で早めに押した入力を拾うためのもので、長くしすぎると
+  // 「ずっと前に押した向き」に勝手に曲がる
+  const WANT_GRACE = 0.25;
+  let heldDir=null, heldCode=null;   // いま押されている方向キー
+
+  function mkCar(x,y,color,ai){
+    // wantFresh: 予約が押されたばかりかどうか。後退の可否判定だけに使う
+    // wantTimer: 予約の残り寿命(秒)。自機だけが使う
+    // want が null なら「予約なし」。dir と同じ値を入れる方式だと、その後に
+    // 車が自動で曲がった瞬間 want と dir がズレて予約として復活してしまう
+    return { x,y,color,ai, dir:{x:1,y:0}, want:null, wantFresh:false, wantTimer:0,
+             speed:(ai?1.75:2.1), spin:0, ang:0 };
+  }
+
+  function newGame(){
+    grid=genMaze();
+    const cells=openCells();
+    player=mkCar(1.5*TILE,1.5*TILE,C.player,false);
+    enemies=[];
+    const far=cells.filter(([x,y])=>(x+y)>(COLS+ROWS)*0.55).sort(()=>Math.random()-.5);
+    for(let i=0;i<4;i++){ const [x,y]=far[i]||cells[cells.length-1-i]; const e=mkCar((x+.5)*TILE,(y+.5)*TILE,C.enemy,true); e.dir={x:-1,y:0};e.want={x:-1,y:0}; enemies.push(e); }
+    targets=[];
+    const pool=cells.filter(([x,y])=>!(x<5&&y<5)).sort(()=>Math.random()-.5);
+    for(let i=0;i<NTARGET;i++){ const [x,y]=pool[i]; targets.push({x:(x+.5)*TILE,y:(y+.5)*TILE,got:false,ch:CNP[i]}); }
+    smoke=[]; cam={x:0,y:0}; score=0; got=0; fuel=100; emitting=false; t=0;
+    // スポーン地点で開いている方向へ走り出す（前が壁だと動けないため）
+    const pdir=[{x:1,y:0},{x:0,y:1},{x:-1,y:0},{x:0,y:-1}].find(d=>!isWall(1+d.x,1+d.y)) || {x:1,y:0};
+    player.dir={...pdir}; player.want=null;
+    state='play'; ov.classList.add('hidden'); last=performance.now(); requestAnimationFrame(loop);
+  }
+
+  const cellOf=c=> [Math.floor(c.x/TILE), Math.floor(c.y/TILE)];
+  const canGo=(c,d)=>{ const [cx,cy]=cellOf(c); return !isWall(cx+d.x,cy+d.y); };
+  function snap(c){ c.x=(Math.floor(c.x/TILE)+.5)*TILE; c.y=(Math.floor(c.y/TILE)+.5)*TILE; }
+  // 進行方向から見た右折/左折。yが下向きの座標系なので、右折は (x,y)→(-y,x)
+  // （右へ走っていて右折すると下、下へ走っていて右折すると左）
+  const rightOf=d=>({x:-d.y,y:d.x});
+  const leftOf =d=>({x:d.y,y:-d.x});
+  // 中心付近か＝この1フレームで中心をまたぐ距離まで近い。
+  // しきい値は実際に進む距離(step)と必ず同じにすること。ここがズレると、
+  // 重いフレームで中心を飛び越えたのに気づけず、曲がり損ねて壁をすり抜ける
+  const atCenter=(c,step)=>{
+    const ox=c.x-(Math.floor(c.x/TILE)+.5)*TILE, oy=c.y-(Math.floor(c.y/TILE)+.5)*TILE;
+    return Math.abs(ox)<step && Math.abs(oy)<step;
+  };
+
+  // k は 60fps を 1 とするフレーム倍率(= dt*60)。速度をこれで割り増しすることで、
+  // 120Hz でも 60Hz でも実時間あたりの速さが揃う。元は毎フレーム固定量だけ
+  // 進めていたため、120Hz の端末では2倍速で走っていた
+  function stepCar(c,k){
+    if(c.spin>0){ c.spin-=k/60; c.ang+=0.35*k; return; }
+    const step=c.speed*k;
+    if(atCenter(c,step)){
+      // 予約された曲がりを適用（曲がるときだけ中心へスナップ）。
+      // ただし後退（今の向きの真逆）は、押されたばかりの予約でないと通さない。
+      // 自動で曲がったあとに残った古い予約が真逆を向いていると、来た道は必ず
+      // 開いているので無条件に通ってしまい、勝手にUターンする
+      const wantsReverse = !!c.want && (c.want.x===-c.dir.x && c.want.y===-c.dir.y);
+      if(c.want && (c.want.x!==c.dir.x||c.want.y!==c.dir.y) && canGo(c,c.want)
+         && (!wantsReverse || c.wantFresh)){
+        snap(c); c.dir={...c.want}; c.wantFresh=false;
+      }
+      // 進行方向が壁のときの行き先。地形ごとに分かれる:
+      //   L字路  … 開いている一方へ曲がって先へ進む
+      //   T字路  … 左右とも開くので既定は右折。ただし上の予約適用が先に
+      //             走るので、キー操作をしていればそちらが優先される
+      //   袋小路 … 左右とも壁。戻るしかないので反転する
+      // どのケースでも止まらない。
+      if(!canGo(c,c.dir)){
+        const r=rightOf(c.dir), l=leftOf(c.dir);
+        snap(c);
+        c.wantFresh=false;
+        if(canGo(c,r))      c.dir=r;
+        else if(canGo(c,l)) c.dir=l;
+        else {
+          c.dir={x:-c.dir.x,y:-c.dir.y};
+          // 袋小路のときだけ予約も戻す。壁を向いたままの予約が残っていると、
+          // 隣のマスで即座に曲がり直して袋小路の前で往復し続ける。
+          // 曲がれた場合に予約を消さないのは、プレイヤーが押した向きを
+          // 次のマスまで持ち越して「操作した方へ行く」を成立させるため
+          c.want=null;
+        }
+      }
+    }
+    c.x += c.dir.x*step;
+    c.y += c.dir.y*step;
+    c.ang = Math.atan2(c.dir.y,c.dir.x);
+  }
+
+  function aiThink(e,k){
+    if(e.spin>0 || !atCenter(e,e.speed*k)) return;
+    const opts=[{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}].filter(d=>{
+      if(d.x===-e.dir.x&&d.y===-e.dir.y) return false;
+      return canGo(e,d);
+    });
+    let ch = opts.length?opts:[{x:-e.dir.x,y:-e.dir.y}];
+    ch.sort((a,b)=>{
+      const da=Math.hypot(e.x+a.x*TILE-player.x, e.y+a.y*TILE-player.y);
+      const db=Math.hypot(e.x+b.x*TILE-player.x, e.y+b.y*TILE-player.y);
+      return da-db;
+    });
+    e.want = (Math.random()<0.72? ch[0] : ch[(Math.random()*ch.length)|0]) || e.dir;
+    e.wantFresh = true;
+  }
+
+  let last;
+  function update(dt){
+    t+=dt;
+    // dt は loop() で 0.05 秒に制限済みなので k は最大 3。1フレームの移動量は
+    // 最大でも 6.3px で、TILE=24 を飛び越すことはない
+    const k = dt*60;
+    // 予約の寿命。押している間は補充し続け、離すと WANT_GRACE 秒で消える。
+    // 消えた状態(want===dir)では下の自動規則だけで走るので、何も押していない
+    // ときの動きは「直進 → 壁で右折 → 左折 → 袋小路ならUターン」に固定される。
+    // 以前は予約が永久に残り、一度押した向きへ延々と曲がり続けていた
+    if(heldDir){ player.want={...heldDir}; player.wantTimer=WANT_GRACE; }
+    else if(player.wantTimer>0){
+      player.wantTimer-=dt;
+      if(player.wantTimer<=0){ player.want=null; player.wantFresh=false; }
+    }
+    stepCar(player,k);
+    for(const e of enemies){ aiThink(e,k); stepCar(e,k); }
+
+    // fuel: base drain + extra while laying smoke (本家: 煙は燃料を食う)
+    const laying = emitting && fuel>0;
+    fuel -= dt*(1.3 + (laying?3.2:0));
+    if(laying && (t*1000)%36 < 18){
+      smoke.push({x:player.x-player.dir.x*10, y:player.y-player.dir.y*10, life:1.7, r:9});
+    }
+    for(let i=smoke.length-1;i>=0;i--){ const s=smoke[i]; s.life-=dt; s.r+=dt*11; if(s.life<=0) smoke.splice(i,1); }
+
+    for(const e of enemies){
+      if(e.spin>0) continue;
+      for(const s of smoke){ if(Math.hypot(e.x-s.x,e.y-s.y)<s.r+8){ e.spin=1.8; break; } }
+    }
+    for(const tg of targets){
+      if(tg.got) continue;
+      if(Math.hypot(player.x-tg.x,player.y-tg.y)<CHAR_HIT){
+        tg.got=true; got++; score += 100 + got*20; beep(600+got*30,.07);
+        if(got===NTARGET){ win(); return; }
+      }
+    }
+    for(const e of enemies){
+      if(e.spin>0) continue;
+      if(Math.hypot(player.x-e.x,player.y-e.y)<15){ lose('CRASHED'); return; }
+    }
+    if(fuel<=0){ fuel=0; lose('OUT OF FUEL'); return; }
+
+    cam.x=clamp(player.x-VW/2,0,Math.max(0,WW-VW));
+    cam.y=clamp(player.y-VH/2,0,Math.max(0,WH-VH));
+  }
+  const clamp=(v,a,b)=> v<a?a:v>b?b:v;
+
+  let actx;
+  function beep(f,d,type='square',v=.05){
+    try{ actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+      const o=actx.createOscillator(),g=actx.createGain();
+      o.type=type;o.frequency.value=f;g.gain.value=v;o.connect(g);g.connect(actx.destination);
+      const n=actx.currentTime;g.gain.setValueAtTime(v,n);g.gain.exponentialRampToValueAtTime(.0001,n+d);
+      o.start(n);o.stop(n+d);}catch(e){}
+  }
+
+  // ⌐◨-◨ ノグルズ。咲耶スクランブル側の drawNoggles() と同じ作りで、
+  // 原点は中心。フレーム色だけ差し替えられるようにしてある
+  function drawNoggles(cx,cy,w,h,frame){
+    const x=cx-w/2, y=cy-h/2;
+    const armW=w*0.16, lensW=w*0.38, bridgeW=w*0.08;
+    const px=v=>Math.max(1,Math.round(v)); // 極小でも1px下回らせない
+    ctx.fillStyle=frame;
+    ctx.fillRect(x, y+h*0.32, armW, px(h*0.36));              // つる
+    ctx.fillRect(x+armW+lensW, y+h*0.32, bridgeW, px(h*0.36)); // ブリッジ
+    const bw=px(h*0.16);
+    for(const lx of [x+armW, x+armW+lensW+bridgeW]){
+      ctx.fillStyle=frame; ctx.fillRect(lx,y,lensW,h);
+      ctx.fillStyle='#FFFFFF'; ctx.fillRect(lx+bw,y+bw,lensW-bw*2,h-bw*2);
+      // 黒い瞳。中央よりやや右に置くのがノグルズの顔
+      ctx.fillStyle='#000000';
+      ctx.fillRect(lx+bw+(lensW-bw*2)*0.42, y+bw, px((lensW-bw*2)*0.38), h-bw*2);
+    }
+  }
+
+  function drawCar(c){
+    ctx.save(); ctx.translate(c.x-cam.x,c.y-cam.y); ctx.rotate(c.ang);
+    ctx.fillStyle=c.color; ctx.fillRect(-9,-6,18,12);
+    if(c.ai){
+      ctx.fillStyle='#12131a'; ctx.fillRect(2,-4,4,8);
+    } else {
+      // 自機の車体。上下の縁を締めてノグルズが乗る面を作る
+      ctx.fillStyle='#0b2b4a'; ctx.fillRect(-9,-6,18,2); ctx.fillRect(-9,4,18,2);
+    }
+    ctx.restore();
+    // ノグルズは車体と一緒に回さない。真上から見た車が曲がっても
+    // ⌐◨-◨ の顔が常に読めるようにしておく
+    if(!c.ai) drawNoggles(c.x-cam.x, c.y-cam.y, 16, 8, '#12131a');
+  }
+
+  // 画像が未配置のスロット用の仮絵。差し替え待ちだと分かるよう「?」を入れてある
+  function drawCharPlaceholder(px,py,s,ch){
+    ctx.fillStyle=`hsl(${ch.hue},70%,62%)`;
+    ctx.beginPath(); ctx.ellipse(px,py+s*0.16,s*0.22,s*0.24,0,0,7); ctx.fill();
+    ctx.beginPath(); ctx.arc(px,py-s*0.14,s*0.22,0,7); ctx.fill();
+    ctx.fillStyle='#12131a'; ctx.font=`bold ${Math.max(7,Math.round(s*0.3))}px ui-monospace,monospace`;
+    ctx.textAlign='center'; ctx.fillText('?',px,py+s*0.04);
+  }
+  function drawChar(tg,placed){
+    const px=tg.x-cam.x, py=tg.y-cam.y;
+    if(px<-24||py<-30||px>VW+24||py>VH+24) return;
+    const ch=tg.ch, s=CHAR_SIZE;
+    // 暗い路面に沈まないよう、キャラ色のオーラを下に敷く。位相をxでずらして
+    // 全員が同時に明滅しないようにする
+    const pulse=0.55+Math.sin(t*3+tg.x*0.05)*0.18;
+    const grad=ctx.createRadialGradient(px,py,1,px,py,s*0.78);
+    grad.addColorStop(0,`hsla(${ch.hue},85%,65%,${(0.5*pulse).toFixed(3)})`);
+    grad.addColorStop(1,`hsla(${ch.hue},85%,65%,0)`);
+    ctx.fillStyle=grad; ctx.beginPath(); ctx.arc(px,py,s*0.78,0,7); ctx.fill();
+
+    if(ch.ready) ctx.drawImage(ch.img, px-s/2, py-s/2, s, s);
+    else drawCharPlaceholder(px,py,s,ch);
+
+    // 名札。遠目でも誰が残っているか読めるようにキャラ色で出す。
+    // 幅は名前の実測に合わせる（固定幅だとTILE=24より広がり、隣のマスの
+    // キャラの名札と重なって両方読めなくなる）。それでもぶつかる場合は
+    // 先に置いた名札を避けて上へ逃がす
+    ctx.font='bold 8px ui-monospace,monospace';
+    const bw=Math.ceil(ctx.measureText(ch.n).width)+8, bh=9;
+    // 既定は頭上。上に逃がすとHUD帯(y<22)へ潜って読めなくなる位置なら、
+    // 最初から足元側に出して下へ逃がす
+    const above=(py-s/2-11)>=24, stepY=above?-(bh+2):(bh+2);
+    const bx=px-bw/2;
+    let by=above? py-s/2-11 : py+s/2+2;
+    for(let guard=0; guard<6; guard++){
+      if(!placed.some(r=> bx<r.x+r.w && bx+bw>r.x && by<r.y+r.h && by+bh>r.y)) break;
+      by+=stepY;
+    }
+    placed.push({x:bx,y:by,w:bw,h:bh});
+    ctx.fillStyle='rgba(18,19,26,.75)'; ctx.fillRect(bx,by,bw,bh);
+    ctx.fillStyle=ch.c; ctx.textAlign='center'; ctx.fillText(ch.n, px, by+7);
+  }
+  function render(){
+    ctx.fillStyle='#000'; ctx.fillRect(0,0,VW,VH);
+    const x0=Math.floor(cam.x/TILE), y0=Math.floor(cam.y/TILE);
+    const x1=Math.ceil((cam.x+VW)/TILE), y1=Math.ceil((cam.y+VH)/TILE);
+    for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){
+      if(x<0||y<0||x>=COLS||y>=ROWS) continue;
+      const px=x*TILE-cam.x, py=y*TILE-cam.y, g=grid[y][x];
+      if(g===1){ ctx.fillStyle=C.wall; ctx.fillRect(px,py,TILE,TILE); ctx.fillStyle=C.wall2; ctx.fillRect(px,py+TILE-4,TILE,4); }
+      else if(g===2){ ctx.fillStyle=C.road; ctx.fillRect(px,py,TILE,TILE);
+        ctx.fillStyle=C.rock; ctx.fillRect(px+3,py+3,TILE-6,TILE-6); ctx.fillStyle=C.rock2; ctx.fillRect(px+3,py+TILE-8,TILE-6,5); }
+      else { ctx.fillStyle=C.road; ctx.fillRect(px,py,TILE,TILE);
+        ctx.fillStyle='rgba(255,255,255,.04)'; ctx.fillRect(px+TILE/2-1,py+TILE/2-1,2,2); }
+    }
+    for(const s of smoke){ ctx.globalAlpha=Math.max(0,s.life/1.7)*.5; ctx.fillStyle=C.smoke;
+      ctx.beginPath(); ctx.arc(s.x-cam.x,s.y-cam.y,s.r,0,7); ctx.fill(); }
+    ctx.globalAlpha=1;
+    const placed=[]; for(const tg of targets){ if(!tg.got) drawChar(tg,placed); }
+    for(const e of enemies) drawCar(e);
+    drawCar(player);
+
+    ctx.fillStyle='rgba(12,13,19,.75)'; ctx.fillRect(0,0,VW,22);
+    ctx.fillStyle=C.ink; ctx.font='bold 12px ui-monospace,monospace'; ctx.textAlign='left';
+    ctx.fillText('CNP '+got+'/'+NTARGET, 8,15);
+    ctx.textAlign='center'; ctx.fillText('SCORE '+score, VW/2,15);
+    ctx.textAlign='right'; ctx.fillText('BEST '+best, VW-8,15);
+    // fuel = 制限時間
+    ctx.fillStyle='#0c0d13'; ctx.fillRect(8,VH-14,VW-112,10);
+    ctx.fillStyle = fuel<25? '#ff4d5a' : '#ffd23f';
+    ctx.fillRect(8,VH-14,Math.max(0,(VW-112)*fuel/100),10);
+    ctx.fillStyle=C.ink; ctx.font='bold 8px ui-monospace,monospace'; ctx.textAlign='left'; ctx.fillText('FUEL',8,VH-16);
+
+    const RW=92, RH=RW*ROWS/COLS, rx=VW-RW-6, ry=26, sx=RW/COLS, sy=RH/ROWS;
+    ctx.fillStyle=C.radarBg; ctx.fillRect(rx-2,ry-2,RW+4,RH+4);
+    for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++) if(grid[y][x]===1){ ctx.fillStyle='#242a4d'; ctx.fillRect(rx+x*sx,ry+y*sy,Math.ceil(sx),Math.ceil(sy)); }
+    for(const tg of targets){ if(tg.got) continue; ctx.fillStyle=tg.ch.c; ctx.fillRect(rx+(tg.x/TILE)*sx-1,ry+(tg.y/TILE)*sy-1,2,2); }
+    for(const e of enemies){ ctx.fillStyle=C.enemy; ctx.fillRect(rx+(e.x/TILE)*sx-1,ry+(e.y/TILE)*sy-1,2,2); }
+    ctx.fillStyle=C.player; ctx.fillRect(rx+(player.x/TILE)*sx-1,ry+(player.y/TILE)*sy-1,3,3);
+  }
+
+  function loop(now){
+    if(state!=='play') return;
+    let dt=(now-last)/1000; last=now; if(dt>.05)dt=.05;
+    update(dt);
+    if(state==='play'){ render(); requestAnimationFrame(loop); }
+  }
+  function win(){ state='over'; finish('CLEAR!', 'CNP 11/11 &nbsp; SCORE '+score+' &nbsp; 残燃料 '+Math.round(fuel)); }
+  function lose(r){ state='over'; finish('GAME OVER', r+' &nbsp;/&nbsp; SCORE '+score+' (CNP '+got+'/'+NTARGET+')'); }
+  function finish(title,sub){
+    if(score>best){ best=score; localStorage.setItem('nounrally_best',best); }
+    beep(150,.28,'sawtooth',.06);
+    ovt.textContent=title;
+    ovp.innerHTML=sub+'<br><br>車は止まらない。曲がる方向だけ決める。<br>壁に当たると自動で右へ曲がる。行き止まりは跳ね返る。<br>SMOKE は燃料を多く食う ― 使いどころ注意。';
+    btn.textContent='RETRY'; ov.classList.remove('hidden');
+  }
+
+  const KEYDIR={ArrowUp:{x:0,y:-1},KeyW:{x:0,y:-1},ArrowDown:{x:0,y:1},KeyS:{x:0,y:1},
+                ArrowLeft:{x:-1,y:0},KeyA:{x:-1,y:0},ArrowRight:{x:1,y:0},KeyD:{x:1,y:0}};
+  addEventListener('keydown',e=>{
+    if(e.code==='Space'){ e.preventDefault(); emitting=true; return; }
+    const d=KEYDIR[e.code];
+    if(d){ e.preventDefault();
+      if(state==='play'){
+        heldDir={...d}; heldCode=e.code;
+        player.want={...d}; player.wantTimer=WANT_GRACE;
+        // オートリピート(押しっぱなし)は「押したばかり」に数えない。ここを立て
+        // 続けると、自動で2回曲がって向きが真逆になったとき、来た道はかならず
+        // 開いているのでUターンの条件が通り、勝手に引き返してしまう
+        if(!e.repeat) player.wantFresh=true;
+      }
+    }
+  });
+  // キーを押したままタブやウィンドウを切り替えると keyup が飛んでこない。
+  // 放置すると「押しっぱなし」のまま固まり、戻ってきたときに勝手に曲がり続ける
+  addEventListener('blur',()=>{ heldCode=null; heldDir=null; emitting=false; });
+  addEventListener('keyup',e=>{
+    if(e.code==='Space') emitting=false;
+    // 離したのが「いま保持している向き」のときだけ解除する。別の向きを
+    // 押し足した後で古い方を離しても、新しい向きは保持したままにする
+    if(e.code===heldCode){ heldCode=null; heldDir=null; }
+  });
+  document.querySelectorAll('#pad [data-d]').forEach(b=>{
+    const m={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}};
+    const release=()=>{ if(heldCode==='pad:'+b.dataset.d){ heldCode=null; heldDir=null; } };
+    b.addEventListener('pointerdown',e=>{e.preventDefault();
+      if(state==='play'){ heldDir={...m[b.dataset.d]}; heldCode='pad:'+b.dataset.d;
+        player.want={...heldDir}; player.wantTimer=WANT_GRACE; player.wantFresh=true; }});
+    b.addEventListener('pointerup',release);
+    b.addEventListener('pointerleave',release);
+    b.addEventListener('pointercancel',release);
+  });
+  const smk=document.getElementById('smk');
+  smk.addEventListener('pointerdown',e=>{e.preventDefault();emitting=true;});
+  smk.addEventListener('pointerup',()=>emitting=false);
+  smk.addEventListener('pointerleave',()=>emitting=false);
+  let ts=null;
+  cv.addEventListener('pointerdown',e=>{ ts={x:e.clientX,y:e.clientY}; });
+  cv.addEventListener('pointerup',e=>{
+    if(!ts) return; const dx=e.clientX-ts.x, dy=e.clientY-ts.y; ts=null;
+    if(Math.abs(dx)<12&&Math.abs(dy)<12 || state!=='play') return;
+    player.want = Math.abs(dx)>Math.abs(dy)? {x:Math.sign(dx),y:0} : {x:0,y:Math.sign(dy)};
+    player.wantFresh = true;
+    player.wantTimer = WANT_GRACE;
+  });
+  btn.addEventListener('click',e=>{ e.stopPropagation(); newGame(); });
+
+  // idle preview
+  grid=genMaze(); player=mkCar(1.5*TILE,1.5*TILE,C.player,false);
+  enemies=[]; targets=[]; smoke=[]; cam={x:0,y:0}; fuel=100; score=0; got=0; t=0;
+  render();
+})();
+</script>
+</body>
+</html>
